@@ -1,0 +1,23 @@
+[package]
+name = "veritas-protocol"
+description = "Wire protocol and message formats for the VERITAS Protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+veritas-crypto.workspace = true
+veritas-identity.workspace = true
+
+serde.workspace = true
+bincode.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+rand.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

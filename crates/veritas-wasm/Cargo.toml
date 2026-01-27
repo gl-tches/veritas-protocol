@@ -1,0 +1,33 @@
+[package]
+name = "veritas-wasm"
+description = "WebAssembly bindings for the VERITAS Protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+veritas-core.workspace = true
+
+wasm-bindgen.workspace = true
+js-sys.workspace = true
+web-sys.workspace = true
+getrandom = { workspace = true, features = ["js"] }
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[features]
+default = ["console_error_panic_hook"]
+console_error_panic_hook = ["dep:console_error_panic_hook"]
+
+[dependencies.console_error_panic_hook]
+version = "0.1"
+optional = true

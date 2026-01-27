@@ -1,0 +1,35 @@
+[package]
+name = "veritas-crypto"
+description = "Cryptographic primitives for the VERITAS Protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Post-Quantum
+ml-kem.workspace = true
+ml-dsa.workspace = true
+
+# Classical (hybrid)
+x25519-dalek.workspace = true
+chacha20poly1305.workspace = true
+blake3.workspace = true
+argon2.workspace = true
+
+# Utilities
+rand.workspace = true
+zeroize.workspace = true
+subtle.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[features]
+default = []
+# Enable hybrid mode (X25519 + ML-KEM)
+hybrid = []

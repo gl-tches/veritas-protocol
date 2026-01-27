@@ -1,0 +1,28 @@
+[package]
+name = "veritas-net"
+description = "P2P networking layer for the VERITAS Protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+veritas-protocol.workspace = true
+veritas-reputation.workspace = true
+
+libp2p.workspace = true
+tokio.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+rand.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[features]
+default = ["internet"]
+internet = []
+bluetooth = []

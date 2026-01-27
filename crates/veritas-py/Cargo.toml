@@ -1,0 +1,21 @@
+[package]
+name = "veritas-py"
+description = "Python bindings for the VERITAS Protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "veritas"
+crate-type = ["cdylib"]
+
+[dependencies]
+veritas-core.workspace = true
+
+pyo3.workspace = true
+
+[features]
+default = ["pyo3/extension-module"]
