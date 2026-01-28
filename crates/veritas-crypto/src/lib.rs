@@ -20,6 +20,10 @@
 
 pub mod error;
 pub mod hash;
+pub mod symmetric;
+pub mod x25519;
 
 pub use error::{CryptoError, Result};
 pub use hash::Hash256;
+pub use symmetric::{decrypt, encrypt, EncryptedData, Nonce, SymmetricKey};
+pub use x25519::{SharedSecret, X25519EphemeralKeyPair, X25519PublicKey, X25519StaticPrivateKey};

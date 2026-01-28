@@ -29,6 +29,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Zeroize` support
   - Unit tests
 
+- **Task 003**: ChaCha20-Poly1305 symmetric encryption
+  - `SymmetricKey` type with Zeroize
+  - XChaCha20-Poly1305 AEAD encryption/decryption
+  - 192-bit random nonce generation
+  - Additional authenticated data (AAD) support
+  - `EncryptedData` serialization
+  - 15 unit tests
+
+- **Task 006**: X25519 key exchange
+  - `X25519StaticPrivateKey` for long-term keys
+  - `X25519EphemeralKeyPair` for per-message keys
+  - `X25519PublicKey` with serialization
+  - `SharedSecret` with Zeroize and key derivation
+  - Diffie-Hellman key agreement
+  - 12 unit tests
+
 ### Crates
 
 | Crate | Version | Status |
