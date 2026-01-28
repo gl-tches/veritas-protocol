@@ -100,8 +100,8 @@ impl Hash256 {
         }
         let mut bytes = [0u8; 32];
         for (i, chunk) in s.as_bytes().chunks(2).enumerate() {
-            let hex_str = std::str::from_utf8(chunk)
-                .map_err(|_| crate::CryptoError::InvalidHashLength {
+            let hex_str =
+                std::str::from_utf8(chunk).map_err(|_| crate::CryptoError::InvalidHashLength {
                     expected: 64,
                     actual: s.len(),
                 })?;
@@ -130,6 +130,15 @@ impl PartialEq for Hash256 {
 }
 
 impl Eq for Hash256 {}
+
+impl std::hash::Hash for Hash256 {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Hash the raw bytes for HashMap usage.
+        // Note: This is NOT a cryptographic operation - it's only used
+        // for hash table bucket selection, not security.
+        self.0.hash(state);
+    }
+}
 
 impl std::fmt::Debug for Hash256 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

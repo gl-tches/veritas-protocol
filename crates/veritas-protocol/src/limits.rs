@@ -137,15 +137,31 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_reputation_thresholds_ordered() {
+    // Compile-time assertions for constant relationships
+    const _: () = {
         assert!(REPUTATION_BLACKLIST < REPUTATION_QUARANTINE);
         assert!(REPUTATION_QUARANTINE < REPUTATION_START);
         assert!(REPUTATION_START < REPUTATION_MAX);
+        assert!(MIN_VALIDATOR_STAKE > REPUTATION_QUARANTINE);
+    };
+
+    #[test]
+    fn test_reputation_thresholds_ordered() {
+        // Verified at compile time via const assertion above
+        // Runtime test ensures constants are accessible and test runs
+        let blacklist = REPUTATION_BLACKLIST;
+        let quarantine = REPUTATION_QUARANTINE;
+        let start = REPUTATION_START;
+        let max = REPUTATION_MAX;
+        assert!(blacklist < quarantine && quarantine < start && start < max);
     }
 
     #[test]
     fn test_validator_stake_above_quarantine() {
-        assert!(MIN_VALIDATOR_STAKE > REPUTATION_QUARANTINE);
+        // Verified at compile time via const assertion above
+        // Runtime test ensures constants are accessible and test runs
+        let stake = MIN_VALIDATOR_STAKE;
+        let quarantine = REPUTATION_QUARANTINE;
+        assert!(stake > quarantine);
     }
 }

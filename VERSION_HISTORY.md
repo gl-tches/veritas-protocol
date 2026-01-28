@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3] - 2025
+
+### Added
+
+- **Task 011**: Minimal Metadata Envelope
+  - `MinimalEnvelope` struct hiding all metadata from relays
+  - `InnerPayload` with sender_id, timestamp, signature encrypted inside
+  - Mailbox key derivation (recipient + epoch + salt) for unlinkability
+  - Ephemeral X25519 key generation per message (forward secrecy)
+  - Padding to fixed size buckets (256/512/1024 bytes)
+  - Timing jitter (0-3 sec random delay) using OsRng
+  - `MinimalEnvelopeBuilder` for fluent construction
+  - 16 unit tests
+
+- **Task 012**: Message Encryption
+  - `encrypt_for_recipient()` - Full E2E encryption pipeline
+  - `decrypt_as_recipient()` - Full decryption pipeline
+  - Ephemeral X25519 ECDH key exchange (forward secrecy)
+  - XChaCha20-Poly1305 AEAD encryption
+  - `DecryptionContext` for caching recipient keypair
+  - `EncryptedMessage` with serialization support
+  - `decrypt_and_verify()` with sender verification
+  - 18 unit tests
+
+- **Task 013**: Message Signing (Placeholder)
+  - `MessageSignature` struct with version tracking
+  - `SignatureVersion` enum (HmacBlake3 placeholder, MlDsa future)
+  - `SigningData` with domain-separated hash and Zeroize
+  - `sign_message()` placeholder until ML-DSA available
+  - `verify_signature()` with constant-time comparison
+  - 23 unit tests
+  - **Note**: Placeholder HMAC-BLAKE3 scheme until ML-DSA stabilizes
+
+- **Task 014**: Message Chunking
+  - `ChunkInfo` struct (chunk_index, total_chunks, message_hash)
+  - `MessageChunk` with integrity verification
+  - `split_into_chunks()` - Split by character count (max 3 chunks × 300 chars)
+  - `ChunkReassembler` with pending message tracking
+  - Out-of-order chunk handling and duplicate detection
+  - Hash verification after reassembly
+  - Expiry cleanup for pending chunks
+  - 24 unit tests
+
+- **Task 015**: Delivery Receipts
+  - `DeliveryReceipt` struct with signature
+  - `ReceiptType` enum (Delivered, Read, Error)
+  - `DeliveryError` enum (RecipientNotFound, MessageExpired, Rejected, QuotaExceeded, Other)
+  - `DeliveryReceiptData` for embedding in MessageContent
+  - Receipt hash computation with domain separation
+  - Factory methods: `delivered()`, `read()`, `error()`
+  - 26 unit tests
+
+- **Task 016**: Group Messages
+  - `GroupId` 32-byte random identifier
+  - `GroupRole` enum (Admin, Moderator, Member) with permissions
+  - `GroupMember` struct
+  - `GroupMetadata` with member management and limits
+  - `GroupKey` with Zeroize (symmetric key + generation)
+  - `GroupKeyManager` for ECDH-based key distribution
+  - `EncryptedGroupKey` per-member encrypted keys
+  - `GroupMessageData` for encrypted group messages
+  - `KeyRotationManager` (scheduled, manual, compromise triggers)
+  - Forward secrecy on member removal
+  - MAX_GROUP_SIZE=100, rotation every 7 days
+  - 43 unit tests
+
+### Security
+
+- All cryptographic operations use OsRng for randomness
+- Secret data (GroupKey, SymmetricKey) implements Zeroize and ZeroizeOnDrop
+- Constant-time comparisons for signatures and hashes
+- Domain separation in all hashing operations
+- Debug output redacts sensitive data
+- Metadata protection: sender/timestamp hidden inside encrypted payload
+- Mailbox keys derived (not raw recipient ID) for unlinkability
+- Message padding to fixed buckets for traffic analysis resistance
+
+### Crates Updated
+
+| Crate | Version | Status |
+|-------|---------|--------|
+| veritas-protocol | 0.1.0-alpha.3 | Protocol layer complete |
+
 ## [0.1.0-alpha.2] - 2024
 
 ### Added

@@ -3579,6 +3579,7 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "serde",
+ "subtle",
  "thiserror 1.0.69",
  "veritas-crypto",
  "veritas-identity",

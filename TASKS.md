@@ -171,77 +171,109 @@
 
 ## Phase 3: Protocol Layer (v0.1.0-alpha.3)
 
-### Task 011: Minimal Metadata Envelope
+### Task 011: Minimal Metadata Envelope ✅ COMPLETED
 
-**Branch**: `feat/011-minimal-envelope`
+**Branch**: `claude/phase-3-protocol-layer-fhZIO`
+**Status**: Completed
 **Changes**:
 
-- MinimalEnvelope struct (mailbox_key, ephemeral_key, nonce, ciphertext)
-- InnerPayload struct (sender_id, timestamp, content, signature inside encryption)
-- Mailbox key derivation (recipient + epoch + salt)
-- Ephemeral key generation per message
-- Padding to fixed size buckets (256/512/1024)
-- Timing jitter (0-3 sec random delay)
+- ✅ MinimalEnvelope struct (mailbox_key, ephemeral_key, nonce, ciphertext)
+- ✅ InnerPayload struct (sender_id, timestamp, content, signature inside encryption)
+- ✅ Mailbox key derivation (recipient + epoch + salt)
+- ✅ Ephemeral key generation per message
+- ✅ Padding to fixed size buckets (256/512/1024) with random fill
+- ✅ Timing jitter (0-3 sec random delay using OsRng)
+- ✅ MinimalEnvelopeBuilder for fluent construction
+- ✅ Unit tests (16 tests)
   **Version**: 0.1.0-alpha.3
   **Agents**: Backend, Security, QA
 
-### Task 012: Message Encryption
+### Task 012: Message Encryption ✅ COMPLETED
 
-**Branch**: `feat/012-message-encryption`
+**Branch**: `claude/phase-3-protocol-layer-fhZIO`
+**Status**: Completed
 **Changes**:
 
-- Encrypt message for recipient
-- Decrypt message with private key
-- E2E encryption flow
-- Unit tests
+- ✅ encrypt_for_recipient() - Full E2E encryption pipeline
+- ✅ decrypt_as_recipient() - Full decryption pipeline
+- ✅ Ephemeral X25519 key exchange per message (forward secrecy)
+- ✅ XChaCha20-Poly1305 AEAD encryption
+- ✅ DecryptionContext for caching recipient keypair
+- ✅ EncryptedMessage serialization/deserialization
+- ✅ decrypt_and_verify() with sender public key verification
+- ✅ Unit tests (18 tests)
   **Version**: 0.1.0-alpha.3
   **Agents**: Backend, Security, QA
 
-### Task 013: Message Signing
+### Task 013: Message Signing ✅ COMPLETED
 
-**Branch**: `feat/013-message-signing`
+**Branch**: `claude/phase-3-protocol-layer-fhZIO`
+**Status**: Completed (Placeholder)
 **Changes**:
 
-- Sign message with sender key
-- Verify signature
-- Signature over (id || ciphertext)
-- Unit tests
+- ✅ MessageSignature struct with version tracking
+- ✅ SignatureVersion enum (HmacBlake3 placeholder, MlDsa future)
+- ✅ SigningData with domain-separated hash
+- ✅ sign_message() - Placeholder HMAC-BLAKE3 until ML-DSA
+- ✅ verify_signature() - Signature verification
+- ✅ Constant-time comparison using `subtle`
+- ✅ Unit tests (23 tests)
   **Version**: 0.1.0-alpha.3
   **Agents**: Backend, Security, QA
+  **Note**: Placeholder signature scheme until ML-DSA stabilizes
 
-### Task 014: Message Chunking
+### Task 014: Message Chunking ✅ COMPLETED
 
-**Branch**: `feat/014-message-chunking`
+**Branch**: `claude/phase-3-protocol-layer-fhZIO`
+**Status**: Completed
 **Changes**:
 
-- ChunkInfo struct
-- Split message into chunks (max 3)
-- Reassemble chunks
-- Hash verification
+- ✅ ChunkInfo struct (chunk_index, total_chunks, message_hash)
+- ✅ MessageChunk with integrity verification
+- ✅ split_into_chunks() - Split by character count (max 3, 300 chars each)
+- ✅ ChunkReassembler with pending message tracking
+- ✅ Out-of-order chunk handling and duplicate detection
+- ✅ Hash verification after reassembly
+- ✅ Expiry cleanup for pending chunks
+- ✅ Unit tests (24 tests)
   **Version**: 0.1.0-alpha.3
   **Agents**: Backend, QA
 
-### Task 015: Delivery Receipts
+### Task 015: Delivery Receipts ✅ COMPLETED
 
-**Branch**: `feat/015-delivery-receipts`
+**Branch**: `claude/phase-3-protocol-layer-fhZIO`
+**Status**: Completed
 **Changes**:
 
-- DeliveryReceipt struct
-- ReceiptType enum
-- Receipt signing
-- Unit tests
+- ✅ DeliveryReceipt struct with signature
+- ✅ ReceiptType enum (Delivered, Read, Error)
+- ✅ DeliveryError enum (RecipientNotFound, MessageExpired, Rejected, QuotaExceeded, Other)
+- ✅ DeliveryReceiptData for embedding in MessageContent
+- ✅ Receipt hash computation with domain separation
+- ✅ Factory methods: delivered(), read(), error()
+- ✅ Serialization/deserialization support
+- ✅ Unit tests (26 tests)
   **Version**: 0.1.0-alpha.3
   **Agents**: Backend, Security, QA
 
-### Task 016: Group Messages
+### Task 016: Group Messages ✅ COMPLETED
 
-**Branch**: `feat/016-group-messages`
+**Branch**: `claude/phase-3-protocol-layer-fhZIO`
+**Status**: Completed
 **Changes**:
 
-- GroupMetadata struct
-- Group key encryption per member
-- Group message encryption
-- Key rotation on member removal
+- ✅ GroupId (32-byte random identifier)
+- ✅ GroupRole enum (Admin, Moderator, Member) with permissions
+- ✅ GroupMember struct
+- ✅ GroupMetadata with member management
+- ✅ GroupKey with Zeroize (symmetric key + generation)
+- ✅ GroupKeyManager for ECDH-based key distribution
+- ✅ EncryptedGroupKey per-member encrypted keys
+- ✅ GroupMessageData for encrypted group messages
+- ✅ KeyRotationManager with scheduled/manual/compromise triggers
+- ✅ Forward secrecy on member removal
+- ✅ MAX_GROUP_SIZE=100, rotation every 7 days
+- ✅ Unit tests (43 tests)
   **Version**: 0.1.0-alpha.3
   **Agents**: Backend, Security, QA
 

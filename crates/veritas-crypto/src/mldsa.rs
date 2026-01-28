@@ -76,9 +76,7 @@ pub struct MlDsaPrivateKey {
 impl MlDsaPrivateKey {
     /// Get the corresponding public key.
     pub fn public_key(&self) -> MlDsaPublicKey {
-        MlDsaPublicKey {
-            _bytes: Vec::new(),
-        }
+        MlDsaPublicKey { _bytes: Vec::new() }
     }
 
     /// Sign a message.
