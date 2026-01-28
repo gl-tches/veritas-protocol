@@ -1,0 +1,26 @@
+[package]
+name = "veritas-py"
+description = "Python bindings for VERITAS protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["python", "bindings", "pyo3"]
+categories = ["api-bindings"]
+
+[lib]
+name = "veritas"
+crate-type = ["cdylib"]
+
+[dependencies]
+veritas-core.workspace = true
+
+# Python
+pyo3.workspace = true
+
+# Async
+tokio.workspace = true
+
+# Error handling
+thiserror.workspace = true

@@ -1,0 +1,31 @@
+[package]
+name = "veritas-store"
+description = "Encrypted local storage for VERITAS protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["storage", "encrypted", "database", "sled"]
+categories = ["database", "cryptography"]
+
+[dependencies]
+veritas-crypto.workspace = true
+veritas-protocol.workspace = true
+
+# Storage
+sled.workspace = true
+
+# Serialization
+serde.workspace = true
+bincode.workspace = true
+
+# Security
+zeroize.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile = "3"

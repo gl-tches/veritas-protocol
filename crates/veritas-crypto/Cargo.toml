@@ -1,0 +1,41 @@
+[package]
+name = "veritas-crypto"
+description = "Cryptographic primitives for VERITAS protocol - post-quantum secure"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["cryptography", "post-quantum", "ml-kem", "ml-dsa", "blake3"]
+categories = ["cryptography"]
+
+[dependencies]
+# Post-quantum cryptography (to be added once crates stabilize)
+# ml-kem.workspace = true
+# ml-dsa.workspace = true
+
+# Classical cryptography
+x25519-dalek.workspace = true
+chacha20poly1305.workspace = true
+blake3.workspace = true
+argon2.workspace = true
+
+# Security utilities
+rand.workspace = true
+getrandom.workspace = true
+zeroize.workspace = true
+subtle.workspace = true
+
+# Serialization
+serde.workspace = true
+bincode.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[features]
+default = []
+std = []

@@ -1,0 +1,30 @@
+[package]
+name = "veritas-chain"
+description = "Blockchain layer for VERITAS message verification"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["blockchain", "merkle-tree", "consensus", "verification"]
+categories = ["cryptography", "data-structures"]
+
+[dependencies]
+veritas-crypto.workspace = true
+veritas-protocol.workspace = true
+
+# Serialization
+serde.workspace = true
+bincode.workspace = true
+
+# Security
+rand.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+# Time
+chrono.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

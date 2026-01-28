@@ -1,0 +1,25 @@
+[package]
+name = "veritas-ffi"
+description = "C FFI bindings for VERITAS protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["ffi", "c", "bindings"]
+categories = ["api-bindings"]
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+veritas-core.workspace = true
+
+# FFI
+libc.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+[build-dependencies]
+cbindgen = "0.26"
