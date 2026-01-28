@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.4] - 2026
+
+### Added
+
+- **Task 017**: Encrypted Database
+  - `EncryptedDb` struct wrapping sled with transparent encryption
+  - `DbKey` with Argon2id key derivation (64 MiB, 3 iterations, 4 parallelism)
+  - XChaCha20-Poly1305 encryption for all stored values
+  - Salt stored in database `__meta__` tree, reused on reopen
+  - `EncryptedTree` for namespaced/isolated storage within database
+  - put/get/delete/contains/iter operations with automatic encrypt/decrypt
+  - Zeroize on DbKey drop
+  - 27 unit tests
+
+- **Task 018**: Message Queue
+  - `MessageQueue` with separate outbox and inbox sled trees
+  - `MessageId` 32-byte cryptographically random identifier
+  - `QueuedMessage` for outbox with full status tracking
+  - `InboxMessage` for received messages with read status
+  - `MessageStatus` enum (Pending, Sending, Sent, Delivered, Failed, Read)
+  - Exponential backoff retry: 30s, 60s, 120s, 240s, 480s (max 5 retries)
+  - Automatic expiry cleanup (7-day MESSAGE_TTL)
+  - Pagination support for inbox retrieval
+  - `OutboxStats` and `InboxStats` for queue monitoring
+  - 32 unit tests
+
+- **Task 019**: Identity Keyring
+  - `Keyring` with password-protected identity storage
+  - `KeyringEntry` with encrypted keypair, label, timestamps, primary flag
+  - Argon2id password key derivation with BLAKE3 domain separation
+  - Password verification using constant-time comparison (subtle)
+  - Primary identity selection and management
+  - `ExportedIdentity` for portable backup and cross-device transfer
+  - Export/import with separate export password (different from keyring password)
+  - Password change with atomic re-encryption of all entries
+  - Secrets redacted in all Debug implementations
+  - `KeyringMetadata` with version tracking for future migrations
+  - 24 unit tests
+
+### Security
+
+- Argon2id with hardened parameters for all password key derivation
+- All secrets implement Zeroize and ZeroizeOnDrop
+- Password verification uses constant-time comparison via `subtle`
+- No passwords stored - only derived keys and verification hashes
+- BLAKE3 domain separation for password key vs export key derivation
+- Salt generation using OsRng for cryptographic randomness
+- Debug output redacts all sensitive data
+- Invalid password returns generic error (no information leakage)
+
+### Crates Updated
+
+| Crate | Version | Status |
+|-------|---------|--------|
+| veritas-store | 0.1.0-alpha.4 | Storage layer complete |
+
 ## [0.1.0-alpha.3] - 2025
 
 ### Added

@@ -13,6 +13,10 @@ pub enum StoreError {
     #[error("Protocol error: {0}")]
     Protocol(#[from] veritas_protocol::ProtocolError),
 
+    /// Identity error.
+    #[error("Identity error: {0}")]
+    Identity(#[from] veritas_identity::IdentityError),
+
     /// Key not found.
     #[error("Key not found: {0}")]
     KeyNotFound(String),

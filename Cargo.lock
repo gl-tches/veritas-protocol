@@ -3611,13 +3611,20 @@ dependencies = [
 name = "veritas-store"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "argon2",
  "bincode",
+ "blake3",
+ "chrono",
+ "hex",
  "proptest",
+ "rand 0.8.5",
  "serde",
  "sled",
+ "subtle",
  "tempfile",
  "thiserror 1.0.69",
  "veritas-crypto",
+ "veritas-identity",
  "veritas-protocol",
  "zeroize",
 ]

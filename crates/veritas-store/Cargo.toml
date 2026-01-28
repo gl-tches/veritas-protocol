@@ -12,6 +12,7 @@ categories = ["database", "cryptography"]
 [dependencies]
 veritas-crypto.workspace = true
 veritas-protocol.workspace = true
+veritas-identity.workspace = true
 
 # Storage
 sled.workspace = true
@@ -22,6 +23,18 @@ bincode.workspace = true
 
 # Security
 zeroize.workspace = true
+argon2.workspace = true
+subtle.workspace = true
+
+# Time
+chrono.workspace = true
+
+# Random
+rand.workspace = true
+
+# Hashing
+blake3.workspace = true
+hex.workspace = true
 
 # Error handling
 thiserror.workspace = true
