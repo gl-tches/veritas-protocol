@@ -1,0 +1,34 @@
+[package]
+name = "veritas-wasm"
+description = "WebAssembly bindings for VERITAS protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["wasm", "webassembly", "browser"]
+categories = ["wasm", "web-programming"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+veritas-crypto = { workspace = true }
+veritas-identity = { workspace = true }
+veritas-protocol = { workspace = true }
+
+# WASM
+wasm-bindgen.workspace = true
+js-sys.workspace = true
+web-sys.workspace = true
+getrandom = { workspace = true, features = ["js"] }
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"

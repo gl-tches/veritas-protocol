@@ -1,0 +1,35 @@
+[package]
+name = "veritas-core"
+description = "High-level API for VERITAS protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["messaging", "cryptography", "api"]
+categories = ["cryptography", "network-programming"]
+
+[dependencies]
+veritas-crypto.workspace = true
+veritas-identity.workspace = true
+veritas-protocol.workspace = true
+veritas-chain.workspace = true
+veritas-net.workspace = true
+veritas-store.workspace = true
+veritas-reputation.workspace = true
+
+# Async
+tokio.workspace = true
+
+# Serialization
+serde.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Logging
+tracing.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
