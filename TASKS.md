@@ -341,81 +341,113 @@
 
 ## Phase 5: Blockchain Layer (v0.1.0-alpha.5)
 
-### Task 020: Block Structure
+### Task 020: Block Structure ✅ COMPLETED
 
-**Branch**: `feat/020-block-struct`
+**Branch**: `claude/blockchain-layer-phase-5-2I1zZ`
+**Status**: Completed
 **Changes**:
 
-- Block struct
-- ChainEntry enum
-- Block serialization
-- Unit tests
+- ✅ Block struct with header and body separation
+- ✅ BlockHeader with hash, parent_hash, height, timestamp, merkle_root, validator
+- ✅ BlockBody with chain entries and merkle root computation
+- ✅ ChainEntry enum with all entry types (IdentityRegistration, UsernameRegistration, KeyRotation, MessageProof, ReputationChange, ValidatorRegistration/Exit/Slash)
+- ✅ Genesis block support with `Block::genesis()`
+- ✅ Domain-separated hashing (`VERITAS-BLOCK-v1`, `VERITAS-CHAIN-ENTRY-v1`)
+- ✅ Block serialization with serde + bincode
+- ✅ Unit tests (32 tests)
   **Version**: 0.1.0-alpha.5
   **Agents**: Backend, Security, QA
 
-### Task 021: Merkle Tree
+### Task 021: Merkle Tree ✅ COMPLETED
 
-**Branch**: `feat/021-merkle-tree`
+**Branch**: `claude/blockchain-layer-phase-5-2I1zZ`
+**Status**: Completed
 **Changes**:
 
-- Merkle tree construction
-- Proof generation
-- Proof verification
-- Unit tests
+- ✅ MerkleTree struct for tree construction
+- ✅ MerkleProof with sibling hashes and directions
+- ✅ Direction enum (Left, Right) for proof traversal
+- ✅ Proof generation via `generate_proof()`
+- ✅ Proof verification via `verify_proof()`
+- ✅ Domain-separated hashing (`VERITAS-MERKLE-v1`)
+- ✅ Edge case handling (empty, single, power-of-2, non-power-of-2)
+- ✅ Unit tests (29 tests including property-based)
   **Version**: 0.1.0-alpha.5
   **Agents**: Backend, Security, QA
 
-### Task 022: Chain Management
+### Task 022: Chain Management ✅ COMPLETED
 
-**Branch**: `feat/022-chain-management`
+**Branch**: `claude/blockchain-layer-phase-5-2I1zZ`
+**Status**: Completed
 **Changes**:
 
-- Chain storage
-- Block validation
-- Chain traversal
-- Fork handling
+- ✅ Blockchain struct for chain storage and management
+- ✅ BlockValidation with comprehensive validation rules
+- ✅ Height continuity, parent hash, timestamp ordering validation
+- ✅ Hash integrity and merkle root validation
+- ✅ Block producer authorization validation
+- ✅ ForkChoice for fork tracking with longest chain rule
+- ✅ Deterministic tiebreaker for same-height forks
+- ✅ Common ancestor detection
+- ✅ Chain iteration (forward and backward)
+- ✅ ChainState for persistence
+- ✅ Unit tests (33 tests)
   **Version**: 0.1.0-alpha.5
   **Agents**: Backend, Security, QA
 
-### Task 023: PoS Validator Selection with SLA
+### Task 023: PoS Validator Selection with SLA ✅ COMPLETED
 
-**Branch**: `feat/023-pos-validator-selection`
+**Branch**: `claude/blockchain-layer-phase-5-2I1zZ`
+**Status**: Completed
 **Changes**:
 
-- ValidatorStake struct with performance tracking
-- ValidatorSla (99% uptime, max 3 missed blocks, 5s latency)
-- Stake-weighted random selection (ChaCha20Rng)
-- Performance multiplier (0.5-1.5x based on score)
-- SLA bonus for compliant validators
-- Geographic diversity enforcement (max 5 per region)
-- 15% rotation per epoch (worst performers first)
-- Slashing: 0.1% missed block, 1% SLA, 5% invalid, 100% double-sign
+- ✅ ValidatorStake struct with performance tracking
+- ✅ ValidatorSla (99% uptime, max 3 missed blocks, 5s latency)
+- ✅ ValidatorSet for managing active validators (max 21)
+- ✅ Stake-weighted random selection (ChaCha20Rng deterministic)
+- ✅ Weight formula: stake × performance_multiplier × sla_bonus
+- ✅ Performance multiplier (0.5-1.5x based on score)
+- ✅ SLA bonus for compliant validators (up to 1.5x)
+- ✅ Geographic diversity enforcement (max 5 per region)
+- ✅ 15% rotation per epoch (worst performers first)
+- ✅ Domain-separated selection (`VERITAS-VALIDATOR-SELECTION-v1`)
+- ✅ Unit tests (51 tests)
   **Version**: 0.1.0-alpha.5
   **Agents**: Architect, Backend, Security, QA
 
-### Task 023b: Validator Slashing and Penalties
+### Task 023b: Validator Slashing and Penalties ✅ COMPLETED
 
-**Branch**: `feat/023b-validator-slashing`
+**Branch**: `claude/blockchain-layer-phase-5-2I1zZ`
+**Status**: Completed
 **Changes**:
 
-- SlashingConfig with penalty percentages
-- SlashingManager for offense processing
-- SlaViolation tracking and severity levels
-- Automatic removal for critical violations
-- Double-sign detection and permanent ban
-- Slash result recording on chain
+- ✅ SlashingConfig with penalty percentages (0.1% missed, 1% SLA, 5% invalid, 100% double-sign)
+- ✅ SlashingOffense enum for all offense types
+- ✅ SlaViolationType for SLA violation details
+- ✅ SlashResult with penalty amount, remaining stake, ban status
+- ✅ SlashingManager for offense processing
+- ✅ Double-sign detection via `record_block_signature()`
+- ✅ Automatic 100% slash and permanent ban for double-signing
+- ✅ Signature pruning for memory management
+- ✅ Unit tests (24 tests)
   **Version**: 0.1.0-alpha.5
   **Agents**: Backend, Security, QA
 
-### Task 024: Chain Sync
+### Task 024: Chain Sync ✅ COMPLETED
 
-**Branch**: `feat/024-chain-sync`
+**Branch**: `claude/blockchain-layer-phase-5-2I1zZ`
+**Status**: Completed
 **Changes**:
 
-- Sync protocol
-- Block request/response
-- Catch-up mechanism
-- Unit tests
+- ✅ SyncMessage enum for sync protocol (GetHeaders/Headers, GetBlocks/Blocks, NewBlock, GetTip/Tip, Status)
+- ✅ SyncState enum (Synced, SyncingHeaders, SyncingBlocks, Paused)
+- ✅ SyncAction for sync manager responses
+- ✅ SyncManager with configurable limits (500 headers, 100 blocks per request)
+- ✅ PendingRequest tracking with 30s timeout
+- ✅ Progress reporting and pause/resume support
+- ✅ Block request/response handling
+- ✅ Catch-up mechanism with batched fetching
+- ✅ Unit tests (39 tests)
   **Version**: 0.1.0-alpha.5
   **Agents**: Backend, QA
 

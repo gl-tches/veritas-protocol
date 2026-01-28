@@ -7,6 +7,113 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.5] - 2026
+
+### Added
+
+- **Task 020**: Block Structure
+  - `Block` struct with header and body separation
+  - `BlockHeader` with hash, parent_hash, height, timestamp, merkle_root, validator
+  - `BlockBody` containing chain entries with merkle root computation
+  - `ChainEntry` enum supporting all on-chain entry types:
+    - `IdentityRegistration` - identity hash, public keys, timestamp, signature
+    - `UsernameRegistration` - username, identity hash, signature
+    - `KeyRotation` - old identity, new identity, signatures
+    - `MessageProof` - message hash, sender, recipient, timestamp, merkle proof
+    - `ReputationChange` - identity hash, change amount, reason, proof
+    - `ValidatorRegistration` / `ValidatorExit` / `ValidatorSlash`
+  - Genesis block support with `Block::genesis()`
+  - Domain-separated hashing (`VERITAS-BLOCK-v1`, `VERITAS-CHAIN-ENTRY-v1`)
+  - 32 unit tests
+
+- **Task 021**: Merkle Tree
+  - `MerkleTree` struct for tree construction from hash leaves
+  - `MerkleProof` for inclusion proofs with sibling hashes and directions
+  - `Direction` enum (Left, Right) for proof traversal
+  - Domain-separated internal node hashing (`VERITAS-MERKLE-v1`)
+  - Handles edge cases: empty, single leaf, power-of-2, non-power-of-2
+  - Standalone `verify_proof()` function for efficient verification
+  - 29 unit tests including property-based tests
+
+- **Task 022**: Chain Management
+  - `Blockchain` struct for full chain storage and management
+  - `BlockValidation` with comprehensive validation rules:
+    - Height continuity (parent height + 1)
+    - Parent hash verification
+    - Timestamp ordering (>= parent timestamp)
+    - Hash integrity verification
+    - Merkle root validation
+    - Block producer authorization
+  - `ForkChoice` for fork tracking with longest chain rule
+  - Deterministic tiebreaker for same-height forks
+  - Common ancestor detection for fork analysis
+  - Chain iteration (forward and backward from tip/genesis)
+  - `ChainState` for persistence/serialization
+  - 33 unit tests
+
+- **Task 023**: PoS Validator Selection with SLA
+  - `ValidatorStake` struct with performance and SLA tracking
+  - `ValidatorSla` requirements (99% uptime, max 3 missed blocks, 5s latency)
+  - `ValidatorSet` for managing active validators (max 21)
+  - `ValidatorSelection` with deterministic stake-weighted selection:
+    - ChaCha20Rng seeded from epoch for determinism
+    - Weight formula: `stake * performance_multiplier * sla_bonus`
+    - Performance multiplier: 0.5 + (score / 100.0) → 0.5-1.5x
+    - SLA bonus: compliant + streak → up to 1.5x; non-compliant → 0.7x
+  - Geographic diversity enforcement (max 5 per region)
+  - 15% rotation per epoch (worst performers first)
+  - Domain-separated selection (`VERITAS-VALIDATOR-SELECTION-v1`)
+  - 51 unit tests
+
+- **Task 023b**: Validator Slashing and Penalties
+  - `SlashingConfig` with CLAUDE.md-specified percentages:
+    - Missed block: 0.1%
+    - SLA violation: 1%
+    - Invalid block: 5%
+    - Double sign: 100% + permanent ban
+  - `SlashingOffense` enum for all offense types
+  - `SlaViolationType` for SLA violation details
+  - `SlashResult` with penalty amount, remaining stake, ban status
+  - `SlashingManager` with:
+    - `process_offense()` - process and record slashing events
+    - `record_block_signature()` - double-sign detection
+    - Automatic 100% slash and permanent ban for double-signing
+    - Signature pruning for memory management
+  - 24 unit tests
+
+- **Task 024**: Chain Sync
+  - `SyncMessage` enum for sync protocol:
+    - `GetHeaders` / `Headers` - header synchronization
+    - `GetBlocks` / `Blocks` - full block synchronization
+    - `NewBlock` - new block announcements
+    - `GetTip` / `Tip` - chain tip queries
+    - `Status` - peer status reporting
+  - `SyncState` enum (Synced, SyncingHeaders, SyncingBlocks, Paused)
+  - `SyncAction` for sync manager responses
+  - `SyncManager` with:
+    - Configurable max headers (500) and blocks (100) per request
+    - Request timeout tracking (30s default)
+    - Progress reporting
+    - Pause/resume support
+  - `PendingRequest` for tracking in-flight requests
+  - 39 unit tests
+
+### Security
+
+- Domain separation applied consistently to all hashing operations
+- Constant-time hash comparisons via `Hash256` (uses `subtle::ConstantTimeEq`)
+- Input validation at all module boundaries
+- Saturating arithmetic prevents overflow/underflow
+- Double-sign detection with immediate 100% slash and permanent ban
+- Deterministic validator selection prevents gaming
+- Fork handling with longest chain rule and deterministic tiebreaker
+
+### Crates Updated
+
+| Crate | Version | Status |
+|-------|---------|--------|
+| veritas-chain | 0.1.0-alpha.5 | Blockchain layer complete |
+
 ## [0.1.0-alpha.4] - 2026
 
 ### Added

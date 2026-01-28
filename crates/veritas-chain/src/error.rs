@@ -25,6 +25,19 @@ pub enum ChainError {
     #[error("Invalid merkle proof")]
     InvalidProof,
 
+    /// Empty tree.
+    #[error("Cannot create merkle tree from empty leaves")]
+    EmptyTree,
+
+    /// Invalid leaf index.
+    #[error("Leaf index {index} out of bounds (tree has {size} leaves)")]
+    InvalidLeafIndex {
+        /// The requested index.
+        index: usize,
+        /// The size of the tree.
+        size: usize,
+    },
+
     /// Chain is behind.
     #[error("Chain is behind by {blocks} blocks")]
     ChainBehind {

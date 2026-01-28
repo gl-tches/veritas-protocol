@@ -250,7 +250,10 @@ pub fn derive_mailbox_key(
 /// assert_eq!(epoch1, 1);
 /// ```
 pub fn epoch_from_timestamp(timestamp_secs: u64, epoch_duration_secs: u64) -> u64 {
-    debug_assert!(epoch_duration_secs > 0, "epoch_duration_secs must be non-zero");
+    debug_assert!(
+        epoch_duration_secs > 0,
+        "epoch_duration_secs must be non-zero"
+    );
     timestamp_secs / epoch_duration_secs
 }
 

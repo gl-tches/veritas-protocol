@@ -11,6 +11,7 @@ categories = ["cryptography", "data-structures"]
 
 [dependencies]
 veritas-crypto.workspace = true
+veritas-identity.workspace = true
 veritas-protocol.workspace = true
 
 # Serialization
@@ -19,6 +20,7 @@ bincode.workspace = true
 
 # Security
 rand.workspace = true
+rand_chacha.workspace = true
 
 # Error handling
 thiserror.workspace = true
