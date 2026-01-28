@@ -7,6 +7,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.6] - 2026
+
+### Added
+
+- **Task 025**: Reputation Scoring with Rate Limiting
+  - `ReputationScore` struct tracking score, gains, losses, timestamps
+  - Score range 0-1000 with starting score 500
+  - `gain()` and `lose()` methods with capping/flooring
+  - `gain_with_multiplier()` for collusion penalty application
+  - Status checks: `is_quarantined()`, `is_blacklisted()`, `is_priority()`
+  - Permission checks: `can_file_reports()`, `can_be_validator()`
+  - `ScoreRateLimiter` with per-peer and total daily limits:
+    - 60 seconds minimum between interactions with same peer
+    - 30 points maximum gain from any peer per day
+    - 100 points maximum total gain per day
+  - `PeerInteraction` tracking with automatic daily reset
+  - `RateLimitResult` enum for detailed limit feedback
+  - 25 unit tests
+
+- **Task 026**: Weighted Negative Reports
+  - `ReportReason` enum (Spam, Harassment, Impersonation, Malware, Scam, Other)
+  - `NegativeReport` struct with reporter reputation tracking
+  - Report weighting formula: `weight = reporter_reputation / 500.0`
+  - `ReportAggregator` for collecting and processing reports:
+    - Minimum 400 reputation required to file reports
+    - Weighted threshold of 3.0 required for penalty
+    - Penalty based on most severe reason reported
+    - Penalty capped at 200 points per incident
+  - Duplicate reporter detection
+  - Report cleanup for old reports (30 days)
+  - 14 unit tests
+
+- **Task 027**: Collusion Detection
+  - `InteractionRecord` tracking interactions between identities
+  - `CollusionDetector` with interaction graph analysis:
+    - Connected component detection for cluster identification
+    - Internal density calculation (edges within cluster)
+    - Symmetry scoring (A→B vs B→A balance)
+    - External connection ratio tracking
+  - `SuspiciousCluster` with suspicion scoring:
+    - Flagged when internal density > 70%
+    - Flagged when external connections < 30%
+    - Flagged when symmetry > 80%
+  - `ClusterMember` with per-member suspicion contribution
+  - Gain multiplier: `1.0 - suspicion_score` (e.g., 0.8 suspicion = 20% gains)
+  - Minimum cluster size of 3 for analysis
+  - 8 unit tests
+
+- **Task 027b**: Reputation Decay and Effects
+  - `DecayConfig` with configurable decay rate and interval
+  - Default: 1% weekly decay toward 500 (baseline)
+  - `DecayState` for tracking decay timing per identity
+  - `apply_decay()` function with period-based calculation
+  - `project_decay()` for decay forecasting
+  - `ReputationTier` enum (Blacklisted, Quarantined, Deprioritized, Normal, Priority)
+  - `TierEffects` struct with tier-specific restrictions:
+    - Messaging permissions
+    - Report filing rights (requires 400+ rep)
+    - Validator eligibility (requires 700+ rep)
+    - Message priority modifiers (-2 to +2)
+    - Rate limit multipliers (0.25x to 2.0x)
+  - `ReputationManager` coordinating all operations:
+    - Score tracking across all identities
+    - Rate limiting enforcement
+    - Report processing and penalty application
+    - Collusion detection integration
+    - Decay application
+    - Statistics tracking
+  - `ReputationStats` for system monitoring
+  - 27 unit tests
+
+### Security
+
+- Rate limiting prevents reputation gaming and Sybil attacks
+- Reporter reputation weighting reduces low-quality report spam
+- Collusion detection via graph analysis flags suspicious clusters
+- Gain penalties applied to colluding identities
+- Minimum reputation thresholds for privileged actions
+- Tier-based access control prevents abuse by low-reputation identities
+
+### Crates Updated
+
+| Crate | Version | Status |
+|-------|---------|--------|
+| veritas-reputation | 0.1.0-alpha.6 | Reputation system complete |
+
 ## [0.1.0-alpha.5] - 2026
 
 ### Added

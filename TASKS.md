@@ -455,55 +455,80 @@
 
 ## Phase 6: Reputation System (v0.1.0-alpha.6)
 
-### Task 025: Reputation Scoring with Rate Limiting
+### Task 025: Reputation Scoring with Rate Limiting ✅ COMPLETED
 
-**Branch**: `feat/025-reputation-rate-limiting`
+**Branch**: `claude/phase-6-reputation-system-Citik`
+**Status**: Completed
 **Changes**:
 
-- Score struct with gain/loss tracking
-- Rate limiter: 60s between msgs, 30pts/peer/day, 100pts/day total
-- ScoreRateLimiter struct
-- Daily rotation logic
-- Unit tests
+- ✅ `ReputationScore` struct with gain/loss tracking
+- ✅ Score range 0-1000 with starting score 500
+- ✅ `gain()` and `lose()` methods with capping/flooring
+- ✅ `gain_with_multiplier()` for collusion penalty application
+- ✅ `ScoreRateLimiter` with rate limiting:
+  - 60s min between messages to same peer
+  - 30pts max gain from any peer per day
+  - 100pts max total gain per day
+- ✅ `PeerInteraction` tracking with automatic daily reset
+- ✅ `RateLimitResult` enum for detailed limit feedback
+- ✅ Unit tests (25 tests)
   **Version**: 0.1.0-alpha.6
   **Agents**: Backend, Security, QA
 
-### Task 026: Weighted Negative Reports
+### Task 026: Weighted Negative Reports ✅ COMPLETED
 
-**Branch**: `feat/026-weighted-reports`
+**Branch**: `claude/phase-6-reputation-system-Citik`
+**Status**: Completed
 **Changes**:
 
-- NegativeReport struct with reporter reputation
-- ReportAggregator with weighted counting
-- 3-report threshold with rep weighting
-- Min 400 reputation to file reports
-- Penalty calculation by severity
+- ✅ `ReportReason` enum (Spam, Harassment, Impersonation, Malware, Scam, Other)
+- ✅ `NegativeReport` struct with reporter reputation tracking
+- ✅ `ReportAggregator` with weighted counting
+- ✅ Report weighting: `weight = reporter_reputation / 500.0`
+- ✅ 3-report weighted threshold for penalty
+- ✅ Min 400 reputation to file reports
+- ✅ Penalty calculation by severity (capped at 200)
+- ✅ Duplicate reporter detection
+- ✅ Unit tests (14 tests)
   **Version**: 0.1.0-alpha.6
   **Agents**: Backend, Security, QA
 
-### Task 027: Collusion Detection
+### Task 027: Collusion Detection ✅ COMPLETED
 
-**Branch**: `feat/027-collusion-detection`
+**Branch**: `claude/phase-6-reputation-system-Citik`
+**Status**: Completed
 **Changes**:
 
-- CollusionDetector with graph analysis
-- Interaction tracking (from, to, count)
-- Dense cluster detection (>70% internal)
-- Suspicion scoring (density + symmetry + external)
-- Score gain penalties for flagged clusters
+- ✅ `InteractionRecord` tracking (from, to, count, timestamps)
+- ✅ `CollusionDetector` with graph analysis
+- ✅ Connected component detection for cluster identification
+- ✅ Dense cluster detection (>70% internal density)
+- ✅ Symmetry scoring (A→B vs B→A balance)
+- ✅ External connection ratio tracking
+- ✅ `SuspiciousCluster` with combined suspicion scoring
+- ✅ Gain multiplier: `1.0 - suspicion_score`
+- ✅ Unit tests (8 tests)
   **Version**: 0.1.0-alpha.6
   **Agents**: Backend, Security, QA
 
-### Task 027b: Reputation Decay and Effects
+### Task 027b: Reputation Decay and Effects ✅ COMPLETED
 
-**Branch**: `feat/027b-reputation-effects`
+**Branch**: `claude/phase-6-reputation-system-Citik`
+**Status**: Completed
 **Changes**:
 
-- Weekly decay toward 500 (1%/week)
-- Priority levels (800+ priority, 500+ normal, 200+ deprioritized)
-- Quarantine logic (<200 reputation)
-- Blacklist handling (<50 reputation)
-- Integration with network layer
+- ✅ `DecayConfig` with configurable decay rate and interval
+- ✅ Weekly decay toward 500 (1%/week default)
+- ✅ `DecayState` for tracking decay timing
+- ✅ `ReputationTier` enum (Blacklisted, Quarantined, Deprioritized, Normal, Priority)
+- ✅ `TierEffects` struct with tier-specific restrictions:
+  - Messaging permissions
+  - Report filing rights (400+ rep)
+  - Validator eligibility (700+ rep)
+  - Priority modifiers and rate limit multipliers
+- ✅ `ReputationManager` coordinating all operations
+- ✅ `ReputationStats` for system monitoring
+- ✅ Unit tests (27 tests)
   **Version**: 0.1.0-alpha.6
   **Agents**: Backend, QA
 
