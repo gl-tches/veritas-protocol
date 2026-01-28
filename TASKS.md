@@ -281,39 +281,59 @@
 
 ## Phase 4: Storage Layer (v0.1.0-alpha.4)
 
-### Task 017: Encrypted Database
+### Task 017: Encrypted Database ✅ COMPLETED
 
-**Branch**: `feat/017-encrypted-store`
+**Branch**: `claude/phase-4-storage-layer-3AenO`
+**Status**: Completed
 **Changes**:
 
-- sled wrapper with encryption
-- Argon2id key derivation
-- put/get/delete operations
-- Unit tests
+- ✅ `EncryptedDb` struct wrapping sled with encryption
+- ✅ Argon2id key derivation (64 MiB, 3 iterations, 4 parallelism)
+- ✅ XChaCha20-Poly1305 encryption for all values
+- ✅ `DbKey` with Zeroize support
+- ✅ Salt stored in database, reused on reopen
+- ✅ `EncryptedTree` for namespaced storage
+- ✅ put/get/delete/contains/iter operations
+- ✅ Unit tests (27 tests)
   **Version**: 0.1.0-alpha.4
   **Agents**: Backend, Security, QA
 
-### Task 018: Message Queue
+### Task 018: Message Queue ✅ COMPLETED
 
-**Branch**: `feat/018-message-queue`
+**Branch**: `claude/phase-4-storage-layer-3AenO`
+**Status**: Completed
 **Changes**:
 
-- Outbox for pending messages
-- Inbox for received messages
-- Message status tracking
-- Cleanup of expired messages
+- ✅ `MessageQueue` with outbox and inbox trees
+- ✅ `MessageId` (32-byte random identifier)
+- ✅ `QueuedMessage` for outbox with status tracking
+- ✅ `InboxMessage` for received messages
+- ✅ `MessageStatus` enum (Pending, Sending, Sent, Delivered, Failed, Read)
+- ✅ Exponential backoff retry (30s, 60s, 120s, 240s, 480s, max 5 retries)
+- ✅ Expiry cleanup (7-day MESSAGE_TTL)
+- ✅ Pagination support for inbox
+- ✅ OutboxStats and InboxStats for monitoring
+- ✅ Unit tests (32 tests)
   **Version**: 0.1.0-alpha.4
   **Agents**: Backend, QA
 
-### Task 019: Identity Keyring
+### Task 019: Identity Keyring ✅ COMPLETED
 
-**Branch**: `feat/019-keyring`
+**Branch**: `claude/phase-4-storage-layer-3AenO`
+**Status**: Completed
 **Changes**:
 
-- Secure key storage
-- Password-protected access
-- Key export/import
-- Unit tests
+- ✅ `Keyring` with password-protected access
+- ✅ `KeyringEntry` with identity hash, encrypted keypair, metadata
+- ✅ Argon2id password key derivation with domain separation
+- ✅ Password verification using constant-time comparison
+- ✅ Primary identity selection
+- ✅ `ExportedIdentity` for portable backup/transfer
+- ✅ Export/import with separate export password
+- ✅ Password change with re-encryption of all entries
+- ✅ BLAKE3 domain separation for key derivation
+- ✅ Secrets redacted in Debug output
+- ✅ Unit tests (24 tests)
   **Version**: 0.1.0-alpha.4
   **Agents**: Backend, Security, QA
 
