@@ -20,5 +20,9 @@ thiserror.workspace = true
 # Time
 chrono.workspace = true
 
+# Randomness
+rand.workspace = true
+getrandom.workspace = true
+
 [dev-dependencies]
 proptest.workspace = true
