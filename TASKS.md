@@ -536,88 +536,120 @@
 
 ## Phase 7: Networking Layer (v0.1.0-alpha.7)
 
-### Task 028: Network-First Transport Selection
+### Task 028: Network-First Transport Selection ✅ COMPLETED
 
-**Branch**: `feat/028-transport-selection`
+**Branch**: `claude/networking-layer-phase-7-IwEch`
+**Status**: Completed
 **Changes**:
 
-- Transport trait abstraction
-- TransportManager with priority ordering
-- Network connectivity check (always first)
-- Fallback chain: Internet → Local WiFi → Bluetooth → Queue
-- Transport selection logic
+- ✅ `TransportType` enum (Internet, LocalNetwork, Bluetooth, Queued)
+- ✅ `TransportState` for tracking transport availability
+- ✅ `TransportStatus` for connection status
+- ✅ `TransportCapabilities` describing transport features
+- ✅ `Transport` trait with async connectivity methods
+- ✅ `TransportSelector` implementing network-first priority
+- ✅ `PeerInfo` for peer tracking with addresses
+- ✅ `NetworkAddress` multiaddr wrapper
   **Version**: 0.1.0-alpha.7
   **Agents**: Architect, Backend, QA
 
-### Task 029: libp2p Integration
+### Task 029: libp2p Integration ✅ COMPLETED
 
-**Branch**: `feat/029-libp2p`
+**Branch**: `claude/networking-layer-phase-7-IwEch`
+**Status**: Completed
 **Changes**:
 
-- libp2p node setup
-- Noise encryption
-- Peer discovery
-- Connection management
+- ✅ `NodeConfig` for configuring libp2p node
+- ✅ `VeritasNode` wrapping libp2p Swarm
+- ✅ Noise protocol encryption
+- ✅ Kademlia DHT (`/veritas/kad/1.0.0`)
+- ✅ Gossipsub pub/sub integration
+- ✅ mDNS local discovery
+- ✅ Identify protocol
+- ✅ `NodeBehaviour` combining all behaviours
+- ✅ `NodeEvent` enum for event handling
+- ✅ Event loop with channel-based emission
   **Version**: 0.1.0-alpha.7
   **Agents**: Backend, Security, QA
 
-### Task 030: DHT Storage
+### Task 030: DHT Storage ✅ COMPLETED
 
-**Branch**: `feat/030-dht`
+**Branch**: `claude/networking-layer-phase-7-IwEch`
+**Status**: Completed
 **Changes**:
 
-- Kademlia DHT setup
-- Mailbox key derivation
-- Message storage/retrieval
-- TTL handling
+- ✅ `DhtConfig` with replication, TTL, query settings
+- ✅ `DhtKey` for DHT record keys from mailbox keys
+- ✅ `DhtRecord` for serialized message storage
+- ✅ `DhtRecordSet` for multiple messages per mailbox
+- ✅ `DhtStorage` with store/get/delete/has methods
+- ✅ TTL enforcement (7 days)
+- ✅ Message ID computation from envelope hash
   **Version**: 0.1.0-alpha.7
   **Agents**: Backend, QA
 
-### Task 031: Gossip Protocol
+### Task 031: Gossip Protocol ✅ COMPLETED
 
-**Branch**: `feat/031-gossip`
+**Branch**: `claude/networking-layer-phase-7-IwEch`
+**Status**: Completed
 **Changes**:
 
-- Gossipsub setup
-- Message announcement
-- Topic management
+- ✅ `GossipConfig` with mesh parameters
+- ✅ `GossipManager` for pub/sub messaging
+- ✅ Topic constants (messages, blocks, receipts)
+- ✅ `MessageAnnouncement` (privacy-preserving)
+- ✅ `BlockAnnouncement` for new blocks
+- ✅ `ReceiptAnnouncement` for delivery receipts
+- ✅ Hourly timestamp buckets for temporal privacy
+- ✅ Size buckets for traffic analysis resistance
   **Version**: 0.1.0-alpha.7
   **Agents**: Backend, QA
 
-### Task 032: Local Discovery (mDNS)
+### Task 032: Local Discovery (mDNS) ✅ COMPLETED
 
-**Branch**: `feat/032-mdns`
+**Branch**: `claude/networking-layer-phase-7-IwEch`
+**Status**: Completed
 **Changes**:
 
-- mDNS service advertisement
-- Peer discovery on local network
-- Integration with transport manager
+- ✅ `DiscoveryConfig` with TTL and query settings
+- ✅ `LocalDiscovery` wrapping mDNS behaviour
+- ✅ `DiscoveredPeer` with peer ID, addresses, timestamps
+- ✅ `DiscoveryEvent` enum (PeerDiscovered, PeerExpired)
+- ✅ Automatic peer pruning for stale entries
+- ✅ Service name: `_veritas._tcp.local`
   **Version**: 0.1.0-alpha.7
   **Agents**: Backend, QA
 
-### Task 033: Bluetooth Relay Transport
+### Task 033: Bluetooth Relay Transport ✅ COMPLETED (Placeholder)
 
-**Branch**: `feat/033-bluetooth-relay`
+**Branch**: `claude/networking-layer-phase-7-IwEch`
+**Status**: Completed (Placeholder)
 **Changes**:
 
-- btleplug integration
-- BLE service/characteristic setup
-- NO PIN verification (pure relay)
-- NO pairing required (any VERITAS node can relay)
-- Find relay peers, forward to network-connected nodes
-- Security from E2E encryption, not transport
+- ✅ `BluetoothConfig` with service UUID, MTU, scan interval
+- ✅ `BlePeer` for discovered BLE devices
+- ✅ `BluetoothRelay` placeholder (all methods return NotImplemented)
+- ✅ `BluetoothStats` for relay statistics
+- ✅ NO PIN verification (pure relay)
+- ✅ NO pairing required (security from E2E encryption)
+- ⏳ btleplug integration (pending future implementation)
   **Version**: 0.1.0-alpha.7
   **Agents**: Backend, QA
+  **Note**: API designed for future btleplug integration
 
-### Task 034: Store-and-Forward
+### Task 034: Store-and-Forward ✅ COMPLETED
 
-**Branch**: `feat/034-store-forward`
+**Branch**: `claude/networking-layer-phase-7-IwEch`
+**Status**: Completed
 **Changes**:
 
-- Relay logic
-- Message holding for offline peers
-- Delivery on reconnection
-- Hop limit handling
+- ✅ `RelayConfig` with hop limit, TTL, capacity settings
+- ✅ `RelayedMessage` with envelope, hop count, timestamps
+- ✅ `RelayManager` with store/get/mark/forward/prune methods
+- ✅ `RelayStats` for monitoring
+- ✅ Hop limit (3) prevents infinite loops
+- ✅ Traffic analysis resistance via jitter delay
+- ✅ 12 unit tests
   **Version**: 0.1.0-alpha.7
   **Agents**: Backend, QA
 
