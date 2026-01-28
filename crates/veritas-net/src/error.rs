@@ -44,6 +44,64 @@ pub enum NetError {
     /// IO error.
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    /// Node not started.
+    #[error("Node not started")]
+    NodeNotStarted,
+
+    /// Invalid configuration.
+    #[error("Invalid configuration: {0}")]
+    InvalidConfig(String),
+
+    /// Subscription error.
+    #[error("Subscription error: {0}")]
+    Subscription(String),
+
+    /// Relay error.
+    #[error("Relay error: {0}")]
+    Relay(String),
+
+    /// Message too large.
+    #[error("Message too large: {size} bytes (max: {max})")]
+    MessageTooLarge {
+        /// Actual size.
+        size: usize,
+        /// Maximum allowed size.
+        max: usize,
+    },
+
+    /// Hop limit exceeded.
+    #[error("Hop limit exceeded: {hops} (max: {max})")]
+    HopLimitExceeded {
+        /// Current hop count.
+        hops: u8,
+        /// Maximum allowed hops.
+        max: u8,
+    },
+
+    /// Discovery error.
+    #[error("Discovery error: {0}")]
+    Discovery(String),
+
+    /// Serialization error.
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+
+    /// Channel closed.
+    #[error("Channel closed")]
+    ChannelClosed,
+
+    /// Swarm error.
+    #[error("Swarm error: {0}")]
+    Swarm(String),
+
+    /// Dial error.
+    #[error("Dial error: {0}")]
+    Dial(String),
+
+    /// Listen error.
+    #[error("Listen error: {0}")]
+    Listen(String),
 }
 
 /// Result type for networking operations.

@@ -15,10 +15,14 @@ veritas-protocol.workspace = true
 veritas-reputation.workspace = true
 
 # Networking
-libp2p.workspace = true
+libp2p = { workspace = true, features = ["macros", "yamux"] }
 
 # Async
 tokio.workspace = true
+futures.workspace = true
+
+# Cryptography
+blake3.workspace = true
 
 # Serialization
 serde.workspace = true
@@ -31,5 +35,13 @@ anyhow.workspace = true
 # Logging
 tracing.workspace = true
 
+# Time
+chrono.workspace = true
+
+# Utilities
+hex.workspace = true
+rand.workspace = true
+
 [dev-dependencies]
 proptest.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

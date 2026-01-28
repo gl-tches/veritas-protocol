@@ -50,9 +50,10 @@ bincode = "1"
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
+futures = "0.3"
 
 # Networking
-libp2p = { version = "0.53", features = ["tokio", "noise", "tcp", "dns", "websocket", "kad", "gossipsub", "mdns", "identify"] }
+libp2p = { version = "0.53", features = ["tokio", "noise", "tcp", "dns", "websocket", "kad", "gossipsub", "mdns", "identify", "yamux", "macros"] }
 
 # Storage
 sled = "0.34"

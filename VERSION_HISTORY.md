@@ -7,6 +7,120 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7] - 2026
+
+### Added
+
+- **Task 028**: Network-First Transport Selection
+  - `TransportType` enum (Internet, LocalNetwork, Bluetooth, Queued)
+  - `TransportState` for tracking transport availability
+  - `TransportStatus` for connection status
+  - `TransportCapabilities` describing transport features
+  - `Transport` trait with async connectivity methods
+  - `TransportSelector` implementing network-first priority:
+    1. Internet first (always try direct connectivity)
+    2. Local WiFi relay (mDNS-discovered peers)
+    3. Bluetooth relay (BLE peers)
+    4. Queue locally (store for later)
+  - `PeerInfo` for peer tracking with addresses
+  - `NetworkAddress` multiaddr wrapper
+
+- **Task 029**: libp2p Integration
+  - `NodeConfig` for configuring libp2p node
+  - `VeritasNode` wrapping libp2p Swarm with:
+    - Noise protocol encryption
+    - Kademlia DHT (`/veritas/kad/1.0.0`)
+    - Gossipsub pub/sub
+    - mDNS local discovery
+    - Identify protocol
+  - `NodeBehaviour` combining all libp2p behaviours
+  - `NodeEvent` enum for external event handling
+  - Event loop with channel-based emission
+  - Bootstrap peer support
+  - Topic subscription management
+
+- **Task 030**: DHT Storage
+  - `DhtConfig` with replication, TTL, and query settings
+  - `DhtKey` for DHT record keys derived from mailbox keys
+  - `DhtRecord` for serialized message storage
+  - `DhtRecordSet` for multiple messages per mailbox
+  - `DhtStorage` providing:
+    - `store_message()` - store envelope by mailbox key
+    - `get_messages()` - retrieve messages for mailbox
+    - `delete_message()` - remove specific message
+    - `has_messages()` - check mailbox status
+  - TTL enforcement (7 days per MESSAGE_TTL)
+  - Message ID computation from envelope hash
+
+- **Task 031**: Gossip Protocol
+  - `GossipConfig` with mesh parameters (heartbeat, size, history)
+  - `GossipManager` managing pub/sub messaging
+  - Topic constants:
+    - `TOPIC_MESSAGES` ("veritas/messages/v1")
+    - `TOPIC_BLOCKS` ("veritas/blocks/v1")
+    - `TOPIC_RECEIPTS` ("veritas/receipts/v1")
+  - `MessageAnnouncement` (privacy-preserving):
+    - Uses mailbox key, NOT recipient identity
+    - Hourly timestamp buckets to hide exact times
+    - Size buckets (256/512/1024) to hide true size
+  - `BlockAnnouncement` for new block notifications
+  - `ReceiptAnnouncement` for delivery receipts
+  - `GossipAnnouncement` enum combining all types
+
+- **Task 032**: Local Discovery (mDNS)
+  - `DiscoveryConfig` with TTL and query settings
+  - `LocalDiscovery` wrapping mDNS behaviour
+  - `DiscoveredPeer` tracking:
+    - Peer ID and addresses
+    - Discovery and last seen timestamps
+  - `DiscoveryEvent` enum (PeerDiscovered, PeerExpired)
+  - Automatic peer pruning for stale entries
+  - Service name: `_veritas._tcp.local`
+
+- **Task 033**: Bluetooth Relay (Placeholder)
+  - `BluetoothConfig` with service UUID, MTU, scan interval
+  - `BlePeer` for discovered BLE devices
+  - `BluetoothRelay` (placeholder implementation):
+    - All methods return `Err(Transport("Bluetooth not implemented"))`
+    - API designed for future btleplug integration
+  - `BluetoothStats` for relay statistics
+  - **CRITICAL**: NO PIN verification, NO pairing required
+    - Security from E2E encryption, not transport
+    - BLE is pure relay layer
+
+- **Task 034**: Store-and-Forward
+  - `RelayConfig` with hop limit, TTL, capacity settings
+  - `RelayedMessage` tracking:
+    - Envelope data
+    - Hop count (max 3 hops)
+    - Received timestamp
+    - Forward attempts
+  - `RelayManager` providing:
+    - `store_for_relay()` - hold message for offline peer
+    - `get_pending()` - retrieve pending messages
+    - `mark_delivered()` - remove delivered message
+    - `should_forward()` - check if still valid
+    - `increment_hop()` - track forwarding
+    - `prune_expired()` - clean old messages
+  - `RelayStats` for monitoring
+  - Traffic analysis resistance via jitter delay
+
+### Security
+
+- Network-first transport selection prioritizes direct connectivity
+- Bluetooth relay requires NO PIN/pairing (security from E2E encryption)
+- Mailbox keys derived from recipient + epoch + salt (unlinkable)
+- Message announcements use hourly time buckets (temporal privacy)
+- Message sizes use fixed padding buckets (traffic analysis resistance)
+- Hop limit (3) prevents infinite relay loops
+- Message TTL (7 days) prevents indefinite storage
+
+### Crates Updated
+
+| Crate | Version | Status |
+|-------|---------|--------|
+| veritas-net | 0.1.0-alpha.7 | Networking layer complete |
+
 ## [0.1.0-alpha.6] - 2026
 
 ### Added
