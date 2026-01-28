@@ -132,6 +132,15 @@ pub struct EncryptedData {
     pub ciphertext: Vec<u8>,
 }
 
+impl std::fmt::Debug for EncryptedData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EncryptedData")
+            .field("nonce", &self.nonce)
+            .field("ciphertext_len", &self.ciphertext.len())
+            .finish()
+    }
+}
+
 impl EncryptedData {
     /// Get the total size of the encrypted data.
     pub fn len(&self) -> usize {
@@ -221,11 +230,7 @@ pub fn decrypt(key: &SymmetricKey, encrypted: &EncryptedData) -> Result<Vec<u8>>
 ///
 /// AAD is authenticated but not encrypted - useful for headers/metadata
 /// that need integrity protection but can be public.
-pub fn encrypt_with_aad(
-    key: &SymmetricKey,
-    plaintext: &[u8],
-    aad: &[u8],
-) -> Result<EncryptedData> {
+pub fn encrypt_with_aad(key: &SymmetricKey, plaintext: &[u8], aad: &[u8]) -> Result<EncryptedData> {
     use chacha20poly1305::aead::Payload;
 
     let cipher = XChaCha20Poly1305::new(key.as_bytes().into());
@@ -262,7 +267,9 @@ pub fn decrypt_with_aad(
         aad,
     };
 
-    cipher.decrypt(xnonce, payload).map_err(|_| CryptoError::Decryption)
+    cipher
+        .decrypt(xnonce, payload)
+        .map_err(|_| CryptoError::Decryption)
 }
 
 #[cfg(test)]
@@ -440,9 +447,6 @@ mod tests {
         let encrypted = encrypt(&key, plaintext).unwrap();
 
         // Length should be nonce + ciphertext (plaintext + tag)
-        assert_eq!(
-            encrypted.len(),
-            NONCE_SIZE + plaintext.len() + TAG_SIZE
-        );
+        assert_eq!(encrypted.len(), NONCE_SIZE + plaintext.len() + TAG_SIZE);
     }
 }

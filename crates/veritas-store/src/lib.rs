@@ -13,4 +13,4 @@
 
 pub mod error;
 
-pub use error::{StoreError, Result};
+pub use error::{Result, StoreError};

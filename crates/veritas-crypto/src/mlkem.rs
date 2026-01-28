@@ -73,9 +73,7 @@ pub struct MlKemPrivateKey {
 impl MlKemPrivateKey {
     /// Get the corresponding public key.
     pub fn public_key(&self) -> MlKemPublicKey {
-        MlKemPublicKey {
-            _bytes: Vec::new(),
-        }
+        MlKemPublicKey { _bytes: Vec::new() }
     }
 
     /// Get raw bytes (for secure storage).
@@ -143,7 +141,9 @@ impl MlKemCiphertext {
 /// # Errors
 ///
 /// Returns an error if encapsulation fails.
-pub fn encapsulate(_public_key: &MlKemPublicKey) -> Result<(MlKemCiphertext, [u8; SHARED_SECRET_SIZE])> {
+pub fn encapsulate(
+    _public_key: &MlKemPublicKey,
+) -> Result<(MlKemCiphertext, [u8; SHARED_SECRET_SIZE])> {
     // TODO: Implement once ml-kem crate stabilizes
     Err(CryptoError::Encapsulation(
         "ML-KEM not yet implemented - waiting for ml-kem crate to stabilize".into(),
