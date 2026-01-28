@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.2] - 2024
+
+### Added
+
+- **Task 007**: Identity Hash Generation
+  - `IdentityHash` type derived from public key using BLAKE3
+  - Domain separation (`VERITAS-IDENTITY-HASH-v1`)
+  - Constant-time comparison via `subtle`
+  - Hex encoding/decoding and Display formatting
+  - 23 unit tests + property tests
+
+- **Task 008**: Identity Keypair
+  - `IdentityKeyPair` with X25519 keys (ML-DSA placeholder)
+  - `IdentityPublicKeys` for shareable public keys
+  - Encrypted serialization for secure storage
+  - Key exchange and encryption key derivation
+  - `Zeroize` on all private keys
+  - 16 unit tests
+
+- **Task 009**: Username System
+  - `Username` type with validation (3-32 chars, alphanumeric + _-)
+  - `UsernameRegistration` linking username to identity
+  - Signature-based registration verification
+  - Case-insensitive comparison
+  - 23 unit tests + property tests
+
+- **Task 010**: Key Lifecycle and Identity Limits
+  - `KeyState` enum (Active, Expiring, Expired, Rotated, Revoked)
+  - `KeyLifecycle` with 30-day expiry, 5-day warning, 24-hour grace
+  - `OriginFingerprint` for privacy-preserving device binding
+  - `IdentityLimiter` enforcing max 3 identities per origin
+  - `IdentitySlotInfo` for user-facing slot status
+  - Slot recycling and rotation support
+  - 53 unit tests (36 lifecycle + 17 limits)
+
+### Crates Updated
+
+| Crate | Version | Status |
+|-------|---------|--------|
+| veritas-identity | 0.1.0-alpha.2 | Identity system complete |
+
 ## [0.1.0-alpha.1] - 2024
 
 ### Added
