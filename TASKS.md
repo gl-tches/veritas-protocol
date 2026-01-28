@@ -107,56 +107,63 @@
 
 ## Phase 2: Identity System (v0.1.0-alpha.2)
 
-### Task 007: Identity Hash Generation
+### Task 007: Identity Hash Generation ✅ COMPLETED
 
-**Branch**: `feat/007-identity-hash`
+**Branch**: `claude/review-and-execute-GTVfn`
+**Status**: Completed
 **Changes**:
 
-- IdentityHash type (BLAKE3 of public key)
-- Serialization/deserialization
-- Display formatting
-- Unit tests
+- ✅ IdentityHash type (BLAKE3 of public key with domain separation)
+- ✅ Serialization/deserialization (serde, bytes, hex)
+- ✅ Display formatting (full and short)
+- ✅ Constant-time comparison via `subtle`
+- ✅ Unit tests (23 tests + property tests)
   **Version**: 0.1.0-alpha.2
   **Agents**: Backend, Security, QA
 
-### Task 008: Identity Keypair
+### Task 008: Identity Keypair ✅ COMPLETED
 
-**Branch**: `feat/008-identity-keypair`
+**Branch**: `claude/review-and-execute-GTVfn`
+**Status**: Completed
 **Changes**:
 
-- Identity struct with all key types
-- Key generation
-- Serialization (encrypted private keys)
-- Unit tests
+- ✅ Identity struct with X25519 keys (ML-DSA placeholder)
+- ✅ Key generation with `generate()`
+- ✅ Encrypted serialization for secure storage
+- ✅ Key exchange and encryption key derivation
+- ✅ Unit tests (16 tests)
   **Version**: 0.1.0-alpha.2
   **Agents**: Backend, Security, QA
 
-### Task 009: Username System
+### Task 009: Username System ✅ COMPLETED
 
-**Branch**: `feat/009-username`
+**Branch**: `claude/review-and-execute-GTVfn`
+**Status**: Completed
 **Changes**:
 
-- Username type with validation
-- UsernameRegistration struct
-- Linking multiple identities
-- Unit tests
+- ✅ Username type with validation (3-32 chars, alphanumeric + _-)
+- ✅ UsernameRegistration struct with signing
+- ✅ Signature verification support
+- ✅ Case-insensitive comparison
+- ✅ Unit tests (23 tests + property tests)
   **Version**: 0.1.0-alpha.2
   **Agents**: Backend, Security, QA
 
-### Task 010: Key Lifecycle and Identity Limits
+### Task 010: Key Lifecycle and Identity Limits ✅ COMPLETED
 
-**Branch**: `feat/010-key-lifecycle-limits`
+**Branch**: `claude/review-and-execute-GTVfn`
+**Status**: Completed
 **Changes**:
 
-- KeyState enum (Active, Expiring, Expired, Rotated, Revoked)
-- Expiry checking logic (30 days inactive)
-- Rotation with prev_identity linking
-- IdentityLimiter: max 3 identities per origin
-- OriginFingerprint: privacy-preserving device binding
-- 24-hour grace period after expiry
-- Slot recycling when identity expires
-- IdentitySlotInfo for user-facing status
-- Unit tests
+- ✅ KeyState enum (Active, Expiring, Expired, Rotated, Revoked)
+- ✅ Expiry checking logic (30 days inactive)
+- ✅ Rotation with prev_identity linking
+- ✅ IdentityLimiter: max 3 identities per origin
+- ✅ OriginFingerprint: privacy-preserving device binding
+- ✅ 24-hour grace period after expiry
+- ✅ Slot recycling when identity expires
+- ✅ IdentitySlotInfo for user-facing status
+- ✅ Unit tests (53 tests: 36 lifecycle + 17 limits)
   **Version**: 0.1.0-alpha.2
   **Agents**: Backend, Security, QA
 

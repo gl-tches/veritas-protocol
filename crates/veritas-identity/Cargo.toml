@@ -19,12 +19,16 @@ bincode.workspace = true
 # Security
 zeroize.workspace = true
 rand.workspace = true
+subtle.workspace = true
 
 # Error handling
 thiserror.workspace = true
 
 # Time
 chrono.workspace = true
+
+# Encoding
+hex.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

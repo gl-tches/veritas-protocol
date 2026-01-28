@@ -40,6 +40,7 @@ rand = "0.8"
 getrandom = { version = "0.2", features = ["js"] }
 zeroize = { version = "1", features = ["derive"] }
 subtle = "2"
+hex = "0.4"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

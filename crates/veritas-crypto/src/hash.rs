@@ -7,7 +7,7 @@ use subtle::ConstantTimeEq;
 use zeroize::Zeroize;
 
 /// A 256-bit (32-byte) hash value using BLAKE3.
-#[derive(Clone, Serialize, Deserialize, Zeroize)]
+#[derive(Clone, Default, Serialize, Deserialize, Zeroize)]
 pub struct Hash256([u8; 32]);
 
 impl Hash256 {
@@ -146,12 +146,6 @@ impl std::fmt::Display for Hash256 {
 impl AsRef<[u8]> for Hash256 {
     fn as_ref(&self) -> &[u8] {
         &self.0
-    }
-}
-
-impl Default for Hash256 {
-    fn default() -> Self {
-        Self([0u8; 32])
     }
 }
 
