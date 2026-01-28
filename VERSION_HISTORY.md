@@ -37,6 +37,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `EncryptedData` serialization
   - 15 unit tests
 
+- **Task 004**: ML-KEM key encapsulation (PLACEHOLDER)
+  - API design for `MlKemKeyPair`, `MlKemPublicKey`, `MlKemPrivateKey`
+  - `encapsulate()` and `decapsulate()` function signatures
+  - Waiting for ml-kem crate to stabilize (currently 0.3.0-pre.5)
+  - Size constants defined (PUBLIC_KEY_SIZE, CIPHERTEXT_SIZE, etc.)
+
+- **Task 005**: ML-DSA digital signatures (PLACEHOLDER)
+  - API design for `MlDsaKeyPair`, `MlDsaPublicKey`, `MlDsaPrivateKey`
+  - `sign()` and `verify()` method signatures
+  - Waiting for ml-dsa crate to stabilize (currently 0.1.0-rc.4)
+  - Size constants defined (PUBLIC_KEY_SIZE, SIGNATURE_SIZE, etc.)
+
 - **Task 006**: X25519 key exchange
   - `X25519StaticPrivateKey` for long-term keys
   - `X25519EphemeralKeyPair` for per-message keys
