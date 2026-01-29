@@ -2,8 +2,8 @@
 name = "veritas-crypto"
 description = "Cryptographic primitives for VERITAS protocol - post-quantum secure"
 version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
+edition = "2024"
+rust-version = "1.85"
 license.workspace = true
 repository.workspace = true
 keywords = ["cryptography", "post-quantum", "ml-kem", "ml-dsa", "blake3"]

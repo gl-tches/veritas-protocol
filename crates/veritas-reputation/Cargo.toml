@@ -2,8 +2,8 @@
 name = "veritas-reputation"
 description = "Reputation scoring system for VERITAS protocol"
 version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
+edition = "2024"
+rust-version = "1.85"
 license.workspace = true
 repository.workspace = true
 keywords = ["reputation", "scoring", "anti-spam", "trust"]
