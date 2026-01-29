@@ -33,3 +33,22 @@ pub enum FfiError {
 
 /// Result type for FFI operations.
 pub type Result<T> = std::result::Result<T, FfiError>;
+
+impl From<FfiError> for crate::ErrorCode {
+    fn from(err: FfiError) -> Self {
+        match err {
+            FfiError::NullPointer => crate::ErrorCode::NullPointer,
+            FfiError::InvalidArgument(_) => crate::ErrorCode::InvalidArgument,
+            FfiError::InvalidUtf8 => crate::ErrorCode::InvalidArgument,
+            FfiError::BufferTooSmall { .. } => crate::ErrorCode::InvalidArgument,
+            FfiError::Core(e) => match e {
+                veritas_core::CoreError::Crypto(_) => crate::ErrorCode::CryptoError,
+                veritas_core::CoreError::Identity(_) => crate::ErrorCode::IdentityError,
+                veritas_core::CoreError::Protocol(_) => crate::ErrorCode::ProtocolError,
+                veritas_core::CoreError::Net(_) => crate::ErrorCode::NetworkError,
+                veritas_core::CoreError::Store(_) => crate::ErrorCode::StorageError,
+                _ => crate::ErrorCode::Unknown,
+            },
+        }
+    }
+}

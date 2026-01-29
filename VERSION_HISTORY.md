@@ -7,6 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-beta.2] - 2026
+
+### Added
+
+- **Task 040**: C FFI Bindings
+  - cbindgen setup for automatic C header generation (`veritas.h`)
+  - `VeritasHandle` opaque pointer type for C interoperability
+  - Client lifecycle functions:
+    - `veritas_client_create(path)` - create client (in-memory or persistent)
+    - `veritas_client_unlock(handle, password, len)` - unlock with password
+    - `veritas_client_lock(handle)` - lock and zeroize sensitive data
+    - `veritas_client_shutdown(handle)` - clean shutdown
+    - `veritas_client_free(handle)` - free resources
+  - Identity management functions:
+    - `veritas_identity_hash(handle, buf, len)` - get primary identity hash
+    - `veritas_create_identity(handle, label, buf, len)` - create new identity
+    - `veritas_identity_slots(handle, used, max, available)` - check slot usage
+  - Safety number functions:
+    - `veritas_safety_number_compute()` - compute raw safety number
+    - `veritas_safety_number_to_numeric()` - 60-digit verbal format
+    - `veritas_safety_number_to_qr()` - 64-char hex for QR codes
+  - `veritas_version()` - get library version
+  - 14 unit tests
+
+- **Task 041**: WASM Bindings
+  - `WasmClient` class with full lifecycle management:
+    - `new()` - create with in-memory storage
+    - `unlock(password)` / `lock()` / `shutdown()` - lifecycle
+    - `is_unlocked()` - check lock status
+  - Identity management:
+    - `create_identity(label)` - create new identity
+    - `list_identities()` - list all with metadata
+    - `identity_slots()` - get usage info (used/max/available)
+    - `switch_identity(hash)` - switch active identity
+    - `identity_hash()` / `get_public_keys()` - access current identity
+  - `WasmSafetyNumber` class:
+    - `compute(our_keys, their_keys)` - symmetric computation
+    - `to_numeric_string()` - 60-digit format
+    - `to_qr_string()` - 64-char hex
+  - `WasmIdentityInfo` and `WasmIdentitySlotInfo` helper types
+  - `WasmError` for JavaScript interop
+  - Argon2id password-based key derivation
+  - ChaCha20-Poly1305 encrypted storage
+  - 11 unit tests
+
+- **Task 042**: Python Bindings
+  - `VeritasClient` class with tokio runtime integration:
+    - `VeritasClient(path=None)` - create client
+    - `unlock(password)` / `lock()` / `shutdown()` - lifecycle
+    - `is_unlocked()` / `state()` - status checks
+  - Identity management:
+    - `identity_hash()` - hex hash of primary identity
+    - `public_keys()` - serialized public keys
+    - `create_identity(label)` - create new identity
+    - `list_identities()` - list all identities
+    - `set_primary_identity(hash)` - change primary
+    - `identity_slots()` - slot usage info
+  - Supporting classes:
+    - `IdentityInfo` - hash, label, is_primary, created_at
+    - `IdentitySlots` - used, max, available, can_create()
+    - `SafetyNumber` - compute(), to_numeric_string(), to_qr_string()
+  - `VeritasError` custom exception
+  - `veritas.pyi` type stub file for IDE support
+  - 1 unit test (integration tests require Python runtime)
+
+### Security
+
+- All FFI inputs validated at boundary before processing
+- Null pointer checks on all FFI function entries
+- Panic catching with `std::panic::catch_unwind` in FFI layer
+- Error codes used instead of exceptions in C API
+- Memory safety with explicit `_free` functions
+- WASM storage encrypted with Argon2id-derived keys
+- Identity limits (max 3 per origin) enforced in all bindings
+- Sensitive data zeroization on lock/shutdown
+
+### Crates Updated
+
+| Crate | Version | Status |
+|-------|---------|--------|
+| veritas-ffi | 0.1.0-beta.2 | C FFI bindings complete |
+| veritas-wasm | 0.1.0-beta.2 | WASM bindings complete |
+| veritas-py | 0.1.0-beta.2 | Python bindings complete |
+
 ## [0.1.0-beta.1] - 2026
 
 ### Added
