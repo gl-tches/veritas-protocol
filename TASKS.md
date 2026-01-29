@@ -1,989 +1,480 @@
-# VERITAS Implementation Tasks
+# TASKS.md — VERITAS Protocol
 
-> Structured task breakdown for Claude Code development sessions
-
-## Phase 1: Foundation (v0.1.0-alpha.1)
-
-### Task 001: Project Scaffolding ✅ COMPLETED
-
-**Branch**: `claude/review-and-execute-GTVfn`
-**Status**: Completed
-**Changes**:
-
-- ✅ Create all 11 crate directories with Cargo.toml
-- ✅ Set up workspace dependencies
-- ✅ Add LICENSE files (MIT + Apache-2.0)
-- ✅ Initialize git repository
-- ✅ Created error types for all crates
-- ✅ Added protocol limits module
-  **Version**: 0.1.0-alpha.1
-  **Agents**: Lead, Docs
-
-### Task 002: Crypto Primitives — Hashing ✅ COMPLETED
-
-**Branch**: `claude/review-and-execute-GTVfn`
-**Status**: Completed
-**Changes**:
-
-- ✅ Implement BLAKE3 wrapper in veritas-crypto
-- ✅ Add Hash256 type with serialization
-- ✅ Add Zeroize support
-- ✅ Unit tests for hash operations (9 tests)
-- ✅ Multi-input hashing with domain separation
-- ✅ Keyed hashing (MAC) and key derivation
-- ✅ Hex encoding/decoding
-- ✅ Constant-time comparison via `subtle`
-  **Version**: 0.1.0-alpha.1
-  **Agents**: Backend, Security, QA
-
-### Task 003: Crypto Primitives — Symmetric Encryption ✅ COMPLETED
-
-**Branch**: `claude/review-and-execute-GTVfn`
-**Status**: Completed
-**Changes**:
-
-- ✅ Implement ChaCha20-Poly1305 encrypt/decrypt (XChaCha20-Poly1305 AEAD)
-- ✅ Nonce generation (random 192-bit / 24-byte)
-- ✅ SymmetricKey type with Zeroize
-- ✅ Unit tests + property tests (15 tests)
-- ✅ Additional authenticated data (AAD) support
-- ✅ EncryptedData serialization
-  **Version**: 0.1.0-alpha.1
-  **Agents**: Backend, Security, QA
-
-### Task 004: Crypto Primitives — ML-KEM ⏳ PLACEHOLDER
-
-**Branch**: `claude/review-and-execute-GTVfn`
-**Status**: API designed, awaiting crate stabilization
-**Changes**:
-
-- ✅ API design for MlKemKeyPair, MlKemPublicKey, MlKemPrivateKey
-- ✅ encapsulate() and decapsulate() function signatures
-- ✅ Size constants defined (PUBLIC_KEY_SIZE, CIPHERTEXT_SIZE, etc.)
-- ⏳ Integrate ml-kem crate (waiting for 0.3.0-pre.5 to stabilize)
-- ⏳ MlKemKeyPair with generate/encapsulate/decapsulate
-- ⏳ Zeroize on private key
-- ⏳ Unit tests
-  **Version**: 0.1.0-alpha.1
-  **Agents**: Backend, Security, QA
-  **Note**: ml-kem crate has API compatibility issues in pre-release
-
-### Task 005: Crypto Primitives — ML-DSA ⏳ PLACEHOLDER
-
-**Branch**: `claude/review-and-execute-GTVfn`
-**Status**: API designed, awaiting crate stabilization
-**Changes**:
-
-- ✅ API design for MlDsaKeyPair, MlDsaPublicKey, MlDsaPrivateKey
-- ✅ sign() and verify() method signatures
-- ✅ Size constants defined (PUBLIC_KEY_SIZE, SIGNATURE_SIZE, etc.)
-- ⏳ Integrate ml-dsa crate (waiting for 0.1.0-rc.4 to stabilize)
-- ⏳ MlDsaKeyPair with generate/sign/verify
-- ⏳ Zeroize on private key
-- ⏳ Unit tests
-  **Version**: 0.1.0-alpha.1
-  **Agents**: Backend, Security, QA
-  **Note**: ml-dsa crate has API compatibility issues in pre-release
-
-### Task 006: Crypto Primitives — X25519 Hybrid ✅ COMPLETED
-
-**Branch**: `claude/review-and-execute-GTVfn`
-**Status**: Completed (classical key exchange ready, hybrid pending ML-KEM)
-**Changes**:
-
-- ✅ Integrate x25519-dalek
-- ✅ X25519StaticPrivateKey for long-term identity keys
-- ✅ X25519EphemeralKeyPair for per-message encryption
-- ✅ X25519PublicKey with serialization
-- ✅ SharedSecret with Zeroize and BLAKE3 key derivation
-- ✅ Diffie-Hellman key agreement
-- ✅ Unit tests (12 tests)
-- ⏳ Hybrid key exchange (X25519 + ML-KEM) - pending ML-KEM integration
-- ⏳ Combined shared secret derivation - pending ML-KEM integration
-  **Version**: 0.1.0-alpha.1
-  **Agents**: Backend, Security, QA
+> Task tracking for development, security remediation, and Rust 2024 migration
 
 -----
 
-## Phase 2: Identity System (v0.1.0-alpha.2)
+## Current Sprint: Rust 2024 Edition Migration
 
-### Task 007: Identity Hash Generation ✅ COMPLETED
+**Branch**: `chore/rust-2024-edition-upgrade`  
+**Target**: Upgrade all crates from Rust 2021 to Rust 2024 edition  
+**MSRV Change**: 1.75 → 1.85  
+**Estimated Effort**: 2-3 days
 
-**Branch**: `claude/review-and-execute-GTVfn`
-**Status**: Completed
-**Changes**:
+### Pre-Migration Checklist
 
-- ✅ IdentityHash type (BLAKE3 of public key with domain separation)
-- ✅ Serialization/deserialization (serde, bytes, hex)
-- ✅ Display formatting (full and short)
-- ✅ Constant-time comparison via `subtle`
-- ✅ Unit tests (23 tests + property tests)
-  **Version**: 0.1.0-alpha.2
-  **Agents**: Backend, Security, QA
-
-### Task 008: Identity Keypair ✅ COMPLETED
-
-**Branch**: `claude/review-and-execute-GTVfn`
-**Status**: Completed
-**Changes**:
-
-- ✅ Identity struct with X25519 keys (ML-DSA placeholder)
-- ✅ Key generation with `generate()`
-- ✅ Encrypted serialization for secure storage
-- ✅ Key exchange and encryption key derivation
-- ✅ Unit tests (16 tests)
-  **Version**: 0.1.0-alpha.2
-  **Agents**: Backend, Security, QA
-
-### Task 009: Username System ✅ COMPLETED
-
-**Branch**: `claude/review-and-execute-GTVfn`
-**Status**: Completed
-**Changes**:
-
-- ✅ Username type with validation (3-32 chars, alphanumeric + _-)
-- ✅ UsernameRegistration struct with signing
-- ✅ Signature verification support
-- ✅ Case-insensitive comparison
-- ✅ Unit tests (23 tests + property tests)
-  **Version**: 0.1.0-alpha.2
-  **Agents**: Backend, Security, QA
-
-### Task 010: Key Lifecycle and Identity Limits ✅ COMPLETED
-
-**Branch**: `claude/review-and-execute-GTVfn`
-**Status**: Completed
-**Changes**:
-
-- ✅ KeyState enum (Active, Expiring, Expired, Rotated, Revoked)
-- ✅ Expiry checking logic (30 days inactive)
-- ✅ Rotation with prev_identity linking
-- ✅ IdentityLimiter: max 3 identities per origin
-- ✅ OriginFingerprint: privacy-preserving device binding
-- ✅ 24-hour grace period after expiry
-- ✅ Slot recycling when identity expires
-- ✅ IdentitySlotInfo for user-facing status
-- ✅ Unit tests (53 tests: 36 lifecycle + 17 limits)
-  **Version**: 0.1.0-alpha.2
-  **Agents**: Backend, Security, QA
+- [ ] **TASK-100**: Ensure all security audit fixes are merged to `main`
+- [ ] **TASK-101**: Run full test suite on `main` branch (baseline)
+- [ ] **TASK-102**: Create migration branch `chore/rust-2024-edition-upgrade`
+- [ ] **TASK-103**: Verify all dependencies build with Rust 1.85
+- [ ] **TASK-104**: Document current `static mut` usage across codebase
 
 -----
 
-## Phase 3: Protocol Layer (v0.1.0-alpha.3)
+### Phase 1: Leaf Crates (No Internal Dependencies)
 
-### Task 011: Minimal Metadata Envelope ✅ COMPLETED
+#### TASK-110: Migrate veritas-crypto to Rust 2024
 
-**Branch**: `claude/phase-3-protocol-layer-fhZIO`
-**Status**: Completed
-**Changes**:
+**Priority**: P1  
+**Status**: NOT STARTED  
+**Assignee**: Claude Code
 
-- ✅ MinimalEnvelope struct (mailbox_key, ephemeral_key, nonce, ciphertext)
-- ✅ InnerPayload struct (sender_id, timestamp, content, signature inside encryption)
-- ✅ Mailbox key derivation (recipient + epoch + salt)
-- ✅ Ephemeral key generation per message
-- ✅ Padding to fixed size buckets (256/512/1024) with random fill
-- ✅ Timing jitter (0-3 sec random delay using OsRng)
-- ✅ MinimalEnvelopeBuilder for fluent construction
-- ✅ Unit tests (16 tests)
-  **Version**: 0.1.0-alpha.3
-  **Agents**: Backend, Security, QA
+**Checklist**:
 
-### Task 012: Message Encryption ✅ COMPLETED
+- [ ] Run `cargo fix --edition` on crate
+- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [ ] Review `unsafe` blocks — add explicit `unsafe {}` inside unsafe fns
+- [ ] Verify no `static mut` usage (should be clean)
+- [ ] Run `cargo test -p veritas-crypto`
+- [ ] Run `cargo clippy -p veritas-crypto`
 
-**Branch**: `claude/phase-3-protocol-layer-fhZIO`
-**Status**: Completed
-**Changes**:
+**Expected Changes**:
 
-- ✅ encrypt_for_recipient() - Full E2E encryption pipeline
-- ✅ decrypt_as_recipient() - Full decryption pipeline
-- ✅ Ephemeral X25519 key exchange per message (forward secrecy)
-- ✅ XChaCha20-Poly1305 AEAD encryption
-- ✅ DecryptionContext for caching recipient keypair
-- ✅ EncryptedMessage serialization/deserialization
-- ✅ decrypt_and_verify() with sender public key verification
-- ✅ Unit tests (18 tests)
-  **Version**: 0.1.0-alpha.3
-  **Agents**: Backend, Security, QA
-
-### Task 013: Message Signing ✅ COMPLETED
-
-**Branch**: `claude/phase-3-protocol-layer-fhZIO`
-**Status**: Completed (Placeholder)
-**Changes**:
-
-- ✅ MessageSignature struct with version tracking
-- ✅ SignatureVersion enum (HmacBlake3 placeholder, MlDsa future)
-- ✅ SigningData with domain-separated hash
-- ✅ sign_message() - Placeholder HMAC-BLAKE3 until ML-DSA
-- ✅ verify_signature() - Signature verification
-- ✅ Constant-time comparison using `subtle`
-- ✅ Unit tests (23 tests)
-  **Version**: 0.1.0-alpha.3
-  **Agents**: Backend, Security, QA
-  **Note**: Placeholder signature scheme until ML-DSA stabilizes
-
-### Task 014: Message Chunking ✅ COMPLETED
-
-**Branch**: `claude/phase-3-protocol-layer-fhZIO`
-**Status**: Completed
-**Changes**:
-
-- ✅ ChunkInfo struct (chunk_index, total_chunks, message_hash)
-- ✅ MessageChunk with integrity verification
-- ✅ split_into_chunks() - Split by character count (max 3, 300 chars each)
-- ✅ ChunkReassembler with pending message tracking
-- ✅ Out-of-order chunk handling and duplicate detection
-- ✅ Hash verification after reassembly
-- ✅ Expiry cleanup for pending chunks
-- ✅ Unit tests (24 tests)
-  **Version**: 0.1.0-alpha.3
-  **Agents**: Backend, QA
-
-### Task 015: Delivery Receipts ✅ COMPLETED
-
-**Branch**: `claude/phase-3-protocol-layer-fhZIO`
-**Status**: Completed
-**Changes**:
-
-- ✅ DeliveryReceipt struct with signature
-- ✅ ReceiptType enum (Delivered, Read, Error)
-- ✅ DeliveryError enum (RecipientNotFound, MessageExpired, Rejected, QuotaExceeded, Other)
-- ✅ DeliveryReceiptData for embedding in MessageContent
-- ✅ Receipt hash computation with domain separation
-- ✅ Factory methods: delivered(), read(), error()
-- ✅ Serialization/deserialization support
-- ✅ Unit tests (26 tests)
-  **Version**: 0.1.0-alpha.3
-  **Agents**: Backend, Security, QA
-
-### Task 016: Group Messages ✅ COMPLETED
-
-**Branch**: `claude/phase-3-protocol-layer-fhZIO`
-**Status**: Completed
-**Changes**:
-
-- ✅ GroupId (32-byte random identifier)
-- ✅ GroupRole enum (Admin, Moderator, Member) with permissions
-- ✅ GroupMember struct
-- ✅ GroupMetadata with member management
-- ✅ GroupKey with Zeroize (symmetric key + generation)
-- ✅ GroupKeyManager for ECDH-based key distribution
-- ✅ EncryptedGroupKey per-member encrypted keys
-- ✅ GroupMessageData for encrypted group messages
-- ✅ KeyRotationManager with scheduled/manual/compromise triggers
-- ✅ Forward secrecy on member removal
-- ✅ MAX_GROUP_SIZE=100, rotation every 7 days
-- ✅ Unit tests (43 tests)
-  **Version**: 0.1.0-alpha.3
-  **Agents**: Backend, Security, QA
+- `unsafe_op_in_unsafe_fn` — May need explicit blocks in low-level crypto
+- No FFI in this crate — should be straightforward
 
 -----
 
-## Phase 4: Storage Layer (v0.1.0-alpha.4)
+#### TASK-111: Migrate veritas-identity to Rust 2024
 
-### Task 017: Encrypted Database ✅ COMPLETED
+**Priority**: P1  
+**Status**: NOT STARTED  
+**Assignee**: Claude Code  
+**Depends On**: TASK-110
 
-**Branch**: `claude/phase-4-storage-layer-3AenO`
-**Status**: Completed
-**Changes**:
+**Checklist**:
 
-- ✅ `EncryptedDb` struct wrapping sled with encryption
-- ✅ Argon2id key derivation (64 MiB, 3 iterations, 4 parallelism)
-- ✅ XChaCha20-Poly1305 encryption for all values
-- ✅ `DbKey` with Zeroize support
-- ✅ Salt stored in database, reused on reopen
-- ✅ `EncryptedTree` for namespaced storage
-- ✅ put/get/delete/contains/iter operations
-- ✅ Unit tests (27 tests)
-  **Version**: 0.1.0-alpha.4
-  **Agents**: Backend, Security, QA
+- [ ] Run `cargo fix --edition` on crate
+- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [ ] Review `hardware.rs` for any unsafe patterns
+- [ ] Check `limits.rs` for `static mut` (installation ID storage)
+- [ ] Run `cargo test -p veritas-identity`
+- [ ] Run `cargo clippy -p veritas-identity`
 
-### Task 018: Message Queue ✅ COMPLETED
+**Expected Changes**:
 
-**Branch**: `claude/phase-4-storage-layer-3AenO`
-**Status**: Completed
-**Changes**:
-
-- ✅ `MessageQueue` with outbox and inbox trees
-- ✅ `MessageId` (32-byte random identifier)
-- ✅ `QueuedMessage` for outbox with status tracking
-- ✅ `InboxMessage` for received messages
-- ✅ `MessageStatus` enum (Pending, Sending, Sent, Delivered, Failed, Read)
-- ✅ Exponential backoff retry (30s, 60s, 120s, 240s, 480s, max 5 retries)
-- ✅ Expiry cleanup (7-day MESSAGE_TTL)
-- ✅ Pagination support for inbox
-- ✅ OutboxStats and InboxStats for monitoring
-- ✅ Unit tests (32 tests)
-  **Version**: 0.1.0-alpha.4
-  **Agents**: Backend, QA
-
-### Task 019: Identity Keyring ✅ COMPLETED
-
-**Branch**: `claude/phase-4-storage-layer-3AenO`
-**Status**: Completed
-**Changes**:
-
-- ✅ `Keyring` with password-protected access
-- ✅ `KeyringEntry` with identity hash, encrypted keypair, metadata
-- ✅ Argon2id password key derivation with domain separation
-- ✅ Password verification using constant-time comparison
-- ✅ Primary identity selection
-- ✅ `ExportedIdentity` for portable backup/transfer
-- ✅ Export/import with separate export password
-- ✅ Password change with re-encryption of all entries
-- ✅ BLAKE3 domain separation for key derivation
-- ✅ Secrets redacted in Debug output
-- ✅ Unit tests (24 tests)
-  **Version**: 0.1.0-alpha.4
-  **Agents**: Backend, Security, QA
+- Minimal — mostly safe Rust code
 
 -----
 
-## Phase 5: Blockchain Layer (v0.1.0-alpha.5)
+#### TASK-112: Migrate veritas-reputation to Rust 2024
 
-### Task 020: Block Structure ✅ COMPLETED
+**Priority**: P1  
+**Status**: NOT STARTED  
+**Assignee**: Claude Code
 
-**Branch**: `claude/blockchain-layer-phase-5-2I1zZ`
-**Status**: Completed
-**Changes**:
+**Checklist**:
 
-- ✅ Block struct with header and body separation
-- ✅ BlockHeader with hash, parent_hash, height, timestamp, merkle_root, validator
-- ✅ BlockBody with chain entries and merkle root computation
-- ✅ ChainEntry enum with all entry types (IdentityRegistration, UsernameRegistration, KeyRotation, MessageProof, ReputationChange, ValidatorRegistration/Exit/Slash)
-- ✅ Genesis block support with `Block::genesis()`
-- ✅ Domain-separated hashing (`VERITAS-BLOCK-v1`, `VERITAS-CHAIN-ENTRY-v1`)
-- ✅ Block serialization with serde + bincode
-- ✅ Unit tests (32 tests)
-  **Version**: 0.1.0-alpha.5
-  **Agents**: Backend, Security, QA
+- [ ] Run `cargo fix --edition` on crate
+- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [ ] Review rate limiter for any timing-sensitive code
+- [ ] Run `cargo test -p veritas-reputation`
+- [ ] Run `cargo clippy -p veritas-reputation`
 
-### Task 021: Merkle Tree ✅ COMPLETED
+**Expected Changes**:
 
-**Branch**: `claude/blockchain-layer-phase-5-2I1zZ`
-**Status**: Completed
-**Changes**:
-
-- ✅ MerkleTree struct for tree construction
-- ✅ MerkleProof with sibling hashes and directions
-- ✅ Direction enum (Left, Right) for proof traversal
-- ✅ Proof generation via `generate_proof()`
-- ✅ Proof verification via `verify_proof()`
-- ✅ Domain-separated hashing (`VERITAS-MERKLE-v1`)
-- ✅ Edge case handling (empty, single, power-of-2, non-power-of-2)
-- ✅ Unit tests (29 tests including property-based)
-  **Version**: 0.1.0-alpha.5
-  **Agents**: Backend, Security, QA
-
-### Task 022: Chain Management ✅ COMPLETED
-
-**Branch**: `claude/blockchain-layer-phase-5-2I1zZ`
-**Status**: Completed
-**Changes**:
-
-- ✅ Blockchain struct for chain storage and management
-- ✅ BlockValidation with comprehensive validation rules
-- ✅ Height continuity, parent hash, timestamp ordering validation
-- ✅ Hash integrity and merkle root validation
-- ✅ Block producer authorization validation
-- ✅ ForkChoice for fork tracking with longest chain rule
-- ✅ Deterministic tiebreaker for same-height forks
-- ✅ Common ancestor detection
-- ✅ Chain iteration (forward and backward)
-- ✅ ChainState for persistence
-- ✅ Unit tests (33 tests)
-  **Version**: 0.1.0-alpha.5
-  **Agents**: Backend, Security, QA
-
-### Task 023: PoS Validator Selection with SLA ✅ COMPLETED
-
-**Branch**: `claude/blockchain-layer-phase-5-2I1zZ`
-**Status**: Completed
-**Changes**:
-
-- ✅ ValidatorStake struct with performance tracking
-- ✅ ValidatorSla (99% uptime, max 3 missed blocks, 5s latency)
-- ✅ ValidatorSet for managing active validators (max 21)
-- ✅ Stake-weighted random selection (ChaCha20Rng deterministic)
-- ✅ Weight formula: stake × performance_multiplier × sla_bonus
-- ✅ Performance multiplier (0.5-1.5x based on score)
-- ✅ SLA bonus for compliant validators (up to 1.5x)
-- ✅ Geographic diversity enforcement (max 5 per region)
-- ✅ 15% rotation per epoch (worst performers first)
-- ✅ Domain-separated selection (`VERITAS-VALIDATOR-SELECTION-v1`)
-- ✅ Unit tests (51 tests)
-  **Version**: 0.1.0-alpha.5
-  **Agents**: Architect, Backend, Security, QA
-
-### Task 023b: Validator Slashing and Penalties ✅ COMPLETED
-
-**Branch**: `claude/blockchain-layer-phase-5-2I1zZ`
-**Status**: Completed
-**Changes**:
-
-- ✅ SlashingConfig with penalty percentages (0.1% missed, 1% SLA, 5% invalid, 100% double-sign)
-- ✅ SlashingOffense enum for all offense types
-- ✅ SlaViolationType for SLA violation details
-- ✅ SlashResult with penalty amount, remaining stake, ban status
-- ✅ SlashingManager for offense processing
-- ✅ Double-sign detection via `record_block_signature()`
-- ✅ Automatic 100% slash and permanent ban for double-signing
-- ✅ Signature pruning for memory management
-- ✅ Unit tests (24 tests)
-  **Version**: 0.1.0-alpha.5
-  **Agents**: Backend, Security, QA
-
-### Task 024: Chain Sync ✅ COMPLETED
-
-**Branch**: `claude/blockchain-layer-phase-5-2I1zZ`
-**Status**: Completed
-**Changes**:
-
-- ✅ SyncMessage enum for sync protocol (GetHeaders/Headers, GetBlocks/Blocks, NewBlock, GetTip/Tip, Status)
-- ✅ SyncState enum (Synced, SyncingHeaders, SyncingBlocks, Paused)
-- ✅ SyncAction for sync manager responses
-- ✅ SyncManager with configurable limits (500 headers, 100 blocks per request)
-- ✅ PendingRequest tracking with 30s timeout
-- ✅ Progress reporting and pause/resume support
-- ✅ Block request/response handling
-- ✅ Catch-up mechanism with batched fetching
-- ✅ Unit tests (39 tests)
-  **Version**: 0.1.0-alpha.5
-  **Agents**: Backend, QA
+- Minimal — pure business logic
 
 -----
 
-## Phase 6: Reputation System (v0.1.0-alpha.6)
+### Phase 2: Protocol & Storage Crates
 
-### Task 025: Reputation Scoring with Rate Limiting ✅ COMPLETED
+#### TASK-120: Migrate veritas-protocol to Rust 2024
 
-**Branch**: `claude/phase-6-reputation-system-Citik`
-**Status**: Completed
-**Changes**:
+**Priority**: P1  
+**Status**: NOT STARTED  
+**Assignee**: Claude Code  
+**Depends On**: TASK-110, TASK-111
 
-- ✅ `ReputationScore` struct with gain/loss tracking
-- ✅ Score range 0-1000 with starting score 500
-- ✅ `gain()` and `lose()` methods with capping/flooring
-- ✅ `gain_with_multiplier()` for collusion penalty application
-- ✅ `ScoreRateLimiter` with rate limiting:
-  - 60s min between messages to same peer
-  - 30pts max gain from any peer per day
-  - 100pts max total gain per day
-- ✅ `PeerInteraction` tracking with automatic daily reset
-- ✅ `RateLimitResult` enum for detailed limit feedback
-- ✅ Unit tests (25 tests)
-  **Version**: 0.1.0-alpha.6
-  **Agents**: Backend, Security, QA
+**Checklist**:
 
-### Task 026: Weighted Negative Reports ✅ COMPLETED
+- [ ] Run `cargo fix --edition` on crate
+- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [ ] **Review macros** — check for `expr` fragment specifiers
+- [ ] Review RPIT lifetime changes in iterator code
+- [ ] Check envelope deserialization for any unsafe
+- [ ] Run `cargo test -p veritas-protocol`
+- [ ] Run `cargo clippy -p veritas-protocol`
 
-**Branch**: `claude/phase-6-reputation-system-Citik`
-**Status**: Completed
-**Changes**:
+**Expected Changes**:
 
-- ✅ `ReportReason` enum (Spam, Harassment, Impersonation, Malware, Scam, Other)
-- ✅ `NegativeReport` struct with reporter reputation tracking
-- ✅ `ReportAggregator` with weighted counting
-- ✅ Report weighting: `weight = reporter_reputation / 500.0`
-- ✅ 3-report weighted threshold for penalty
-- ✅ Min 400 reputation to file reports
-- ✅ Penalty calculation by severity (capped at 200)
-- ✅ Duplicate reporter detection
-- ✅ Unit tests (14 tests)
-  **Version**: 0.1.0-alpha.6
-  **Agents**: Backend, Security, QA
-
-### Task 027: Collusion Detection ✅ COMPLETED
-
-**Branch**: `claude/phase-6-reputation-system-Citik`
-**Status**: Completed
-**Changes**:
-
-- ✅ `InteractionRecord` tracking (from, to, count, timestamps)
-- ✅ `CollusionDetector` with graph analysis
-- ✅ Connected component detection for cluster identification
-- ✅ Dense cluster detection (>70% internal density)
-- ✅ Symmetry scoring (A→B vs B→A balance)
-- ✅ External connection ratio tracking
-- ✅ `SuspiciousCluster` with combined suspicion scoring
-- ✅ Gain multiplier: `1.0 - suspicion_score`
-- ✅ Unit tests (8 tests)
-  **Version**: 0.1.0-alpha.6
-  **Agents**: Backend, Security, QA
-
-### Task 027b: Reputation Decay and Effects ✅ COMPLETED
-
-**Branch**: `claude/phase-6-reputation-system-Citik`
-**Status**: Completed
-**Changes**:
-
-- ✅ `DecayConfig` with configurable decay rate and interval
-- ✅ Weekly decay toward 500 (1%/week default)
-- ✅ `DecayState` for tracking decay timing
-- ✅ `ReputationTier` enum (Blacklisted, Quarantined, Deprioritized, Normal, Priority)
-- ✅ `TierEffects` struct with tier-specific restrictions:
-  - Messaging permissions
-  - Report filing rights (400+ rep)
-  - Validator eligibility (700+ rep)
-  - Priority modifiers and rate limit multipliers
-- ✅ `ReputationManager` coordinating all operations
-- ✅ `ReputationStats` for system monitoring
-- ✅ Unit tests (27 tests)
-  **Version**: 0.1.0-alpha.6
-  **Agents**: Backend, QA
+- Macro fragment specifiers may need `expr_2021` if issues arise
+- RPIT lifetime capture — `cargo fix` handles automatically
 
 -----
 
-## Phase 7: Networking Layer (v0.1.0-alpha.7)
+#### TASK-121: Migrate veritas-store to Rust 2024
 
-### Task 028: Network-First Transport Selection ✅ COMPLETED
+**Priority**: P1  
+**Status**: NOT STARTED  
+**Assignee**: Claude Code  
+**Depends On**: TASK-110, TASK-120
 
-**Branch**: `claude/networking-layer-phase-7-IwEch`
-**Status**: Completed
-**Changes**:
+**Checklist**:
 
-- ✅ `TransportType` enum (Internet, LocalNetwork, Bluetooth, Queued)
-- ✅ `TransportState` for tracking transport availability
-- ✅ `TransportStatus` for connection status
-- ✅ `TransportCapabilities` describing transport features
-- ✅ `Transport` trait with async connectivity methods
-- ✅ `TransportSelector` implementing network-first priority
-- ✅ `PeerInfo` for peer tracking with addresses
-- ✅ `NetworkAddress` multiaddr wrapper
-  **Version**: 0.1.0-alpha.7
-  **Agents**: Architect, Backend, QA
+- [ ] Run `cargo fix --edition` on crate
+- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [ ] **CRITICAL**: Review all `Mutex`/`RwLock` usage in `if let` expressions
+- [ ] **CRITICAL**: Review tail expression temporary scoping with locks
+- [ ] Check `encrypted_db.rs` for lock patterns
+- [ ] Check `message_queue.rs` for lock patterns
+- [ ] Verify no `static mut` usage
+- [ ] Run `cargo test -p veritas-store`
+- [ ] Run `cargo clippy -p veritas-store`
 
-### Task 029: libp2p Integration ✅ COMPLETED
+**Expected Changes**:
 
-**Branch**: `claude/networking-layer-phase-7-IwEch`
-**Status**: Completed
-**Changes**:
+- Lock scoping may change behavior — **test thoroughly**
+- `cargo fix` will add explicit blocks to preserve old behavior if needed
 
-- ✅ `NodeConfig` for configuring libp2p node
-- ✅ `VeritasNode` wrapping libp2p Swarm
-- ✅ Noise protocol encryption
-- ✅ Kademlia DHT (`/veritas/kad/1.0.0`)
-- ✅ Gossipsub pub/sub integration
-- ✅ mDNS local discovery
-- ✅ Identify protocol
-- ✅ `NodeBehaviour` combining all behaviours
-- ✅ `NodeEvent` enum for event handling
-- ✅ Event loop with channel-based emission
-  **Version**: 0.1.0-alpha.7
-  **Agents**: Backend, Security, QA
+**Review Focus**:
 
-### Task 030: DHT Storage ✅ COMPLETED
-
-**Branch**: `claude/networking-layer-phase-7-IwEch`
-**Status**: Completed
-**Changes**:
-
-- ✅ `DhtConfig` with replication, TTL, query settings
-- ✅ `DhtKey` for DHT record keys from mailbox keys
-- ✅ `DhtRecord` for serialized message storage
-- ✅ `DhtRecordSet` for multiple messages per mailbox
-- ✅ `DhtStorage` with store/get/delete/has methods
-- ✅ TTL enforcement (7 days)
-- ✅ Message ID computation from envelope hash
-  **Version**: 0.1.0-alpha.7
-  **Agents**: Backend, QA
-
-### Task 031: Gossip Protocol ✅ COMPLETED
-
-**Branch**: `claude/networking-layer-phase-7-IwEch`
-**Status**: Completed
-**Changes**:
-
-- ✅ `GossipConfig` with mesh parameters
-- ✅ `GossipManager` for pub/sub messaging
-- ✅ Topic constants (messages, blocks, receipts)
-- ✅ `MessageAnnouncement` (privacy-preserving)
-- ✅ `BlockAnnouncement` for new blocks
-- ✅ `ReceiptAnnouncement` for delivery receipts
-- ✅ Hourly timestamp buckets for temporal privacy
-- ✅ Size buckets for traffic analysis resistance
-  **Version**: 0.1.0-alpha.7
-  **Agents**: Backend, QA
-
-### Task 032: Local Discovery (mDNS) ✅ COMPLETED
-
-**Branch**: `claude/networking-layer-phase-7-IwEch`
-**Status**: Completed
-**Changes**:
-
-- ✅ `DiscoveryConfig` with TTL and query settings
-- ✅ `LocalDiscovery` wrapping mDNS behaviour
-- ✅ `DiscoveredPeer` with peer ID, addresses, timestamps
-- ✅ `DiscoveryEvent` enum (PeerDiscovered, PeerExpired)
-- ✅ Automatic peer pruning for stale entries
-- ✅ Service name: `_veritas._tcp.local`
-  **Version**: 0.1.0-alpha.7
-  **Agents**: Backend, QA
-
-### Task 033: Bluetooth Relay Transport ✅ COMPLETED (Placeholder)
-
-**Branch**: `claude/networking-layer-phase-7-IwEch`
-**Status**: Completed (Placeholder)
-**Changes**:
-
-- ✅ `BluetoothConfig` with service UUID, MTU, scan interval
-- ✅ `BlePeer` for discovered BLE devices
-- ✅ `BluetoothRelay` placeholder (all methods return NotImplemented)
-- ✅ `BluetoothStats` for relay statistics
-- ✅ NO PIN verification (pure relay)
-- ✅ NO pairing required (security from E2E encryption)
-- ⏳ btleplug integration (pending future implementation)
-  **Version**: 0.1.0-alpha.7
-  **Agents**: Backend, QA
-  **Note**: API designed for future btleplug integration
-
-### Task 034: Store-and-Forward ✅ COMPLETED
-
-**Branch**: `claude/networking-layer-phase-7-IwEch`
-**Status**: Completed
-**Changes**:
-
-- ✅ `RelayConfig` with hop limit, TTL, capacity settings
-- ✅ `RelayedMessage` with envelope, hop count, timestamps
-- ✅ `RelayManager` with store/get/mark/forward/prune methods
-- ✅ `RelayStats` for monitoring
-- ✅ Hop limit (3) prevents infinite loops
-- ✅ Traffic analysis resistance via jitter delay
-- ✅ 12 unit tests
-  **Version**: 0.1.0-alpha.7
-  **Agents**: Backend, QA
+```rust
+// These patterns need manual review:
+if let Some(x) = mutex.lock().unwrap().get(&key) { ... }
+mutex.lock().unwrap().get(&key).cloned()  // tail expression
+```
 
 -----
 
-## Phase 8: Core API (v0.1.0-beta.1)
+#### TASK-122: Migrate veritas-chain to Rust 2024
 
-### Task 035: Client Interface ✅ COMPLETED
+**Priority**: P1  
+**Status**: NOT STARTED  
+**Assignee**: Claude Code  
+**Depends On**: TASK-110, TASK-120
 
-**Branch**: `claude/phase-8-core-api-4aMhQ`
-**Status**: Completed
-**Changes**:
+**Checklist**:
 
-- ✅ `VeritasClient` struct - Main entry point for VERITAS protocol
-- ✅ `ClientState` enum (Created, Locked, Unlocked, ShuttingDown)
-- ✅ `ClientConfig` with StorageConfig, NetworkConfig, ReputationConfig, FeatureConfig
-- ✅ `ClientConfigBuilder` for fluent configuration
-- ✅ Lifecycle methods: `new()`, `unlock()`, `lock()`, `shutdown()`
-- ✅ Identity management: `identity_hash()`, `public_keys()`, `create_identity()`, `list_identities()`, `set_primary_identity()`
-- ✅ Identity slot tracking: `identity_slots()` with max 3 identities per device
-- ✅ Internal services architecture (IdentityManager, MessageService, ChainService, ReputationService)
-  **Version**: 0.1.0-beta.1
-  **Agents**: Architect, Backend, Docs, Security, QA
+- [ ] Run `cargo fix --edition` on crate
+- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [ ] Review validator set locking patterns
+- [ ] Review block storage lock patterns
+- [ ] Check sync protocol for any unsafe
+- [ ] Run `cargo test -p veritas-chain`
+- [ ] Run `cargo clippy -p veritas-chain`
 
-### Task 036: Messaging API ✅ COMPLETED
+**Expected Changes**:
 
-**Branch**: `claude/phase-8-core-api-4aMhQ`
-**Status**: Completed
-**Changes**:
-
-- ✅ `MessageHash` type alias for message tracking
-- ✅ `ReceivedMessage` struct with message metadata, content access, verification status
-- ✅ `MessageStatus` enum (Pending, Sending, Sent, Delivered, Read, Failed)
-- ✅ `SendOptions` for configuring message delivery (receipts, reply threading, jitter control)
-- ⏳ Full message send/receive implementation (API types complete, wire-up pending Phase 9+)
-  **Version**: 0.1.0-beta.1
-  **Agents**: Backend, Docs, QA
-
-### Task 037: Group API ✅ COMPLETED
-
-**Branch**: `claude/phase-8-core-api-4aMhQ`
-**Status**: Completed
-**Changes**:
-
-- ✅ `GroupInfo` struct for group metadata
-- ✅ `GroupMessage` struct for group messages
-- ✅ Re-exports of `GroupId` and `GroupRole` from veritas-protocol
-- ⏳ Full group messaging implementation (API types complete, wire-up pending Phase 9+)
-  **Version**: 0.1.0-beta.1
-  **Agents**: Backend, Docs, QA
-
-### Task 038: Verification API ✅ COMPLETED
-
-**Branch**: `claude/phase-8-core-api-4aMhQ`
-**Status**: Completed
-**Changes**:
-
-- ✅ `MessageProof` struct with Merkle proof, block height/hash, chain entry
-- ✅ `verify_inclusion()` method for proof verification
-- ✅ `SyncStatus` struct with local/network heights, pending counts, progress percentage
-- ✅ `is_synced()`, `blocks_behind()`, `has_pending_work()` methods
-- ⏳ Full blockchain verification wire-up (API types complete, wire-up pending Phase 9+)
-  **Version**: 0.1.0-beta.1
-  **Agents**: Backend, Docs, QA
-
-### Task 039: Safety Numbers ✅ COMPLETED
-
-**Branch**: `claude/phase-8-core-api-4aMhQ`
-**Status**: Completed
-**Changes**:
-
-- ✅ `SafetyNumber` struct for identity verification
-- ✅ `compute()` with domain-separated BLAKE3 hashing (`VERITAS-SAFETY-NUMBER-v1`)
-- ✅ Symmetric computation (A,B == B,A)
-- ✅ `to_numeric_string()` - 60 digits in 12 groups of 5
-- ✅ `to_qr_string()` - 64-character hex string
-- ✅ `Display` and `Debug` trait implementations
-- ✅ Security review: All checks PASS
-- ✅ 55 integration tests
-  **Version**: 0.1.0-beta.1
-  **Agents**: Backend, Security, QA
+- Lock scoping changes — review consensus-critical code carefully
 
 -----
 
-## Phase 9: Bindings (v0.1.0-beta.2)
+### Phase 3: Networking Crate
 
-### Task 040: C FFI ✅ COMPLETED
+#### TASK-130: Migrate veritas-net to Rust 2024
 
-**Branch**: `claude/phase-9-bindings-GhxbX`
-**Status**: Completed
-**Changes**:
+**Priority**: P1  
+**Status**: NOT STARTED  
+**Assignee**: Claude Code  
+**Depends On**: TASK-120, TASK-112
 
-- ✅ cbindgen setup for automatic C header generation (`veritas.h`)
-- ✅ `VeritasHandle` opaque pointer type for safe C interoperability
-- ✅ Safe FFI wrappers with panic catching (`std::panic::catch_unwind`)
-- ✅ Error codes (ErrorCode enum with Success, NullPointer, InvalidArgument, etc.)
-- ✅ Memory management (`veritas_client_free`, `veritas_string_free`)
-- ✅ Client lifecycle: create, unlock, lock, shutdown, free
-- ✅ Identity management: identity_hash, create_identity, identity_slots
-- ✅ Safety numbers: compute, to_numeric (60-digit), to_qr (hex)
-- ✅ 14 unit tests
-  **Version**: 0.1.0-beta.2
-  **Agents**: Bindings, Security, QA
+**Checklist**:
 
-### Task 041: WASM Bindings ✅ COMPLETED
+- [ ] Run `cargo fix --edition` on crate
+- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [ ] **OPPORTUNITY**: Refactor to use async closures where beneficial
+- [ ] Review gossip.rs for async patterns
+- [ ] Review dht.rs for async patterns
+- [ ] Review transport_manager.rs for lock patterns
+- [ ] Check rate_limiter.rs (new file from security fixes)
+- [ ] Run `cargo test -p veritas-net`
+- [ ] Run `cargo clippy -p veritas-net`
 
-**Branch**: `claude/phase-9-bindings-GhxbX`
-**Status**: Completed
-**Changes**:
+**Expected Changes**:
 
-- ✅ wasm-bindgen setup with `WasmClient` class
-- ✅ Browser-compatible API (no filesystem, no direct network)
-- ✅ In-memory storage with Argon2id password encryption
-- ✅ `WasmClient`: new, unlock, lock, shutdown, is_unlocked
-- ✅ Identity: create_identity, list_identities, identity_slots, switch_identity
-- ✅ `WasmSafetyNumber`: compute, to_numeric_string, to_qr_string
-- ✅ `WasmIdentityInfo` and `WasmIdentitySlotInfo` helper types
-- ✅ `WasmError` for JavaScript interop
-- ✅ console_error_panic_hook for debugging
-- ✅ 11 unit tests
-  **Version**: 0.1.0-beta.2
-  **Agents**: Bindings, Security, QA
+- **Async closures** — Can simplify many patterns (optional refactor)
+- Lock scoping in connection management
 
-### Task 042: Python Bindings ✅ COMPLETED
+**Refactor Opportunity** (optional):
 
-**Branch**: `claude/phase-9-bindings-GhxbX`
-**Status**: Completed
-**Changes**:
+```rust
+// Before (2021)
+peers.iter().map(|p| {
+    let p = p.clone();
+    async move { send_to(&p).await }
+})
 
-- ✅ PyO3 setup with `VeritasClient` class
-- ✅ Pythonic API wrapper with docstrings
-- ✅ Tokio runtime integration for async operations
-- ✅ `VeritasClient`: new, unlock, lock, shutdown, is_unlocked, state
-- ✅ Identity: identity_hash, public_keys, create_identity, list_identities, set_primary_identity, identity_slots
-- ✅ `IdentityInfo` and `IdentitySlots` classes
-- ✅ `SafetyNumber`: compute, to_numeric_string, to_qr_string
-- ✅ `VeritasError` custom exception
-- ✅ Type hints (`veritas.pyi` stub file)
-- ✅ 1 unit test (integration tests require Python runtime)
-  **Version**: 0.1.0-beta.2
-  **Agents**: Bindings, Docs, QA
+// After (2024) — cleaner
+peers.iter().map(async |p| { send_to(p).await })
+```
 
 -----
 
-## Phase 10: Testing & Documentation (v0.1.0-rc.1)
+### Phase 4: High-Level API
 
-### Task 043: Integration Tests ✅ COMPLETED
+#### TASK-140: Migrate veritas-core to Rust 2024
 
-**Branch**: `claude/phase-10-testing-docs-7lB3p`
-**Status**: Completed
-**Changes**:
+**Priority**: P1  
+**Status**: NOT STARTED  
+**Assignee**: Claude Code  
+**Depends On**: TASK-121, TASK-122, TASK-130
 
-- ✅ End-to-end messaging tests (84 tests in `phase10_integration.rs`)
-  - Client lifecycle tests with messaging state
-  - Identity management tests
-  - Safety number computation tests
-  - Multi-client messaging scenarios
-- ✅ Multi-node tests
-  - Two-node message exchange
-  - Bidirectional messaging
-  - Concurrent message processing
-  - Multiple clients interaction
-- ✅ Offline scenario tests
-  - Message queuing when offline
-  - Inbox/outbox storage persistence
-  - Message retry scheduling
-  - Status transitions
-  - Pagination support
-- ✅ Additional tests for:
-  - Delivery receipts
-  - Mailbox key derivation
-  - Gossip protocol announcements
-  - Store-and-forward relay
-  **Version**: 0.1.0-rc.1
-  **Agents**: QA
+**Checklist**:
 
-### Task 044: Property Tests ✅ COMPLETED
+- [ ] Run `cargo fix --edition` on crate
+- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [ ] Review public API for RPIT changes
+- [ ] Ensure no breaking API changes introduced
+- [ ] Run `cargo test -p veritas-core`
+- [ ] Run `cargo clippy -p veritas-core`
 
-**Branch**: `claude/phase-10-testing-docs-7lB3p`
-**Status**: Completed
-**Changes**:
+**Expected Changes**:
 
-- ✅ Crypto property tests (`crates/veritas-crypto/src/proptests.rs`)
-  - Encryption/decryption roundtrip for arbitrary data
-  - Hash consistency and uniqueness
-  - Key generation uniqueness
-  - Nonce uniqueness verification
-- ✅ Protocol property tests (`crates/veritas-protocol/src/proptests.rs`)
-  - Message validation (reject oversized, accept valid)
-  - Envelope padding correctness
-  - Chunking/reassembly roundtrip
-- ✅ Identity property tests (`crates/veritas-identity/src/proptests.rs`)
-  - Username validation (accept valid, reject invalid)
-  - Identity hash uniqueness and consistency
-- ✅ Fuzzing setup (`fuzz/` directory)
-  - 8 fuzz targets created:
-    - `fuzz_message_chunking.rs`
-    - `fuzz_encrypted_data_parse.rs`
-    - `fuzz_x25519_public_key.rs`
-    - `fuzz_hash_from_bytes.rs`
-    - `fuzz_username_validation.rs`
-    - `fuzz_symmetric_decrypt.rs`
-    - `fuzz_padding.rs`
-    - `fuzz_identity_hash_from_hex.rs`
-  - `fuzz/Cargo.toml` with cargo-fuzz configuration
-  - `fuzz/README.md` with usage instructions
-  **Version**: 0.1.0-rc.1
-  **Agents**: QA, Security
-
-### Task 045: Documentation ✅ COMPLETED
-
-**Branch**: `claude/phase-10-testing-docs-7lB3p`
-**Status**: Completed
-**Changes**:
-
-- ✅ API documentation (`docs/API.md` - 22KB)
-  - VeritasClient API with all methods
-  - Identity management API
-  - Messaging API
-  - Group messaging API
-  - Safety number API
-  - Verification/proof API
-  - Code examples for each major function
-  - Error handling patterns
-- ✅ Architecture guide (`docs/ARCHITECTURE.md` - 44KB)
-  - System overview with ASCII diagrams
-  - Crate dependency graph
-  - Data flow diagrams
-  - Network topology
-  - Storage architecture
-  - Blockchain integration
-- ✅ Security considerations (`docs/SECURITY.md`)
-  - Threat model
-  - Cryptographic design
-  - Post-quantum readiness
-  - Metadata protection
-  - Key management
-  - Recommended practices
-- ✅ Setup and running guide (`docs/SETUP.md` - 10KB)
-  - Prerequisites (Rust, system dependencies)
-  - Building from source
-  - Running the node
-  - Configuration options
-  - Environment variables
-  - Running tests
-  - Troubleshooting
-- ✅ Docker documentation (`docs/DOCKER.md` - 12KB)
-  - Building the image
-  - Running a single node
-  - Running multiple nodes
-  - Persistent storage
-  - Configuration via environment
-  - Networking between containers
-  - Production deployment tips
-  **Version**: 0.1.0-rc.1
-  **Agents**: Docs
-
-### Task 046: Example Applications ✅ COMPLETED
-
-**Branch**: `claude/phase-10-testing-docs-7lB3p`
-**Status**: Completed
-**Changes**:
-
-- ✅ CLI chat example (`examples/cli-chat/`)
-  - Full Rust CLI application (28KB main.rs)
-  - Create/load identity
-  - Set username (optional)
-  - List contacts (by identity hash)
-  - Add contact by identity hash
-  - Send message to contact
-  - Receive and display messages
-  - Show safety number for contact verification
-  - Commands: `/identity`, `/contacts`, `/add`, `/msg`, `/safety`, `/quit`
-  - `README.md` with usage instructions
-- ✅ Web demo (`examples/web-demo/`)
-  - Pure HTML/CSS/JS implementation
-  - `index.html` - Main application page
-  - `style.css` - Styling (9.6KB)
-  - `app.js` - WASM integration (13.8KB)
-  - `build.sh` - Build script for wasm-pack
-  - Create/unlock wallet (password protected)
-  - Display identity hash
-  - Create multiple identities (up to 3)
-  - Switch between identities
-  - Compute safety number
-  - Display safety number in numeric and QR formats
-  - `README.md` with build and usage instructions
-- ✅ Node daemon (`crates/veritas-node/`)
-  - Standalone VERITAS node binary
-  - CLI with clap for argument parsing
-  - Health check endpoint
-  - Configurable via environment variables
-  - Relay mode support
-  - Validator mode (placeholder)
-  - Structured logging (plain/JSON)
-  **Version**: 0.1.0-rc.1
-  **Agents**: Backend, Bindings, Docs
-
-### Task 047: Docker Containerization ✅ COMPLETED
-
-**Branch**: `claude/phase-10-testing-docs-7lB3p`
-**Status**: Completed
-**Changes**:
-
-- ✅ Multi-stage Dockerfile
-  - Build stage with rust:1.75-bookworm
-  - Runtime stage with debian:bookworm-slim
-  - Non-root user for security
-  - Health check configuration
-  - Proper signal handling
-  - Minimal image size
-- ✅ `docker-compose.yml`
-  - VERITAS node service
-  - Volume for data persistence
-  - Port mappings (9000/tcp, 8080/http)
-  - Environment variable configuration
-  - Multi-node setup for testing
-- ✅ `.dockerignore`
-  - Excludes target/, .git/, test files
-  - Keeps necessary source files
-  **Version**: 0.1.0-rc.1
-  **Agents**: DevOps, Docs
+- Minimal — mostly wraps other crates
 
 -----
 
-## Release Checklist (v0.1.0)
+### Phase 5: FFI & Bindings (Most Work)
 
-- [x] All Phase 1-10 tasks completed
-- [ ] Security audit of crypto layer
-- [x] Fuzz testing setup completed
-- [x] Documentation complete
-- [x] Examples working (CLI chat, web demo)
-- [ ] Performance benchmarks meet targets
-- [ ] CI/CD pipeline green
-- [x] VERSION_HISTORY.md updated
-- [ ] Git tag created
-- [ ] Crates published to crates.io (if public)
+#### TASK-150: Migrate veritas-ffi to Rust 2024
+
+**Priority**: P1  
+**Status**: NOT STARTED  
+**Assignee**: Claude Code  
+**Depends On**: TASK-140
+
+**Checklist**:
+
+- [ ] Run `cargo fix --edition` on crate
+- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [ ] **REQUIRED**: Add `unsafe` to all `extern` blocks
+- [ ] **REQUIRED**: Update `#[no_mangle]` → `#[unsafe(no_mangle)]`
+- [ ] **REQUIRED**: Update `#[export_name]` → `#[unsafe(export_name)]`
+- [ ] Review all FFI functions for `static mut` usage
+- [ ] Verify C header compatibility unchanged
+- [ ] Run `cargo test -p veritas-ffi`
+- [ ] Run `cargo clippy -p veritas-ffi`
+
+**Required Changes**:
+
+```rust
+// Before (2021)
+#[no_mangle]
+pub extern "C" fn veritas_create_identity() -> *mut Identity { ... }
+
+extern "C" {
+    fn platform_entropy(buf: *mut u8, len: usize);
+}
+
+// After (2024)
+#[unsafe(no_mangle)]
+pub extern "C" fn veritas_create_identity() -> *mut Identity { ... }
+
+unsafe extern "C" {
+    fn platform_entropy(buf: *mut u8, len: usize);
+}
+```
+
+-----
+
+#### TASK-151: Migrate veritas-wasm to Rust 2024
+
+**Priority**: P1  
+**Status**: NOT STARTED  
+**Assignee**: Claude Code  
+**Depends On**: TASK-140
+
+**Checklist**:
+
+- [ ] Run `cargo fix --edition` on crate
+- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [ ] Update `#[wasm_bindgen]` exports if any use `#[no_mangle]`
+- [ ] Review JS interop for any unsafe patterns
+- [ ] Test WASM build: `wasm-pack build --target web`
+- [ ] Test WASM build: `wasm-pack build --target nodejs`
+- [ ] Run `cargo test -p veritas-wasm`
+
+**Expected Changes**:
+
+- `wasm_bindgen` handles most FFI — should be minimal
+
+-----
+
+#### TASK-152: Migrate veritas-py to Rust 2024
+
+**Priority**: P1  
+**Status**: NOT STARTED  
+**Assignee**: Claude Code  
+**Depends On**: TASK-140
+
+**Checklist**:
+
+- [ ] Run `cargo fix --edition` on crate
+- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [ ] Review PyO3 macros for any unsafe patterns
+- [ ] Test Python build: `maturin develop`
+- [ ] Run Python test suite
+- [ ] Run `cargo test -p veritas-py`
+
+**Expected Changes**:
+
+- PyO3 handles most FFI — should be minimal
+
+-----
+
+### Phase 6: Workspace & Documentation
+
+#### TASK-160: Update Workspace Cargo.toml
+
+**Priority**: P1  
+**Status**: NOT STARTED  
+**Depends On**: TASK-150, TASK-151, TASK-152
+
+**Checklist**:
+
+- [ ] Update workspace `rust-version = "1.85"` if specified
+- [ ] Verify resolver version compatibility
+- [ ] Run `cargo build --all --release`
+- [ ] Run `cargo test --all`
+- [ ] Run `cargo clippy --all-targets --all-features`
+
+-----
+
+#### TASK-161: Update Documentation
+
+**Priority**: P2  
+**Status**: NOT STARTED  
+**Depends On**: TASK-160
+
+**Checklist**:
+
+- [ ] Update README.md MSRV to 1.85
+- [ ] Update CLAUDE.md with 2024 edition notes
+- [ ] Update any CI/CD workflows for Rust 1.85
+- [ ] Add entry to VERSION_HISTORY.md
+- [ ] Update Dockerfile if present
+
+-----
+
+#### TASK-162: Final Validation & PR
+
+**Priority**: P1  
+**Status**: NOT STARTED  
+**Depends On**: TASK-160, TASK-161
+
+**Checklist**:
+
+- [ ] Run full test suite: `cargo test --all --all-features`
+- [ ] Run security tests: `cargo test security --all`
+- [ ] Run fuzz tests (if configured)
+- [ ] Run `cargo audit`
+- [ ] Run `cargo deny check`
+- [ ] Compare binary sizes (optional)
+- [ ] Create PR to `main`
+- [ ] Request security review of unsafe changes
+
+-----
+
+## Post-Migration Tasks (Optional Refactoring)
+
+### TASK-170: Refactor veritas-net with Async Closures
+
+**Priority**: P3  
+**Status**: NOT STARTED  
+**Depends On**: TASK-130
+
+**Description**: Take advantage of Rust 2024 async closures to simplify networking code.
+
+**Scope**:
+
+- [ ] gossip.rs — message broadcasting
+- [ ] dht.rs — parallel DHT queries
+- [ ] relay.rs — multi-peer forwarding
+- [ ] transport_manager.rs — connection management
+
+**Note**: This is optional cleanup. The protocol works without it.
+
+-----
+
+### TASK-171: Remove Unnecessary .clone() Calls
+
+**Priority**: P3  
+**Status**: NOT STARTED  
+**Depends On**: TASK-170
+
+**Description**: Async closures capture by reference — remove clones that were only needed for `async move` blocks.
+
+-----
+
+## Completed Tasks
+
+### Security Remediation (Completed)
+
+- [x] **TASK-001**: Fix VERITAS-2026-0001 — Sybil fingerprint bypass
+- [x] **TASK-002**: Fix VERITAS-2026-0002 — Missing block signatures
+- [x] **TASK-003**: Fix VERITAS-2026-0003 — Unbounded deserialization DoS
+- [x] **TASK-004**: Fix VERITAS-2026-0004 — Validator consensus divergence
+- [x] **TASK-005**: Fix VERITAS-2026-0005 — Message queue metadata leak
+- [x] **TASK-006**: Fix VERITAS-2026-0006 — DHT eclipse attack
+- [x] **TASK-007**: Fix VERITAS-2026-0007 — Gossip protocol flooding
+- [x] **TASK-008**: Fix VERITAS-2026-0008 — Time manipulation (identity)
+- [x] **TASK-009**: Fix VERITAS-2026-0009 — Time manipulation (TTL)
+- [x] **TASK-010**: Fix VERITAS-2026-0010 — Reputation interaction auth
+- [x] **TASK-011-022**: Remaining critical fixes
+- [x] **TASK-023-053**: High severity fixes
+- [x] **TASK-054-079**: Medium severity fixes
+- [x] **TASK-080-090**: Low severity fixes
+
+-----
+
+## Task ID Reference
+
+|Range  |Category                   |
+|-------|---------------------------|
+|001-099|Security Remediation       |
+|100-109|Migration Pre-work         |
+|110-119|Phase 1: Leaf Crates       |
+|120-129|Phase 2: Protocol & Storage|
+|130-139|Phase 3: Networking        |
+|140-149|Phase 4: High-Level API    |
+|150-159|Phase 5: FFI & Bindings    |
+|160-169|Phase 6: Workspace & Docs  |
+|170-179|Post-Migration Refactoring |
+|200+   |Future Features            |
+
+-----
+
+## Notes
+
+### Branch Strategy
+
+```
+main (stable)
+  └── chore/rust-2024-edition-upgrade (this work)
+        ├── Crate-by-crate commits
+        └── Merge after full test + security review
+```
+
+### Commit Format
+
+```
+chore(crate-name): migrate to Rust 2024 edition
+
+- Updated edition to 2024
+- Updated rust-version to 1.85
+- [specific changes made]
+
+Task-ID: TASK-1XX
+```
+
+### Rollback Plan
+
+If issues discovered after merge:
+
+1. Revert merge commit
+1. Fix issues on migration branch
+1. Re-run full test suite
+1. Re-merge
+
+Edition changes are isolated per-crate, so partial rollback is possible if needed.
