@@ -1,0 +1,213 @@
+# =============================================================================
+# VERITAS Protocol - Docker Compose Configuration
+# =============================================================================
+# Development:  docker compose up
+# Production:   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Multi-node:   docker compose --profile multi up
+# =============================================================================
+
+version: "3.9"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Primary VERITAS Node
+  # ---------------------------------------------------------------------------
+  veritas-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: veritas-node:latest
+    container_name: veritas-node-1
+    hostname: veritas-node-1
+    restart: unless-stopped
+
+    ports:
+      - "9000:9000"    # P2P TCP port
+      - "8080:8080"    # Health check endpoint
+      - "9090:9090"    # Metrics (optional)
+
+    environment:
+      VERITAS_DATA_DIR: /var/lib/veritas
+      VERITAS_LISTEN_ADDR: /ip4/0.0.0.0/tcp/9000
+      VERITAS_LOG_LEVEL: info
+      VERITAS_LOG_FORMAT: plain
+      VERITAS_HEALTH_PORT: "8080"
+      VERITAS_RELAY_MODE: "true"
+      VERITAS_VALIDATOR_MODE: "false"
+      VERITAS_MAX_CONNECTIONS: "1000"
+      # Bootstrap nodes (comma-separated multiaddrs)
+      # VERITAS_BOOTSTRAP_NODES: /ip4/bootstrap.veritas.network/tcp/9000/p2p/...
+
+    volumes:
+      - veritas-data:/var/lib/veritas
+
+    networks:
+      - veritas-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # Additional Nodes for Multi-Node Testing (Optional)
+  # Use: docker compose --profile multi up
+  # ---------------------------------------------------------------------------
+  veritas-node-2:
+    profiles: ["multi"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: veritas-node:latest
+    container_name: veritas-node-2
+    hostname: veritas-node-2
+    restart: unless-stopped
+
+    ports:
+      - "9001:9000"
+      - "8081:8080"
+
+    environment:
+      VERITAS_DATA_DIR: /var/lib/veritas
+      VERITAS_LISTEN_ADDR: /ip4/0.0.0.0/tcp/9000
+      VERITAS_LOG_LEVEL: info
+      VERITAS_RELAY_MODE: "true"
+      # Connect to node-1 as bootstrap
+      VERITAS_BOOTSTRAP_NODES: /dns4/veritas-node-1/tcp/9000
+
+    volumes:
+      - veritas-data-2:/var/lib/veritas
+
+    networks:
+      - veritas-network
+
+    depends_on:
+      veritas-node:
+        condition: service_healthy
+
+  veritas-node-3:
+    profiles: ["multi"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: veritas-node:latest
+    container_name: veritas-node-3
+    hostname: veritas-node-3
+    restart: unless-stopped
+
+    ports:
+      - "9002:9000"
+      - "8082:8080"
+
+    environment:
+      VERITAS_DATA_DIR: /var/lib/veritas
+      VERITAS_LISTEN_ADDR: /ip4/0.0.0.0/tcp/9000
+      VERITAS_LOG_LEVEL: info
+      VERITAS_RELAY_MODE: "true"
+      # Connect to node-1 as bootstrap
+      VERITAS_BOOTSTRAP_NODES: /dns4/veritas-node-1/tcp/9000
+
+    volumes:
+      - veritas-data-3:/var/lib/veritas
+
+    networks:
+      - veritas-network
+
+    depends_on:
+      veritas-node:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Development Tools (Optional)
+  # Use: docker compose --profile dev up
+  # ---------------------------------------------------------------------------
+
+  # Prometheus for metrics collection
+  prometheus:
+    profiles: ["monitoring", "dev"]
+    image: prom/prometheus:latest
+    container_name: veritas-prometheus
+    restart: unless-stopped
+
+    ports:
+      - "9091:9090"
+
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+    networks:
+      - veritas-network
+
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+
+  # Grafana for visualization
+  grafana:
+    profiles: ["monitoring", "dev"]
+    image: grafana/grafana:latest
+    container_name: veritas-grafana
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"
+
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: veritas123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+
+    networks:
+      - veritas-network
+
+    depends_on:
+      - prometheus
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  veritas-network:
+    name: veritas-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  veritas-data:
+    name: veritas-data
+  veritas-data-2:
+    name: veritas-data-2
+  veritas-data-3:
+    name: veritas-data-3
+  prometheus-data:
+    name: veritas-prometheus-data
+  grafana-data:
+    name: veritas-grafana-data

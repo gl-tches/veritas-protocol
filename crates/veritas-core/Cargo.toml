@@ -50,3 +50,4 @@ dirs = "5"
 [dev-dependencies]
 proptest.workspace = true
 tempfile = "3"
+futures = "0.3"

@@ -1,0 +1,79 @@
+[package]
+name = "veritas-fuzz"
+version = "0.0.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+
+# VERITAS crates
+veritas-crypto = { path = "../crates/veritas-crypto" }
+veritas-protocol = { path = "../crates/veritas-protocol" }
+veritas-identity = { path = "../crates/veritas-identity" }
+
+# Workspace prevention
+[workspace]
+
+# Fuzz targets - one per file in fuzz_targets/
+
+[[bin]]
+name = "fuzz_symmetric_decrypt"
+path = "fuzz_targets/fuzz_symmetric_decrypt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_hash_from_bytes"
+path = "fuzz_targets/fuzz_hash_from_bytes.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_encrypted_data_parse"
+path = "fuzz_targets/fuzz_encrypted_data_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_identity_hash_from_hex"
+path = "fuzz_targets/fuzz_identity_hash_from_hex.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_username_validation"
+path = "fuzz_targets/fuzz_username_validation.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_padding"
+path = "fuzz_targets/fuzz_padding.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_message_chunking"
+path = "fuzz_targets/fuzz_message_chunking.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_x25519_public_key"
+path = "fuzz_targets/fuzz_x25519_public_key.rs"
+test = false
+doc = false
+bench = false

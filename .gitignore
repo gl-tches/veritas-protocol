@@ -34,6 +34,7 @@ credentials.json
 
 # WASM build output
 crates/veritas-wasm/pkg/
+examples/web-demo/pkg/
 
 # Python build output
 crates/veritas-py/target/

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VERITAS Protocol - Web Demo</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>VERITAS Protocol</h1>
+            <p class="subtitle">Post-Quantum Secure Messaging Demo</p>
+            <div id="version" class="version"></div>
+        </header>
+
+        <!-- Status Messages -->
+        <div id="status" class="status hidden"></div>
+
+        <!-- Unlock Section -->
+        <section id="unlock-section" class="card">
+            <h2>Unlock Wallet</h2>
+            <p class="description">Enter a password to unlock or create your wallet. Your identities are encrypted with this password.</p>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Enter your password" autocomplete="off">
+            </div>
+            <div class="button-group">
+                <button id="unlock-btn" class="btn btn-primary">Unlock Wallet</button>
+            </div>
+        </section>
+
+        <!-- Main App (hidden until unlocked) -->
+        <div id="main-app" class="hidden">
+            <!-- Identity Management -->
+            <section class="card">
+                <h2>Identity Management</h2>
+
+                <!-- Slot Info -->
+                <div id="slot-info" class="slot-info">
+                    <span>Slots: <span id="slots-used">0</span> / <span id="slots-max">3</span></span>
+                    <span class="available">(<span id="slots-available">3</span> available)</span>
+                </div>
+
+                <!-- Current Identity -->
+                <div id="current-identity" class="identity-display">
+                    <h3>Current Identity</h3>
+                    <div id="no-identity" class="no-identity">No identity selected</div>
+                    <div id="identity-details" class="identity-details hidden">
+                        <div class="identity-hash-display">
+                            <label>Identity Hash</label>
+                            <code id="current-hash"></code>
+                            <button id="copy-hash-btn" class="btn btn-small" title="Copy to clipboard">Copy</button>
+                        </div>
+                        <div class="identity-meta">
+                            <span id="identity-label" class="identity-label"></span>
+                            <span id="identity-state" class="identity-state"></span>
+                            <span id="identity-expiry" class="identity-expiry"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Create Identity -->
+                <div class="create-identity">
+                    <h3>Create New Identity</h3>
+                    <div class="form-group">
+                        <label for="identity-label-input">Label (optional)</label>
+                        <input type="text" id="identity-label-input" placeholder="e.g., Personal, Work">
+                    </div>
+                    <button id="create-identity-btn" class="btn btn-primary">Create Identity</button>
+                </div>
+
+                <!-- Identity List -->
+                <div class="identity-list-section">
+                    <h3>Your Identities</h3>
+                    <div id="identity-list" class="identity-list">
+                        <p class="empty-list">No identities created yet.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Safety Number Section -->
+            <section class="card">
+                <h2>Safety Number</h2>
+                <p class="description">Compute a safety number to verify you're communicating with the right person. Both parties should see the same number.</p>
+
+                <div class="safety-number-form">
+                    <div class="form-group">
+                        <label for="peer-identity">Peer Identity</label>
+                        <select id="peer-identity">
+                            <option value="">Select a peer identity...</option>
+                        </select>
+                    </div>
+                    <button id="compute-safety-btn" class="btn btn-secondary" disabled>Compute Safety Number</button>
+                </div>
+
+                <div id="safety-result" class="safety-result hidden">
+                    <h3>Safety Number</h3>
+
+                    <!-- Numeric Format -->
+                    <div class="safety-numeric">
+                        <label>Numeric Format (for verbal comparison)</label>
+                        <div id="safety-numeric" class="safety-number-display"></div>
+                    </div>
+
+                    <!-- QR Format -->
+                    <div class="safety-qr">
+                        <label>QR Format (for scanning)</label>
+                        <div id="safety-qr" class="safety-qr-display">
+                            <canvas id="qr-canvas"></canvas>
+                        </div>
+                        <code id="safety-hex" class="safety-hex"></code>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Lock Button -->
+            <div class="lock-section">
+                <button id="lock-btn" class="btn btn-danger">Lock Wallet</button>
+            </div>
+        </div>
+
+        <footer>
+            <p>VERITAS Protocol - Post-Quantum Secure Messaging</p>
+            <p class="note">This is a demonstration of WASM bindings. Data is stored in memory only.</p>
+        </footer>
+    </div>
+
+    <!-- QR Code library (minimal, from CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <!-- WASM module and application -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>

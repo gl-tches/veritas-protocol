@@ -85,6 +85,8 @@ pub mod identity_hash;
 pub mod keypair;
 pub mod lifecycle;
 pub mod limits;
+#[cfg(test)]
+mod proptests;
 pub mod username;
 
 pub use error::{IdentityError, Result};

@@ -39,6 +39,8 @@ pub mod envelope;
 pub mod error;
 pub mod groups;
 pub mod limits;
+#[cfg(test)]
+mod proptests;
 pub mod receipts;
 pub mod signing;
 
