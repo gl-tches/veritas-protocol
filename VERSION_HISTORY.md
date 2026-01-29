@@ -7,6 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-rc.1] - 2026
+
+### Added
+
+- **Task 043**: Integration Tests
+  - End-to-end messaging tests (84 tests in `phase10_integration.rs`)
+  - Multi-node tests (two-node exchange, bidirectional, concurrent processing)
+  - Offline scenario tests (queuing, inbox/outbox persistence, retry scheduling)
+  - Delivery receipt tests
+  - Mailbox key derivation tests
+  - Gossip protocol announcement tests
+  - Store-and-forward relay tests
+
+- **Task 044**: Property Tests & Fuzzing
+  - Crypto property tests (`crates/veritas-crypto/src/proptests.rs`)
+    - Encryption/decryption roundtrip for arbitrary data
+    - Hash consistency and uniqueness
+    - Key generation uniqueness
+  - Protocol property tests (`crates/veritas-protocol/src/proptests.rs`)
+    - Message validation
+    - Envelope padding correctness
+    - Chunking/reassembly roundtrip
+  - Identity property tests (`crates/veritas-identity/src/proptests.rs`)
+    - Username validation
+    - Identity hash uniqueness
+  - Fuzzing setup (`fuzz/` directory)
+    - 8 fuzz targets: message chunking, encrypted data parsing, X25519 keys,
+      hash parsing, username validation, symmetric decryption, padding,
+      identity hash parsing
+    - `fuzz/Cargo.toml` with cargo-fuzz configuration
+    - `fuzz/README.md` with usage instructions
+
+- **Task 045**: Comprehensive Documentation
+  - `docs/API.md` (22KB) - Complete API documentation with examples
+  - `docs/ARCHITECTURE.md` (44KB) - System architecture with diagrams
+  - `docs/SECURITY.md` - Security considerations and threat model
+  - `docs/SETUP.md` (10KB) - Setup and running guide
+  - `docs/DOCKER.md` (12KB) - Docker deployment documentation
+
+- **Task 046**: Example Applications
+  - CLI chat example (`examples/cli-chat/`)
+    - Full Rust CLI application with identity management
+    - Contact management, messaging, safety number verification
+    - Commands: `/identity`, `/contacts`, `/add`, `/msg`, `/safety`, `/quit`
+  - Web demo (`examples/web-demo/`)
+    - Pure HTML/CSS/JS implementation using WASM bindings
+    - Identity creation, switching, safety number computation
+    - Password-protected wallet
+
+- **Task 047**: Docker Containerization
+  - Multi-stage `Dockerfile` (build + slim runtime)
+  - `docker-compose.yml` for development/testing
+  - `.dockerignore` for efficient builds
+  - Non-root user, health checks, proper signal handling
+
+- **veritas-node**: Standalone Node Daemon
+  - New crate `crates/veritas-node/`
+  - CLI with clap argument parsing
+  - Health check endpoint (`/health`, `/ready`)
+  - Environment variable configuration
+  - Relay and validator mode support
+  - Structured logging (plain/JSON)
+
+### Testing
+
+- 1,200+ total tests across all crates
+- 84 new Phase 10 integration tests
+- Property-based testing with proptest
+- Fuzzing infrastructure ready
+
+### Documentation
+
+| Document | Size | Description |
+|----------|------|-------------|
+| `docs/API.md` | 22KB | Complete API reference |
+| `docs/ARCHITECTURE.md` | 44KB | System architecture guide |
+| `docs/SECURITY.md` | - | Security considerations |
+| `docs/SETUP.md` | 10KB | Setup and running guide |
+| `docs/DOCKER.md` | 12KB | Docker deployment guide |
+
+### Crates Updated
+
+| Crate | Version | Status |
+|-------|---------|--------|
+| veritas-core | 0.1.0-rc.1 | Integration tests added |
+| veritas-crypto | 0.1.0-rc.1 | Property tests added |
+| veritas-identity | 0.1.0-rc.1 | Property tests added |
+| veritas-protocol | 0.1.0-rc.1 | Property tests added |
+| veritas-node | 0.1.0-rc.1 | New - Node daemon |
+
 ## [0.1.0-beta.2] - 2026
 
 ### Added

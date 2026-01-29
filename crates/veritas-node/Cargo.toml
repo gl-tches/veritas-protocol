@@ -1,0 +1,40 @@
+[package]
+name = "veritas-node"
+description = "VERITAS protocol node daemon"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["daemon", "node", "server"]
+categories = ["network-programming"]
+
+[[bin]]
+name = "veritas-node"
+path = "src/main.rs"
+
+[dependencies]
+veritas-core.workspace = true
+veritas-crypto.workspace = true
+veritas-identity.workspace = true
+veritas-protocol.workspace = true
+veritas-net.workspace = true
+veritas-store.workspace = true
+veritas-reputation.workspace = true
+
+# Async
+tokio = { workspace = true, features = ["full", "signal"] }
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Logging
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+anyhow.workspace = true

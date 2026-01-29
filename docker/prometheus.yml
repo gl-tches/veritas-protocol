@@ -1,0 +1,47 @@
+# Prometheus configuration for VERITAS monitoring
+# https://prometheus.io/docs/prometheus/latest/configuration/configuration/
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+  # Attach labels to all metrics
+  external_labels:
+    monitor: 'veritas-monitor'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+# rule_files:
+#   - "alert_rules.yml"
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # VERITAS nodes
+  - job_name: 'veritas'
+    static_configs:
+      - targets:
+        - 'veritas-node:9090'
+        - 'veritas-node-2:9090'
+        - 'veritas-node-3:9090'
+
+    # Relabel to add instance names
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '(.+):9090'
+        target_label: instance
+        replacement: '${1}'
+
+  # Docker daemon metrics (if enabled)
+  # - job_name: 'docker'
+  #   static_configs:
+  #     - targets: ['host.docker.internal:9323']

@@ -12,6 +12,9 @@ members = [
     "crates/veritas-ffi",
     "crates/veritas-wasm",
     "crates/veritas-py",
+    "crates/veritas-node",
+    # Examples
+    "examples/cli-chat",
 ]
 
 [workspace.package]
