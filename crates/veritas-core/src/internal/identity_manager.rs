@@ -38,8 +38,8 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use veritas_identity::{
-    IdentityHash, IdentityKeyPair, IdentityLimiter, IdentityPublicKeys, IdentitySlotInfo,
-    KeyLifecycle, KeyState, OriginFingerprint,
+    HardwareAttestation, IdentityHash, IdentityKeyPair, IdentityLimiter, IdentityPublicKeys,
+    IdentitySlotInfo, KeyLifecycle, KeyState, OriginFingerprint,
 };
 use veritas_store::{Keyring, KeyringEntry};
 
@@ -397,7 +397,9 @@ impl PersistentIdentityManager {
                 )))
             })
         } else {
-            let origin = OriginFingerprint::generate();
+            // Create origin fingerprint from hardware attestation
+            let attestation = HardwareAttestation::collect().map_err(CoreError::Identity)?;
+            let origin = OriginFingerprint::from_hardware(&attestation).map_err(CoreError::Identity)?;
             let limiter = IdentityLimiter::new(origin);
 
             let bytes = bincode::serialize(&limiter).map_err(|e| {

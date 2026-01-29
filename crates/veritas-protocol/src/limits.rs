@@ -16,6 +16,28 @@ pub const MAX_TOTAL_MESSAGE_CHARS: usize = 900;
 /// Message time-to-live in seconds (7 days).
 pub const MESSAGE_TTL_SECS: u64 = 7 * 24 * 60 * 60;
 
+// === DoS Prevention ===
+
+/// Maximum size of a serialized MinimalEnvelope in bytes.
+/// SECURITY: Check this BEFORE deserialization to prevent OOM attacks (VERITAS-2026-0003).
+pub const MAX_ENVELOPE_SIZE: usize = 2048;
+
+/// Maximum size of a serialized InnerPayload in bytes.
+/// SECURITY: Check this BEFORE deserialization to prevent OOM attacks (VERITAS-2026-0003).
+pub const MAX_INNER_ENVELOPE_SIZE: usize = 1536;
+
+/// Maximum total buffer size for chunk reassembly per session.
+/// SECURITY: Prevents memory exhaustion from incomplete chunk streams.
+pub const MAX_REASSEMBLY_BUFFER: usize = 4096;
+
+/// Maximum number of concurrent pending reassembly sessions.
+/// SECURITY: Prevents memory exhaustion from many incomplete messages.
+pub const MAX_PENDING_REASSEMBLIES: usize = 1000;
+
+/// Timeout for incomplete reassembly sessions in seconds.
+/// SECURITY: Ensures stale sessions are cleaned up.
+pub const REASSEMBLY_TIMEOUT_SECS: u64 = 300;
+
 // === Privacy ===
 
 /// Padding bucket sizes for hiding message length.
@@ -143,6 +165,11 @@ mod tests {
         assert!(REPUTATION_QUARANTINE < REPUTATION_START);
         assert!(REPUTATION_START < REPUTATION_MAX);
         assert!(MIN_VALIDATOR_STAKE > REPUTATION_QUARANTINE);
+        // DoS prevention constants must be reasonable
+        assert!(MAX_INNER_ENVELOPE_SIZE < MAX_ENVELOPE_SIZE);
+        assert!(MAX_ENVELOPE_SIZE <= MAX_REASSEMBLY_BUFFER);
+        assert!(REASSEMBLY_TIMEOUT_SECS > 0);
+        assert!(MAX_PENDING_REASSEMBLIES > 0);
     };
 
     #[test]

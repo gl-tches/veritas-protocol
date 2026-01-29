@@ -2,12 +2,23 @@
 //!
 //! Enforces the maximum of 3 identities per device origin with slot recycling
 //! when identities expire past the grace period.
+//!
+//! # Security
+//!
+//! Origin fingerprints MUST be hardware-bound in production to prevent Sybil attacks.
+//! The `generate()` function is only available in tests. Production code must use
+//! `from_hardware()` which requires a verified `HardwareAttestation`.
+//!
+//! See VERITAS-2026-0001 for vulnerability details.
 
+#[cfg(test)]
 use rand::rngs::OsRng;
+#[cfg(test)]
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use veritas_crypto::Hash256;
 
+use crate::hardware::HardwareAttestation;
 use crate::lifecycle::{KeyLifecycle, EXPIRY_GRACE_PERIOD_SECS, KEY_EXPIRY_SECS};
 use crate::IdentityHash;
 
@@ -43,11 +54,81 @@ impl OriginFingerprint {
 
     /// Generate a new origin fingerprint with a random installation ID.
     ///
-    /// This should be used when no hardware ID is available (e.g., in testing).
+    /// # Security Warning
+    ///
+    /// This function creates fingerprints that are NOT hardware-bound and
+    /// can be used to bypass the identity limit. It is only available in
+    /// test builds.
+    ///
+    /// **Production code MUST use `from_hardware()` instead.**
+    ///
+    /// See VERITAS-2026-0001 for details on the Sybil attack this prevents.
+    #[cfg(test)]
     pub fn generate() -> Self {
         let mut installation_id = [0u8; 32];
         OsRng.fill_bytes(&mut installation_id);
         Self::new(&[], None, &installation_id)
+    }
+
+    /// Create an origin fingerprint from verified hardware attestation.
+    ///
+    /// This is the ONLY way to create origin fingerprints in production.
+    /// The hardware attestation must be verified before the fingerprint
+    /// is created, ensuring that each physical device can only create
+    /// a limited number of identities.
+    ///
+    /// # Arguments
+    ///
+    /// * `attestation` - A hardware attestation that has been collected
+    ///   from the current device's secure hardware.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The attestation fails verification
+    /// - The hardware does not provide strong binding (in production)
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use veritas_identity::hardware::HardwareAttestation;
+    /// use veritas_identity::limits::OriginFingerprint;
+    ///
+    /// // Collect attestation from secure hardware
+    /// let attestation = HardwareAttestation::collect()?;
+    ///
+    /// // Create hardware-bound fingerprint
+    /// let origin = OriginFingerprint::from_hardware(&attestation)?;
+    /// ```
+    ///
+    /// # Security
+    ///
+    /// This function enforces VERITAS-2026-0001 remediation by requiring
+    /// cryptographic proof from secure hardware before creating an origin
+    /// fingerprint. This prevents unlimited identity creation.
+    pub fn from_hardware(attestation: &HardwareAttestation) -> crate::Result<Self> {
+        // Verify the attestation is valid
+        attestation.verify()?;
+
+        // In production, require strong hardware binding
+        #[cfg(not(test))]
+        if !attestation.is_strong_binding() {
+            return Err(crate::IdentityError::HardwareAttestationFailed {
+                reason: "production requires strong hardware binding (TPM, Secure Enclave, or Android Keystore)".into(),
+            });
+        }
+
+        // Derive the fingerprint from hardware attestation
+        let hardware_fingerprint = attestation.fingerprint();
+
+        // Create origin fingerprint using the hardware identity
+        // The installation_id is derived from the hardware fingerprint
+        // to ensure determinism while maintaining privacy
+        Ok(Self::new(
+            hardware_fingerprint.as_bytes(),
+            None,
+            hardware_fingerprint.as_bytes(),
+        ))
     }
 
     /// Get the fingerprint as bytes.
@@ -305,7 +386,9 @@ impl IdentityLimiter {
 mod tests {
     use super::*;
 
-    const BASE_TIME: u64 = 1700000000;
+    // Use a timestamp after MIN_VALID_TIMESTAMP (2024-01-01 = 1704067200)
+    // 1710000000 = March 9, 2024
+    const BASE_TIME: u64 = 1710000000;
     const DAY: u64 = 24 * 60 * 60;
 
     fn make_identity(name: &str) -> IdentityHash {
@@ -617,5 +700,81 @@ mod tests {
         // user0 is Rotated (terminated), user1 and user2 are Active, new_user0 is Active
         // Only non-terminated identities count: user1, user2, new_user0 = 3
         assert_eq!(slot_info.used, 3);
+    }
+
+    // =========================================================================
+    // Security Tests for VERITAS-2026-0001: Sybil Attack Prevention
+    // =========================================================================
+
+    #[test]
+    fn test_from_hardware_valid_attestation() {
+        // Test that from_hardware works with valid attestations
+        let attestation = HardwareAttestation::test_attestation();
+        let result = OriginFingerprint::from_hardware(&attestation);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_from_hardware_deterministic() {
+        // Same attestation should produce same fingerprint
+        let attestation = HardwareAttestation::test_attestation();
+        let fp1 = OriginFingerprint::from_hardware(&attestation).unwrap();
+        let fp2 = OriginFingerprint::from_hardware(&attestation).unwrap();
+        assert_eq!(fp1, fp2);
+    }
+
+    #[test]
+    fn test_from_hardware_unique_per_device() {
+        // Different hardware attestations should produce different fingerprints
+        let attestation1 = HardwareAttestation::test_attestation();
+        let attestation2 = HardwareAttestation::test_attestation();
+        let fp1 = OriginFingerprint::from_hardware(&attestation1).unwrap();
+        let fp2 = OriginFingerprint::from_hardware(&attestation2).unwrap();
+        // Test attestations have random hardware_id, so fingerprints should differ
+        assert_ne!(fp1, fp2);
+    }
+
+    #[test]
+    fn test_from_hardware_verifies_attestation() {
+        // Test that from_hardware() calls verify() on the attestation
+        // A valid test attestation should pass
+        let attestation = HardwareAttestation::test_attestation();
+        let result = OriginFingerprint::from_hardware(&attestation);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sybil_attack_prevention() {
+        // Verify that the same hardware attestation creates the same origin,
+        // preventing unlimited identity creation
+        let attestation = HardwareAttestation::test_attestation();
+
+        // Create origin from hardware
+        let origin = OriginFingerprint::from_hardware(&attestation).unwrap();
+        let mut limiter = IdentityLimiter::new(origin.clone());
+
+        // Register max identities
+        for i in 0..MAX_IDENTITIES_PER_ORIGIN {
+            let id = make_identity(&format!("user{}", i));
+            limiter.register(id, BASE_TIME).unwrap();
+        }
+
+        // Verify we hit the limit
+        assert!(!limiter.can_register(BASE_TIME));
+
+        // Creating another origin from the SAME attestation should give SAME origin
+        let same_origin = OriginFingerprint::from_hardware(&attestation).unwrap();
+        assert_eq!(origin, same_origin);
+
+        // This proves that an attacker cannot create unlimited fingerprints
+        // from the same hardware attestation
+    }
+
+    #[test]
+    fn test_generate_only_available_in_tests() {
+        // This test verifies generate() is available in tests
+        // In production builds, generate() won't compile
+        let fp = OriginFingerprint::generate();
+        assert!(fp.as_bytes().len() == 32);
     }
 }

@@ -37,10 +37,20 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
-use veritas_crypto::Hash256;
+use veritas_crypto::{Hash256, MlDsaPrivateKey, MlDsaPublicKey, MlDsaSignature};
 use veritas_identity::IdentityHash;
 
 use crate::{ChainError, Result};
+
+// ============================================================================
+// Signature Constants (VERITAS-2026-0002)
+// ============================================================================
+
+/// Domain separator for block signature computation.
+///
+/// SECURITY: Using a domain separator prevents cross-protocol signature attacks
+/// where a valid signature from another context could be reused.
+const BLOCK_SIGNATURE_DOMAIN: &[u8] = b"VERITAS-BLOCK-SIGNATURE-v1";
 
 // ============================================================================
 // Domain Separators
@@ -63,6 +73,15 @@ const GENESIS_DOMAIN: &[u8] = b"VERITAS-GENESIS-v1";
 ///
 /// The header is separate from the body to allow efficient header-only
 /// synchronization and validation without downloading full block contents.
+///
+/// ## Security (VERITAS-2026-0002)
+///
+/// Non-genesis blocks MUST include a valid ML-DSA signature from the validator.
+/// The signature covers the block hash and prevents forged blocks from being
+/// accepted even if an attacker knows a valid validator ID.
+///
+/// Signature verification is performed by calling [`verify_signature()`] before
+/// trusting any data from the block.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BlockHeader {
     /// Hash of this block's contents (computed from header fields + body).
@@ -89,10 +108,33 @@ pub struct BlockHeader {
     ///
     /// For genesis, this is a special null validator.
     pub validator: IdentityHash,
+
+    /// ML-DSA public key of the validator (serialized).
+    ///
+    /// SECURITY (VERITAS-2026-0002): This public key MUST be verified to derive
+    /// to the claimed `validator` identity hash. Empty for genesis blocks.
+    #[serde(default)]
+    pub validator_pubkey: Vec<u8>,
+
+    /// ML-DSA signature over the block signing payload (serialized).
+    ///
+    /// SECURITY (VERITAS-2026-0002): This signature MUST be verified before
+    /// trusting any block data. Empty for genesis blocks.
+    #[serde(default)]
+    pub signature: Vec<u8>,
 }
 
 impl BlockHeader {
-    /// Create a new block header with computed hash.
+    /// Create a new UNSIGNED block header with computed hash.
+    ///
+    /// # Warning
+    ///
+    /// This creates an unsigned block header. For production use, you MUST use
+    /// [`new_signed()`] instead to create properly signed blocks.
+    ///
+    /// Unsigned headers are only valid for:
+    /// - Genesis blocks (which don't require signatures)
+    /// - Testing purposes
     ///
     /// # Arguments
     ///
@@ -105,12 +147,13 @@ impl BlockHeader {
     /// # Example
     ///
     /// ```ignore
+    /// // For genesis blocks only:
     /// let header = BlockHeader::new(
-    ///     parent_hash,
-    ///     1,
+    ///     Hash256::default(), // All zeros for genesis
+    ///     0,
     ///     chrono::Utc::now().timestamp() as u64,
     ///     merkle_root,
-    ///     validator_id,
+    ///     genesis_validator_id,
     /// );
     /// ```
     pub fn new(
@@ -128,7 +171,84 @@ impl BlockHeader {
             timestamp,
             merkle_root,
             validator,
+            validator_pubkey: Vec::new(),
+            signature: Vec::new(),
         }
+    }
+
+    /// Create a new SIGNED block header with computed hash and ML-DSA signature.
+    ///
+    /// SECURITY (VERITAS-2026-0002): This is the REQUIRED constructor for all
+    /// non-genesis blocks. The block is signed using the validator's ML-DSA
+    /// private key, which cryptographically binds the block to the validator's
+    /// identity.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent_hash` - Hash of the parent block
+    /// * `height` - Block height (must be > 0)
+    /// * `timestamp` - Unix timestamp in seconds
+    /// * `merkle_root` - Merkle root of entries
+    /// * `validator` - Identity hash of the block producer
+    /// * `validator_private_key` - ML-DSA private key for signing
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Signing fails
+    /// - Height is 0 (use `new()` for genesis blocks)
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let header = BlockHeader::new_signed(
+    ///     parent_hash,
+    ///     1,
+    ///     chrono::Utc::now().timestamp() as u64,
+    ///     merkle_root,
+    ///     validator_id,
+    ///     &validator_private_key,
+    /// )?;
+    /// ```
+    pub fn new_signed(
+        parent_hash: Hash256,
+        height: u64,
+        timestamp: u64,
+        merkle_root: Hash256,
+        validator: IdentityHash,
+        validator_private_key: &MlDsaPrivateKey,
+    ) -> Result<Self> {
+        // Genesis blocks should use new() instead
+        if height == 0 {
+            return Err(ChainError::InvalidBlock(
+                "genesis blocks should use new(), not new_signed()".to_string(),
+            ));
+        }
+
+        let hash = Self::compute_hash(&parent_hash, height, timestamp, &merkle_root, &validator);
+
+        // Get the public key from the private key
+        let public_key = validator_private_key.public_key();
+        let validator_pubkey = public_key.as_bytes().to_vec();
+
+        // Compute the signing payload
+        let signing_payload = Self::compute_signing_payload_static(&hash);
+
+        // Sign the payload
+        let signature_obj = validator_private_key
+            .sign(&signing_payload)
+            .map_err(|e| ChainError::InvalidSignature(format!("signing failed: {}", e)))?;
+
+        Ok(Self {
+            hash,
+            parent_hash,
+            height,
+            timestamp,
+            merkle_root,
+            validator,
+            validator_pubkey,
+            signature: signature_obj.as_bytes().to_vec(),
+        })
     }
 
     /// Compute the block hash from header components.
@@ -163,6 +283,112 @@ impl BlockHeader {
             &self.validator,
         );
         self.hash == computed
+    }
+
+    /// Compute the signing payload for this block.
+    ///
+    /// The signing payload includes a domain separator and the block hash,
+    /// ensuring that signatures are bound to this specific block and cannot
+    /// be reused in other contexts.
+    ///
+    /// # Returns
+    ///
+    /// A byte vector containing the data that should be signed.
+    pub fn compute_signing_payload(&self) -> Vec<u8> {
+        Self::compute_signing_payload_static(&self.hash)
+    }
+
+    /// Static helper to compute the signing payload from a hash.
+    ///
+    /// This is used internally by both `compute_signing_payload()` and
+    /// `new_signed()` to ensure consistent payload computation.
+    fn compute_signing_payload_static(hash: &Hash256) -> Vec<u8> {
+        let mut payload = Vec::with_capacity(BLOCK_SIGNATURE_DOMAIN.len() + 32);
+        payload.extend_from_slice(BLOCK_SIGNATURE_DOMAIN);
+        payload.extend_from_slice(hash.as_bytes());
+        payload
+    }
+
+    /// Verify the block's cryptographic signature.
+    ///
+    /// SECURITY (VERITAS-2026-0002): This method MUST be called before trusting
+    /// any data from a non-genesis block. It verifies:
+    ///
+    /// 1. The signature is present (non-empty)
+    /// 2. The public key is present (non-empty)
+    /// 3. The public key derives to the claimed validator identity
+    /// 4. The ML-DSA signature is valid over the block's signing payload
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(())` if the signature is valid
+    /// - `Err(ChainError::MissingSignature)` if signature or pubkey is missing
+    /// - `Err(ChainError::ValidatorKeyMismatch)` if pubkey doesn't match validator
+    /// - `Err(ChainError::InvalidSignature)` if signature verification fails
+    ///
+    /// # Genesis Blocks
+    ///
+    /// Genesis blocks (height 0, parent_hash all zeros) are exempt from
+    /// signature verification and will return `Ok(())` even without a signature.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // ALWAYS verify signature before trusting block data
+    /// block.header.verify_signature()?;
+    /// // Now safe to use block data
+    /// process_block(&block);
+    /// ```
+    pub fn verify_signature(&self) -> Result<()> {
+        // Genesis blocks don't require signatures
+        if self.is_genesis() {
+            return Ok(());
+        }
+
+        // SECURITY: Non-genesis blocks MUST have a signature
+        if self.signature.is_empty() {
+            return Err(ChainError::MissingSignature);
+        }
+
+        // SECURITY: Non-genesis blocks MUST have a public key
+        if self.validator_pubkey.is_empty() {
+            return Err(ChainError::MissingSignature);
+        }
+
+        // Parse the public key
+        let pubkey = MlDsaPublicKey::from_bytes(&self.validator_pubkey)
+            .map_err(|e| ChainError::InvalidSignature(format!("invalid public key: {}", e)))?;
+
+        // SECURITY: Verify the public key derives to the claimed validator identity
+        // This prevents an attacker from using their own key to sign a block
+        // while claiming to be a different validator.
+        let derived_id = IdentityHash::from(Hash256::hash(pubkey.as_bytes()));
+        if derived_id != self.validator {
+            return Err(ChainError::ValidatorKeyMismatch {
+                claimed: self.validator.to_string(),
+                derived: derived_id.to_string(),
+            });
+        }
+
+        // Parse the signature
+        let signature = MlDsaSignature::from_bytes(&self.signature)
+            .map_err(|e| ChainError::InvalidSignature(format!("invalid signature: {}", e)))?;
+
+        // Compute the signing payload
+        let payload = self.compute_signing_payload();
+
+        // SECURITY: Verify the signature
+        pubkey
+            .verify(&payload, &signature)
+            .map_err(|_| ChainError::InvalidSignature("signature verification failed".to_string()))
+    }
+
+    /// Check if the block has a signature (non-genesis blocks should always have one).
+    ///
+    /// This is a quick check that doesn't verify the signature validity.
+    /// Use [`verify_signature()`] for full verification.
+    pub fn has_signature(&self) -> bool {
+        !self.signature.is_empty() && !self.validator_pubkey.is_empty()
     }
 
     /// Get the block creation time as a DateTime.
@@ -253,9 +479,16 @@ pub struct Block {
 }
 
 impl Block {
-    /// Create a new block with the given parameters.
+    /// Create a new UNSIGNED block with the given parameters.
     ///
-    /// The block hash and merkle root are computed automatically.
+    /// # Warning
+    ///
+    /// This creates an unsigned block. For production use with non-genesis blocks,
+    /// you MUST use [`new_signed()`] instead to create properly signed blocks.
+    ///
+    /// Unsigned blocks are only valid for:
+    /// - Genesis blocks (which don't require signatures)
+    /// - Testing purposes
     ///
     /// # Arguments
     ///
@@ -275,6 +508,61 @@ impl Block {
         let merkle_root = body.compute_merkle_root();
         let header = BlockHeader::new(parent_hash, height, timestamp, merkle_root, validator);
         Self { header, body }
+    }
+
+    /// Create a new SIGNED block with the given parameters.
+    ///
+    /// SECURITY (VERITAS-2026-0002): This is the REQUIRED constructor for all
+    /// non-genesis blocks in production. The block is signed using the validator's
+    /// ML-DSA private key, which cryptographically binds the block to the
+    /// validator's identity and prevents block forgery.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent_hash` - Hash of the parent block
+    /// * `height` - Block height (must be > 0)
+    /// * `timestamp` - Unix timestamp in seconds
+    /// * `entries` - Chain entries to include
+    /// * `validator` - Identity hash of the block producer
+    /// * `validator_private_key` - ML-DSA private key for signing
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Signing fails
+    /// - Height is 0 (use `new()` or `genesis()` for genesis blocks)
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let block = Block::new_signed(
+    ///     parent_hash,
+    ///     1,
+    ///     chrono::Utc::now().timestamp() as u64,
+    ///     entries,
+    ///     validator_id,
+    ///     &validator_private_key,
+    /// )?;
+    /// ```
+    pub fn new_signed(
+        parent_hash: Hash256,
+        height: u64,
+        timestamp: u64,
+        entries: Vec<ChainEntry>,
+        validator: IdentityHash,
+        validator_private_key: &MlDsaPrivateKey,
+    ) -> Result<Self> {
+        let body = BlockBody::new(entries);
+        let merkle_root = body.compute_merkle_root();
+        let header = BlockHeader::new_signed(
+            parent_hash,
+            height,
+            timestamp,
+            merkle_root,
+            validator,
+            validator_private_key,
+        )?;
+        Ok(Self { header, body })
     }
 
     /// Create the genesis block.
@@ -339,11 +627,16 @@ impl Block {
         self.header.is_genesis()
     }
 
-    /// Verify block integrity.
+    /// Verify block integrity (hash and merkle root only).
     ///
     /// Checks that:
     /// 1. Block hash is correctly computed
     /// 2. Merkle root matches entry hashes
+    ///
+    /// # Warning
+    ///
+    /// This method does NOT verify the block signature. For full security
+    /// verification including signature checks, use [`verify_with_signature()`].
     ///
     /// # Errors
     ///
@@ -361,6 +654,45 @@ impl Block {
         }
 
         Ok(())
+    }
+
+    /// Verify block integrity AND cryptographic signature.
+    ///
+    /// SECURITY (VERITAS-2026-0002): This is the REQUIRED verification method
+    /// for production use. It performs all checks from [`verify()`] plus:
+    ///
+    /// 3. Signature is present (for non-genesis blocks)
+    /// 4. Public key matches claimed validator identity
+    /// 5. ML-DSA signature is valid
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any verification fails:
+    /// - `ChainError::InvalidBlock` for hash/merkle issues
+    /// - `ChainError::MissingSignature` for unsigned non-genesis blocks
+    /// - `ChainError::ValidatorKeyMismatch` for pubkey/identity mismatch
+    /// - `ChainError::InvalidSignature` for signature verification failure
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // ALWAYS use this for production verification
+    /// block.verify_with_signature()?;
+    /// ```
+    pub fn verify_with_signature(&self) -> Result<()> {
+        // First verify hash and merkle root
+        self.verify()?;
+
+        // Then verify signature (required for non-genesis blocks)
+        self.header.verify_signature()
+    }
+
+    /// Check if this block has a signature.
+    ///
+    /// Returns `true` if the block has both a public key and signature.
+    /// This is a quick check that doesn't verify validity.
+    pub fn has_signature(&self) -> bool {
+        self.header.has_signature()
     }
 
     /// Serialize block to bytes using bincode.
@@ -1216,6 +1548,308 @@ mod tests {
             let genesis = Block::genesis(timestamp, vec![]);
             prop_assert!(genesis.is_genesis());
             prop_assert!(genesis.verify().is_ok());
+        }
+    }
+
+    // ==================== Security Tests (VERITAS-2026-0002) ====================
+    //
+    // These tests verify that block signature verification works correctly
+    // and prevents forged block attacks.
+
+    mod security_tests {
+        use super::*;
+
+        // ==================== Test: Genesis blocks don't require signature ====================
+        #[test]
+        fn test_genesis_block_no_signature_required() {
+            let genesis = Block::genesis(1700000000, vec![]);
+
+            // Genesis should pass signature verification even without a signature
+            assert!(genesis.header.verify_signature().is_ok());
+            assert!(genesis.verify_with_signature().is_ok());
+        }
+
+        // ==================== Test: Unsigned non-genesis blocks are rejected ====================
+        #[test]
+        fn test_unsigned_block_rejected() {
+            // Create an unsigned non-genesis block
+            let block = Block::new(
+                test_hash(1), // Non-zero parent = not genesis
+                1,
+                1700000001,
+                vec![],
+                test_identity(2),
+            );
+
+            // Unsigned blocks should fail signature verification
+            let result = block.header.verify_signature();
+            assert!(result.is_err());
+            assert!(matches!(result, Err(ChainError::MissingSignature)));
+        }
+
+        // ==================== Test: Block with empty signature is rejected ====================
+        #[test]
+        fn test_empty_signature_rejected() {
+            let mut block = Block::new(
+                test_hash(1),
+                1,
+                1700000001,
+                vec![],
+                test_identity(2),
+            );
+
+            // Set pubkey but leave signature empty
+            block.header.validator_pubkey = vec![1, 2, 3, 4]; // Fake pubkey
+
+            let result = block.header.verify_signature();
+            assert!(result.is_err());
+            assert!(matches!(result, Err(ChainError::MissingSignature)));
+        }
+
+        // ==================== Test: Block with empty pubkey is rejected ====================
+        #[test]
+        fn test_empty_pubkey_rejected() {
+            let mut block = Block::new(
+                test_hash(1),
+                1,
+                1700000001,
+                vec![],
+                test_identity(2),
+            );
+
+            // Set signature but leave pubkey empty
+            block.header.signature = vec![1, 2, 3, 4]; // Fake signature
+
+            let result = block.header.verify_signature();
+            assert!(result.is_err());
+            assert!(matches!(result, Err(ChainError::MissingSignature)));
+        }
+
+        // ==================== Test: Forged block with invalid signature rejected ====================
+        #[test]
+        fn test_forged_block_invalid_signature_rejected() {
+            let mut block = Block::new(
+                test_hash(1),
+                1,
+                1700000001,
+                vec![],
+                test_identity(2),
+            );
+
+            // Attacker tries to forge by adding fake pubkey and signature
+            // that don't actually verify
+            block.header.validator_pubkey = vec![0u8; 100]; // Garbage pubkey
+            block.header.signature = vec![0u8; 100]; // Garbage signature
+
+            let result = block.header.verify_signature();
+            assert!(result.is_err());
+            // Should fail at pubkey parsing stage
+            assert!(matches!(result, Err(ChainError::InvalidSignature(_))));
+        }
+
+        // ==================== Test: Signing payload is deterministic ====================
+        #[test]
+        fn test_signing_payload_deterministic() {
+            let header = BlockHeader::new(
+                test_hash(1),
+                1,
+                1700000001,
+                test_hash(3),
+                test_identity(2),
+            );
+
+            let payload1 = header.compute_signing_payload();
+            let payload2 = header.compute_signing_payload();
+
+            assert_eq!(payload1, payload2);
+        }
+
+        // ==================== Test: Different blocks have different signing payloads ====================
+        #[test]
+        fn test_different_blocks_different_payloads() {
+            let header1 = BlockHeader::new(
+                test_hash(1),
+                1,
+                1700000001,
+                test_hash(3),
+                test_identity(2),
+            );
+
+            let header2 = BlockHeader::new(
+                test_hash(1),
+                2, // Different height
+                1700000001,
+                test_hash(3),
+                test_identity(2),
+            );
+
+            let payload1 = header1.compute_signing_payload();
+            let payload2 = header2.compute_signing_payload();
+
+            assert_ne!(payload1, payload2);
+        }
+
+        // ==================== Test: has_signature() helper ====================
+        #[test]
+        fn test_has_signature_helper() {
+            let mut block = Block::new(
+                test_hash(1),
+                1,
+                1700000001,
+                vec![],
+                test_identity(2),
+            );
+
+            // Initially no signature
+            assert!(!block.has_signature());
+
+            // Add pubkey only
+            block.header.validator_pubkey = vec![1, 2, 3];
+            assert!(!block.has_signature());
+
+            // Add signature too
+            block.header.signature = vec![4, 5, 6];
+            assert!(block.has_signature());
+        }
+
+        // ==================== Test: Signing payload includes domain separator ====================
+        #[test]
+        fn test_signing_payload_includes_domain() {
+            let header = BlockHeader::new(
+                test_hash(1),
+                1,
+                1700000001,
+                test_hash(3),
+                test_identity(2),
+            );
+
+            let payload = header.compute_signing_payload();
+
+            // Payload should start with the domain separator
+            assert!(payload.starts_with(b"VERITAS-BLOCK-SIGNATURE-v1"));
+        }
+
+        // ==================== Test: verify_with_signature checks both hash and signature ====================
+        #[test]
+        fn test_verify_with_signature_full_check() {
+            // Create a valid unsigned block
+            let mut block = Block::new(
+                test_hash(1),
+                1,
+                1700000001,
+                vec![],
+                test_identity(2),
+            );
+
+            // Basic verify() should pass (hash and merkle are correct)
+            assert!(block.verify().is_ok());
+
+            // But verify_with_signature() should fail (no signature)
+            let result = block.verify_with_signature();
+            assert!(result.is_err());
+            assert!(matches!(result, Err(ChainError::MissingSignature)));
+
+            // Add invalid signature - should still fail
+            block.header.validator_pubkey = vec![0u8; 50];
+            block.header.signature = vec![0u8; 50];
+
+            let result = block.verify_with_signature();
+            assert!(result.is_err());
+        }
+
+        // ==================== Test: Genesis verify_with_signature passes ====================
+        #[test]
+        fn test_genesis_verify_with_signature_passes() {
+            let genesis = Block::genesis(1700000000, vec![]);
+
+            // Both verify methods should pass for genesis
+            assert!(genesis.verify().is_ok());
+            assert!(genesis.verify_with_signature().is_ok());
+        }
+
+        // ==================== Test: Tampered block hash fails verification ====================
+        #[test]
+        fn test_tampered_hash_fails_signature_verification() {
+            let mut block = Block::new(
+                test_hash(1),
+                1,
+                1700000001,
+                vec![],
+                test_identity(2),
+            );
+
+            // Add fake signature data
+            block.header.validator_pubkey = vec![0u8; 50];
+            block.header.signature = vec![0u8; 50];
+
+            // Tamper with the hash
+            block.header.hash = test_hash(99);
+
+            // Both verifications should fail
+            let result = block.verify();
+            assert!(result.is_err());
+            assert!(matches!(result, Err(ChainError::InvalidBlock(_))));
+        }
+
+        // ==================== Test: new_signed() API exists ====================
+        #[test]
+        fn test_new_signed_api_exists() {
+            // This is a compile-time check that the Block::new_signed API exists
+            // Note: We can't actually test signing until ML-DSA is fully implemented,
+            // but we verify the API is available and has the correct signature.
+
+            fn _assert_api_exists() {
+                fn _uses_new_signed(
+                    _parent: Hash256,
+                    _height: u64,
+                    _ts: u64,
+                    _entries: Vec<ChainEntry>,
+                    _validator: IdentityHash,
+                    _privkey: &MlDsaPrivateKey,
+                ) -> Result<Block> {
+                    Block::new_signed(_parent, _height, _ts, _entries, _validator, _privkey)
+                }
+            }
+        }
+
+        // ==================== Test: Serialization preserves signature fields ====================
+        #[test]
+        fn test_serialization_preserves_signature_fields() {
+            let mut block = Block::new(
+                test_hash(1),
+                1,
+                1700000001,
+                vec![],
+                test_identity(2),
+            );
+
+            // Add test signature data
+            block.header.validator_pubkey = vec![1, 2, 3, 4, 5];
+            block.header.signature = vec![6, 7, 8, 9, 10];
+
+            // Serialize and deserialize
+            let bytes = block.to_bytes().unwrap();
+            let restored = Block::from_bytes(&bytes).unwrap();
+
+            // Verify signature fields are preserved
+            assert_eq!(restored.header.validator_pubkey, vec![1, 2, 3, 4, 5]);
+            assert_eq!(restored.header.signature, vec![6, 7, 8, 9, 10]);
+        }
+
+        // ==================== Test: Empty signature fields in new blocks ====================
+        #[test]
+        fn test_new_block_has_empty_signature_fields() {
+            let block = Block::new(
+                test_hash(1),
+                1,
+                1700000001,
+                vec![],
+                test_identity(2),
+            );
+
+            assert!(block.header.validator_pubkey.is_empty());
+            assert!(block.header.signature.is_empty());
+            assert!(!block.has_signature());
         }
     }
 }

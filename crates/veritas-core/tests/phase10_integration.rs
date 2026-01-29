@@ -897,18 +897,19 @@ mod gossip {
 mod offline {
     use super::*;
 
-    /// Create a test message queue backed by a temp directory.
-    fn create_test_queue() -> (tempfile::TempDir, MessageQueue) {
+    /// Create a test message queue backed by a temp directory with encryption.
+    fn create_test_queue() -> (tempfile::TempDir, veritas_store::EncryptedDb, MessageQueue) {
+        use veritas_store::EncryptedDb;
         let dir = tempfile::TempDir::new().expect("Failed to create temp dir");
-        let db = sled::open(dir.path()).expect("Failed to open test db");
+        let db = EncryptedDb::open(dir.path(), b"test-password").expect("Failed to open test db");
         let queue = MessageQueue::new(&db).expect("Failed to create queue");
-        (dir, queue)
+        (dir, db, queue)
     }
 
     /// Test message queuing when offline.
     #[test]
     fn test_message_queuing() {
-        let (_dir, queue) = create_test_queue();
+        let (_dir, _db, queue) = create_test_queue();
 
         let recipient = [1u8; 32];
         let payload = b"encrypted-message".to_vec();
@@ -927,7 +928,7 @@ mod offline {
     /// Test pending message retrieval.
     #[test]
     fn test_get_pending_messages() {
-        let (_dir, queue) = create_test_queue();
+        let (_dir, _db, queue) = create_test_queue();
 
         let recipient = [1u8; 32];
 
@@ -943,7 +944,7 @@ mod offline {
     /// Test status transitions.
     #[test]
     fn test_status_transitions() {
-        let (_dir, queue) = create_test_queue();
+        let (_dir, _db, queue) = create_test_queue();
 
         let recipient = [1u8; 32];
         let id = queue.queue_outgoing(&recipient, b"msg".to_vec()).unwrap();
@@ -963,7 +964,7 @@ mod offline {
     /// Test retry scheduling with exponential backoff.
     #[test]
     fn test_retry_scheduling() {
-        let (_dir, queue) = create_test_queue();
+        let (_dir, _db, queue) = create_test_queue();
 
         let recipient = [1u8; 32];
         let id = queue.queue_outgoing(&recipient, b"retry-me".to_vec()).unwrap();
@@ -993,7 +994,7 @@ mod offline {
     /// Test inbox message storage.
     #[test]
     fn test_inbox_storage() {
-        let (_dir, queue) = create_test_queue();
+        let (_dir, _db, queue) = create_test_queue();
 
         let payload = b"incoming-message".to_vec();
         let id = queue.store_incoming(payload.clone()).unwrap();
@@ -1007,7 +1008,7 @@ mod offline {
     /// Test unread message retrieval.
     #[test]
     fn test_unread_messages() {
-        let (_dir, queue) = create_test_queue();
+        let (_dir, _db, queue) = create_test_queue();
 
         let id1 = queue.store_incoming(b"msg1".to_vec()).unwrap();
         let id2 = queue.store_incoming(b"msg2".to_vec()).unwrap();
@@ -1028,7 +1029,7 @@ mod offline {
     /// Test inbox statistics.
     #[test]
     fn test_inbox_stats() {
-        let (_dir, queue) = create_test_queue();
+        let (_dir, _db, queue) = create_test_queue();
 
         let id1 = queue.store_incoming(b"msg1".to_vec()).unwrap();
         let _id2 = queue.store_incoming(b"msg2".to_vec()).unwrap();
@@ -1045,7 +1046,7 @@ mod offline {
     /// Test outbox statistics.
     #[test]
     fn test_outbox_stats() {
-        let (_dir, queue) = create_test_queue();
+        let (_dir, _db, queue) = create_test_queue();
 
         let recipient = [1u8; 32];
 
@@ -1067,7 +1068,7 @@ mod offline {
     /// Test message deletion.
     #[test]
     fn test_message_deletion() {
-        let (_dir, queue) = create_test_queue();
+        let (_dir, _db, queue) = create_test_queue();
 
         let id = queue.store_incoming(b"delete-me".to_vec()).unwrap();
 
@@ -1087,7 +1088,7 @@ mod offline {
     /// Test pagination.
     #[test]
     fn test_inbox_pagination() {
-        let (_dir, queue) = create_test_queue();
+        let (_dir, _db, queue) = create_test_queue();
 
         // Store 5 messages
         for i in 0..5 {

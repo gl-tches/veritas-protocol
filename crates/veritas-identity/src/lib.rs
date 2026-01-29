@@ -81,6 +81,7 @@
 #![warn(missing_docs)]
 
 pub mod error;
+pub mod hardware;
 pub mod identity_hash;
 pub mod keypair;
 pub mod lifecycle;
@@ -90,6 +91,9 @@ mod proptests;
 pub mod username;
 
 pub use error::{IdentityError, Result};
+pub use hardware::{
+    AttestationPlatform, HardwareAttestation, HardwareFingerprint, ATTESTATION_MAX_AGE_SECS,
+};
 pub use identity_hash::IdentityHash;
 pub use keypair::{EncryptedIdentityKeyPair, IdentityKeyPair, IdentityPublicKeys};
 pub use lifecycle::{

@@ -24,5 +24,11 @@ chrono.workspace = true
 rand.workspace = true
 getrandom.workspace = true
 
+# Cryptographic operations (VERITAS-2026-0010)
+veritas-crypto = { path = "../veritas-crypto" }
+
+# Hex encoding for error messages
+hex.workspace = true
+
 [dev-dependencies]
 proptest.workspace = true

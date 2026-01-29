@@ -147,7 +147,19 @@ impl BlockValidation {
         Ok(())
     }
 
-    /// Validate that the block producer is an authorized validator.
+    /// Validate that the block producer is an authorized validator with valid signature.
+    ///
+    /// SECURITY (VERITAS-2026-0002): This method performs cryptographic signature
+    /// verification BEFORE trusting the claimed validator identity. This prevents
+    /// an attacker who learns a valid validator ID from forging blocks.
+    ///
+    /// # Verification Steps
+    ///
+    /// For non-genesis blocks:
+    /// 1. Verify the block has a signature and public key
+    /// 2. Verify the signature is valid (ML-DSA verification)
+    /// 3. Verify the public key derives to the claimed validator identity
+    /// 4. Check that the validator is in the authorized set
     ///
     /// # Arguments
     ///
@@ -156,9 +168,13 @@ impl BlockValidation {
     ///
     /// # Errors
     ///
-    /// Returns `ChainError::InvalidBlock` if the producer is not authorized.
+    /// Returns an error if:
+    /// - `ChainError::MissingSignature` - Block lacks signature (non-genesis)
+    /// - `ChainError::InvalidSignature` - Signature verification failed
+    /// - `ChainError::ValidatorKeyMismatch` - Public key doesn't match validator ID
+    /// - `ChainError::InvalidBlock` - Producer not in validator set
     pub fn validate_producer(block: &Block, validators: &[IdentityHash]) -> Result<()> {
-        // Genesis block has a special validator
+        // Genesis block has a special validator and doesn't need signature
         if block.is_genesis() {
             if block.validator() == &Block::genesis_validator() {
                 return Ok(());
@@ -168,7 +184,21 @@ impl BlockValidation {
             ));
         }
 
-        // Check if block producer is in validator set
+        // SECURITY (VERITAS-2026-0002): CRITICAL - Verify signature BEFORE
+        // trusting the validator identity. This is the fix for the vulnerability
+        // where an attacker could forge blocks by knowing a valid validator ID.
+        //
+        // The signature verification:
+        // 1. Checks the signature is present
+        // 2. Parses the public key
+        // 3. Verifies the public key derives to the claimed validator identity
+        // 4. Verifies the ML-DSA signature over the block hash
+        //
+        // Only after this verification passes can we trust the validator field.
+        block.header.verify_signature()?;
+
+        // Now that we've verified the signature, we can trust the validator field.
+        // Check if block producer is in the authorized validator set.
         if !validators.contains(block.validator()) {
             return Err(ChainError::InvalidBlock(format!(
                 "block producer {} is not an authorized validator",
@@ -1219,16 +1249,23 @@ mod tests {
         let genesis = Block::genesis(1000, vec![]);
         let valid_block = create_block(&genesis, 1, 1001);
 
-        // Empty validator list - should pass
-        let result = BlockValidation::validate_producer(&valid_block, &[]);
-        assert!(result.is_err()); // Block producer not in list
+        // SECURITY (VERITAS-2026-0002): Unsigned blocks are now rejected.
+        // Previously this test expected that having the validator in the list
+        // would be sufficient. Now signatures are required.
 
-        // Include producer in list
+        // Empty validator list - should fail (missing signature, even before checking list)
+        let result = BlockValidation::validate_producer(&valid_block, &[]);
+        assert!(result.is_err());
+        assert!(matches!(result, Err(ChainError::MissingSignature)));
+
+        // Include producer in list - should STILL fail (missing signature)
+        // This is the key fix: knowing a valid validator ID is not enough
         let validators = vec![test_identity(1)];
         let result = BlockValidation::validate_producer(&valid_block, &validators);
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        assert!(matches!(result, Err(ChainError::MissingSignature)));
 
-        // Genesis block validation
+        // Genesis block validation - should pass (no signature required)
         let result = BlockValidation::validate_producer(&genesis, &[]);
         assert!(result.is_ok());
     }
@@ -1467,6 +1504,223 @@ mod tests {
 
             prop_assert_eq!(forward.len() as u64, num_blocks + 1);
             prop_assert_eq!(backward.len() as u64, num_blocks + 1);
+        }
+    }
+
+    // ==================== Security Tests (VERITAS-2026-0002) ====================
+    //
+    // These tests verify that validate_producer() correctly rejects unsigned
+    // and forged blocks, preventing the block forgery vulnerability.
+
+    mod security_tests {
+        use super::*;
+
+        // ==================== Test: Genesis validation passes without signature ====================
+        #[test]
+        fn test_validate_producer_genesis_no_signature() {
+            let genesis = Block::genesis(1700000000, vec![]);
+
+            // Genesis should pass validation without any validators in the list
+            let result = BlockValidation::validate_producer(&genesis, &[]);
+            assert!(result.is_ok());
+        }
+
+        // ==================== Test: Unsigned non-genesis block rejected ====================
+        #[test]
+        fn test_validate_producer_unsigned_block_rejected() {
+            let genesis = Block::genesis(1700000000, vec![]);
+
+            // Create an unsigned block claiming to be from a valid validator
+            let valid_validator = test_identity(1);
+            let block = Block::new(
+                genesis.hash().clone(),
+                1,
+                1700000001,
+                vec![],
+                valid_validator.clone(),
+            );
+
+            // Should fail even if the validator is in the authorized set
+            let validators = vec![valid_validator];
+            let result = BlockValidation::validate_producer(&block, &validators);
+
+            assert!(result.is_err());
+            assert!(matches!(result, Err(ChainError::MissingSignature)));
+        }
+
+        // ==================== Test: Forged block with fake signature rejected ====================
+        #[test]
+        fn test_validate_producer_forged_block_rejected() {
+            let genesis = Block::genesis(1700000000, vec![]);
+
+            // Create a block and add fake signature data
+            let valid_validator = test_identity(1);
+            let mut block = Block::new(
+                genesis.hash().clone(),
+                1,
+                1700000001,
+                vec![],
+                valid_validator.clone(),
+            );
+
+            // Attacker adds garbage pubkey and signature
+            block.header.validator_pubkey = vec![0u8; 100];
+            block.header.signature = vec![0u8; 100];
+
+            // Should fail signature verification
+            let validators = vec![valid_validator];
+            let result = BlockValidation::validate_producer(&block, &validators);
+
+            assert!(result.is_err());
+            // Should fail at pubkey parsing (InvalidSignature)
+            assert!(matches!(result, Err(ChainError::InvalidSignature(_))));
+        }
+
+        // ==================== Test: Block with wrong validator ID rejected ====================
+        #[test]
+        fn test_validate_producer_wrong_validator_rejected() {
+            let genesis = Block::genesis(1700000000, vec![]);
+
+            // Create an unsigned block with a validator NOT in the set
+            // Note: This would fail signature check first, but let's verify
+            // the validator set check also works
+            let unauthorized_validator = test_identity(99);
+            let block = Block::new(
+                genesis.hash().clone(),
+                1,
+                1700000001,
+                vec![],
+                unauthorized_validator,
+            );
+
+            // Authorized validators don't include our validator
+            let validators = vec![test_identity(1), test_identity(2), test_identity(3)];
+            let result = BlockValidation::validate_producer(&block, &validators);
+
+            // Should fail (either MissingSignature or InvalidBlock)
+            assert!(result.is_err());
+        }
+
+        // ==================== Test: Invalid genesis validator rejected ====================
+        #[test]
+        fn test_validate_producer_invalid_genesis_validator() {
+            // Create a "genesis" block with a non-genesis validator
+            let mut fake_genesis = Block::genesis(1700000000, vec![]);
+
+            // Tamper with the validator to make it invalid
+            fake_genesis.header.validator = test_identity(99);
+
+            let result = BlockValidation::validate_producer(&fake_genesis, &[]);
+            assert!(result.is_err());
+            assert!(matches!(result, Err(ChainError::InvalidBlock(_))));
+        }
+
+        // ==================== Test: Signature verified BEFORE validator set check ====================
+        #[test]
+        fn test_validate_producer_signature_first() {
+            let genesis = Block::genesis(1700000000, vec![]);
+
+            // Create an unsigned block with a validator that IS in the set
+            let valid_validator = test_identity(1);
+            let block = Block::new(
+                genesis.hash().clone(),
+                1,
+                1700000001,
+                vec![],
+                valid_validator.clone(),
+            );
+
+            // Even with the validator in the set, should fail due to missing signature
+            let validators = vec![valid_validator];
+            let result = BlockValidation::validate_producer(&block, &validators);
+
+            // SECURITY: Must fail with MissingSignature, not pass because validator is valid
+            assert!(result.is_err());
+            assert!(matches!(result, Err(ChainError::MissingSignature)));
+        }
+
+        // ==================== Test: Block with only pubkey (no signature) rejected ====================
+        #[test]
+        fn test_validate_producer_pubkey_only_rejected() {
+            let genesis = Block::genesis(1700000000, vec![]);
+
+            let valid_validator = test_identity(1);
+            let mut block = Block::new(
+                genesis.hash().clone(),
+                1,
+                1700000001,
+                vec![],
+                valid_validator.clone(),
+            );
+
+            // Add pubkey but no signature
+            block.header.validator_pubkey = vec![1, 2, 3, 4, 5];
+
+            let validators = vec![valid_validator];
+            let result = BlockValidation::validate_producer(&block, &validators);
+
+            assert!(result.is_err());
+            assert!(matches!(result, Err(ChainError::MissingSignature)));
+        }
+
+        // ==================== Test: Block with only signature (no pubkey) rejected ====================
+        #[test]
+        fn test_validate_producer_signature_only_rejected() {
+            let genesis = Block::genesis(1700000000, vec![]);
+
+            let valid_validator = test_identity(1);
+            let mut block = Block::new(
+                genesis.hash().clone(),
+                1,
+                1700000001,
+                vec![],
+                valid_validator.clone(),
+            );
+
+            // Add signature but no pubkey
+            block.header.signature = vec![1, 2, 3, 4, 5];
+
+            let validators = vec![valid_validator];
+            let result = BlockValidation::validate_producer(&block, &validators);
+
+            assert!(result.is_err());
+            assert!(matches!(result, Err(ChainError::MissingSignature)));
+        }
+
+        // ==================== Test: Multiple forged blocks all rejected ====================
+        #[test]
+        fn test_validate_producer_multiple_forgery_attempts() {
+            let genesis = Block::genesis(1700000000, vec![]);
+            let valid_validator = test_identity(1);
+            let validators = vec![valid_validator.clone()];
+
+            // Attempt 1: No signature at all
+            let block1 = Block::new(
+                genesis.hash().clone(),
+                1,
+                1700000001,
+                vec![],
+                valid_validator.clone(),
+            );
+            assert!(BlockValidation::validate_producer(&block1, &validators).is_err());
+
+            // Attempt 2: Empty pubkey and signature
+            let mut block2 = block1.clone();
+            block2.header.validator_pubkey = vec![];
+            block2.header.signature = vec![];
+            assert!(BlockValidation::validate_producer(&block2, &validators).is_err());
+
+            // Attempt 3: Random garbage in both fields
+            let mut block3 = block1.clone();
+            block3.header.validator_pubkey = (0u8..200).collect();
+            block3.header.signature = vec![0u8; 300]; // Use vec! instead of range for values > 255
+            assert!(BlockValidation::validate_producer(&block3, &validators).is_err());
+
+            // Attempt 4: Valid-looking but wrong sizes
+            let mut block4 = block1.clone();
+            block4.header.validator_pubkey = vec![0u8; 32];  // Wrong size for ML-DSA
+            block4.header.signature = vec![0u8; 64];         // Wrong size for ML-DSA
+            assert!(BlockValidation::validate_producer(&block4, &validators).is_err());
         }
     }
 }

@@ -249,11 +249,28 @@ impl MinimalEnvelope {
 
     /// Deserialize an envelope from bytes.
     ///
+    /// # Security
+    ///
+    /// This function checks the input size BEFORE deserialization to prevent
+    /// OOM attacks from malicious size fields (VERITAS-2026-0003).
+    ///
     /// # Errors
     ///
-    /// Returns `ProtocolError::Serialization` if deserialization fails,
-    /// or `ProtocolError::InvalidEnvelope` if validation fails.
+    /// Returns `ProtocolError::InvalidEnvelope` if:
+    /// - Input exceeds `MAX_ENVELOPE_SIZE` (DoS prevention)
+    /// - Deserialization fails
+    /// - Validation fails
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ProtocolError> {
+        // SECURITY: Check size BEFORE deserialization to prevent OOM attacks
+        // from malicious size fields in the serialized data (VERITAS-2026-0003)
+        if bytes.len() > crate::limits::MAX_ENVELOPE_SIZE {
+            return Err(ProtocolError::InvalidEnvelope(format!(
+                "envelope too large: {} bytes exceeds maximum {} bytes",
+                bytes.len(),
+                crate::limits::MAX_ENVELOPE_SIZE
+            )));
+        }
+
         let envelope: Self =
             bincode::deserialize(bytes).map_err(|e| ProtocolError::Serialization(e.to_string()))?;
 
@@ -585,6 +602,64 @@ mod tests {
         // Random garbage
         let result = MinimalEnvelope::from_bytes(&[0xFFu8; 100]);
         assert!(result.is_err());
+    }
+
+    // === Security Tests for VERITAS-2026-0003 ===
+
+    #[test]
+    fn test_oversized_envelope_rejected() {
+        // SECURITY: Verify that oversized envelopes are rejected BEFORE deserialization
+        // This prevents OOM attacks from malicious size fields (VERITAS-2026-0003)
+        let oversized = vec![0u8; crate::limits::MAX_ENVELOPE_SIZE + 1];
+        let result = MinimalEnvelope::from_bytes(&oversized);
+
+        assert!(matches!(
+            result,
+            Err(ProtocolError::InvalidEnvelope(msg)) if msg.contains("too large")
+        ));
+    }
+
+    #[test]
+    fn test_exactly_max_size_envelope_allowed_to_deserialize() {
+        // An envelope at exactly MAX_ENVELOPE_SIZE should be allowed to attempt deserialization
+        // (it will fail deserialization due to invalid content, but not due to size check)
+        let at_limit = vec![0u8; crate::limits::MAX_ENVELOPE_SIZE];
+        let result = MinimalEnvelope::from_bytes(&at_limit);
+
+        // Should fail, but NOT because it's "too large" - the size check should pass
+        match result {
+            Err(ProtocolError::InvalidEnvelope(msg)) => {
+                // Should NOT be the "too large" error
+                assert!(!msg.contains("too large"), "Size check should pass for data at exactly MAX_ENVELOPE_SIZE");
+            }
+            Err(_) => {
+                // Any other error is fine (serialization, validation, etc.)
+            }
+            Ok(_) => {
+                // Unlikely to succeed with zero bytes, but if it does, that's fine
+            }
+        }
+    }
+
+    #[test]
+    fn test_valid_envelope_within_size_limit() {
+        // Verify that valid envelopes within the size limit work correctly
+        let ephemeral = X25519EphemeralKeyPair::generate();
+        let envelope = MinimalEnvelope::new(
+            test_mailbox_key(),
+            ephemeral.public_key().clone(),
+            test_nonce(),
+            test_ciphertext(),
+        );
+
+        let bytes = envelope.to_bytes().unwrap();
+
+        // Ensure our test envelope is within limits
+        assert!(bytes.len() <= crate::limits::MAX_ENVELOPE_SIZE);
+
+        // Should deserialize successfully
+        let restored = MinimalEnvelope::from_bytes(&bytes).unwrap();
+        assert_eq!(envelope, restored);
     }
 }
 
