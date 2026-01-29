@@ -22,7 +22,7 @@ version = "0.1.0-alpha.1"
 edition = "2021"
 rust-version = "1.75"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/veritas-protocol/veritas"
+repository = "https://github.com/gl-tches/veritas-protocol"
 keywords = ["cryptography", "messaging", "post-quantum", "blockchain", "p2p"]
 categories = ["cryptography", "network-programming"]
 

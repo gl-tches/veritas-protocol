@@ -140,5 +140,5 @@ LABEL org.opencontainers.image.title="VERITAS Node" \
       org.opencontainers.image.description="Post-quantum secure decentralized messaging node" \
       org.opencontainers.image.vendor="VERITAS Protocol" \
       org.opencontainers.image.licenses="MIT OR Apache-2.0" \
-      org.opencontainers.image.source="https://github.com/veritas-protocol/veritas" \
-      org.opencontainers.image.documentation="https://github.com/veritas-protocol/veritas/blob/main/docs/DOCKER.md"
+      org.opencontainers.image.source="https://github.com/gl-tches/veritas-protocol" \
+      org.opencontainers.image.documentation="https://github.com/gl-tches/veritas-protocol/blob/main/docs/DOCKER.md"
