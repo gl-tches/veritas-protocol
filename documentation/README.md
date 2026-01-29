@@ -49,6 +49,6 @@
 
 ## Getting Help
 
-- **Issues**: [GitHub Issues](https://github.com/veritas-protocol/veritas/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/veritas-protocol/veritas/discussions)
+- **Issues**: [GitHub Issues](https://github.com/gl-tches/veritas-protocol/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/gl-tches/veritas-protocol/discussions)
 - **Security**: See [SECURITY.md](../docs/SECURITY.md)

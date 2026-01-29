@@ -287,7 +287,7 @@ docker run -d \
     -v veritas-data:/var/lib/veritas \
     -e VERITAS_LOG_LEVEL=info \
     -e VERITAS_BOOTSTRAP_NODES="..." \
-    ghcr.io/veritas-protocol/veritas-node:latest
+    ghcr.io/gl-tches/veritas-protocol:latest
 ```
 
 ### Systemd

@@ -134,8 +134,8 @@ winget install Microsoft.VisualStudio.2022.BuildTools
 ### Step 2: Clone the Repository
 
 ```bash
-git clone https://github.com/veritas-protocol/veritas.git
-cd veritas
+git clone https://github.com/gl-tches/veritas-protocol.git
+cd veritas-protocol
 ```
 
 ### Step 3: Build
@@ -185,7 +185,7 @@ cargo build --release -p veritas-core -p veritas-node
 
 ```bash
 # Pull the latest image
-docker pull ghcr.io/veritas-protocol/veritas-node:latest
+docker pull ghcr.io/gl-tches/veritas-protocol:latest
 
 # Run the node
 docker run -d \
@@ -193,15 +193,15 @@ docker run -d \
     -p 9000:9000 \
     -p 8080:8080 \
     -v veritas-data:/var/lib/veritas \
-    ghcr.io/veritas-protocol/veritas-node:latest
+    ghcr.io/gl-tches/veritas-protocol:latest
 ```
 
 ### Building Docker Image Locally
 
 ```bash
 # Clone the repository
-git clone https://github.com/veritas-protocol/veritas.git
-cd veritas
+git clone https://github.com/gl-tches/veritas-protocol.git
+cd veritas-protocol
 
 # Build the image
 docker build -t veritas-node:local .
@@ -419,7 +419,7 @@ sudo systemctl restart veritas-node  # If using systemd
 ### Docker
 
 ```bash
-docker pull ghcr.io/veritas-protocol/veritas-node:latest
+docker pull ghcr.io/gl-tches/veritas-protocol:latest
 docker-compose down
 docker-compose up -d
 ```

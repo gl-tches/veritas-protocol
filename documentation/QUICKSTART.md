@@ -11,8 +11,8 @@ Get up and running with VERITAS in 5 minutes.
 
 ```bash
 # Clone the repository
-git clone https://github.com/veritas-protocol/veritas.git
-cd veritas
+git clone https://github.com/gl-tches/veritas-protocol.git
+cd veritas-protocol
 
 # Start a node with Docker Compose
 docker-compose up -d
@@ -28,8 +28,8 @@ curl http://localhost:8080/health
 
 ```bash
 # Clone the repository
-git clone https://github.com/veritas-protocol/veritas.git
-cd veritas
+git clone https://github.com/gl-tches/veritas-protocol.git
+cd veritas-protocol
 
 # Build in release mode
 cargo build --release

@@ -39,7 +39,7 @@ docker run -d \
     -e VERITAS_LOG_LEVEL=info \
     -e VERITAS_LOG_FORMAT=json \
     -e VERITAS_BOOTSTRAP_NODES="$BOOTSTRAP_NODES" \
-    ghcr.io/veritas-protocol/veritas-node:latest
+    ghcr.io/gl-tches/veritas-protocol:latest
 ```
 
 ### Docker Compose (Production)
@@ -51,7 +51,7 @@ version: "3.8"
 
 services:
   veritas-node:
-    image: ghcr.io/veritas-protocol/veritas-node:latest
+    image: ghcr.io/gl-tches/veritas-protocol:latest
     container_name: veritas-node
     restart: unless-stopped
     ports:
@@ -137,7 +137,7 @@ version: "3.8"
 
 services:
   node1:
-    image: ghcr.io/veritas-protocol/veritas-node:latest
+    image: ghcr.io/gl-tches/veritas-protocol:latest
     container_name: veritas-node-1
     restart: unless-stopped
     ports:
@@ -151,7 +151,7 @@ services:
       - veritas-net
 
   node2:
-    image: ghcr.io/veritas-protocol/veritas-node:latest
+    image: ghcr.io/gl-tches/veritas-protocol:latest
     container_name: veritas-node-2
     restart: unless-stopped
     ports:
@@ -165,7 +165,7 @@ services:
       - veritas-net
 
   node3:
-    image: ghcr.io/veritas-protocol/veritas-node:latest
+    image: ghcr.io/gl-tches/veritas-protocol:latest
     container_name: veritas-node-3
     restart: unless-stopped
     ports:
@@ -265,7 +265,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: veritas-node
-          image: ghcr.io/veritas-protocol/veritas-node:latest
+          image: ghcr.io/gl-tches/veritas-protocol:latest
           ports:
             - containerPort: 9000
               name: p2p
@@ -381,7 +381,7 @@ spec:
     spec:
       containers:
         - name: veritas-node
-          image: ghcr.io/veritas-protocol/veritas-node:latest
+          image: ghcr.io/gl-tches/veritas-protocol:latest
           env:
             - name: VERITAS_VALIDATOR_MODE
               value: "true"

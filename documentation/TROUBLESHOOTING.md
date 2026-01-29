@@ -533,7 +533,7 @@ veritas-node --log-level trace
 
 ### Reporting Issues
 
-Open an issue at: https://github.com/veritas-protocol/veritas/issues
+Open an issue at: https://github.com/gl-tches/veritas-protocol/issues
 
 Include:
 - Clear description of the problem
@@ -544,7 +544,7 @@ Include:
 
 ### Community Support
 
-- GitHub Discussions: https://github.com/veritas-protocol/veritas/discussions
+- GitHub Discussions: https://github.com/gl-tches/veritas-protocol/discussions
 - Discord: (if available)
 
 ## See Also

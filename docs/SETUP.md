@@ -102,8 +102,8 @@ pip install maturin
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/veritas-protocol/veritas.git
-cd veritas
+git clone https://github.com/gl-tches/veritas-protocol.git
+cd veritas-protocol
 ```
 
 ### Build All Crates
@@ -186,7 +186,7 @@ Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-veritas-core = { git = "https://github.com/veritas-protocol/veritas" }
+veritas-core = { git = "https://github.com/gl-tches/veritas-protocol" }
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -746,7 +746,7 @@ tracing_subscriber::fmt()
 
 ### Getting Help
 
-1. Check the [GitHub Issues](https://github.com/veritas-protocol/veritas/issues)
+1. Check the [GitHub Issues](https://github.com/gl-tches/veritas-protocol/issues)
 2. Search existing discussions
 3. Open a new issue with:
    - OS and version

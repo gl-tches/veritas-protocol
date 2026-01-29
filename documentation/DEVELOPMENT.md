@@ -38,8 +38,8 @@ pre-commit install
 ### Clone and Build
 
 ```bash
-git clone https://github.com/veritas-protocol/veritas.git
-cd veritas
+git clone https://github.com/gl-tches/veritas-protocol.git
+cd veritas-protocol
 
 # Build all crates
 cargo build
