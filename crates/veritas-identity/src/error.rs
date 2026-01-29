@@ -51,6 +51,24 @@ pub enum IdentityError {
         /// Attempted state.
         to: String,
     },
+
+    /// Hardware attestation verification failed.
+    #[error("Hardware attestation failed: {reason}")]
+    HardwareAttestationFailed {
+        /// Reason for failure.
+        reason: String,
+    },
+
+    /// No supported hardware available for attestation.
+    #[error("Hardware not available: {reason}")]
+    HardwareNotAvailable {
+        /// Reason hardware is unavailable.
+        reason: String,
+    },
+
+    /// Origin fingerprint requires hardware attestation.
+    #[error("Origin fingerprint requires hardware attestation in production")]
+    HardwareAttestationRequired,
 }
 
 /// Result type for identity operations.

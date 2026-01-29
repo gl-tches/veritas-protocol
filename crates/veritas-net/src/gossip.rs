@@ -19,7 +19,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use libp2p::gossipsub::{
     self, Behaviour as GossipsubBehaviour, ConfigBuilder as GossipsubConfigBuilder, IdentTopic,
@@ -28,13 +28,14 @@ use libp2p::gossipsub::{
 use libp2p::identity::Keypair;
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tokio::sync::{Mutex, RwLock};
+use tracing::{debug, info, warn};
 
 use veritas_crypto::Hash256;
 use veritas_protocol::{MailboxKey, PADDING_BUCKETS};
 
 use crate::error::{NetError, Result};
+use crate::rate_limiter::{RateLimitConfig, RateLimitResult, RateLimiter};
 
 // ============================================================================
 // Topic Constants
@@ -90,6 +91,10 @@ pub struct GossipConfig {
     /// Number of heartbeats to include in gossip.
     /// Default: 3.
     pub history_gossip: usize,
+
+    /// Rate limiting configuration for incoming announcements.
+    /// Addresses VERITAS-2026-0007.
+    pub rate_limit: RateLimitConfig,
 }
 
 impl Default for GossipConfig {
@@ -103,6 +108,7 @@ impl Default for GossipConfig {
             gossip_lazy: 6,
             history_length: 5,
             history_gossip: 3,
+            rate_limit: RateLimitConfig::default(),
         }
     }
 }
@@ -158,6 +164,17 @@ impl GossipConfig {
     /// Set the history gossip parameter.
     pub fn with_history_gossip(mut self, n: usize) -> Self {
         self.history_gossip = n;
+        self
+    }
+
+    /// Set the rate limiting configuration.
+    ///
+    /// # Security
+    ///
+    /// Rate limiting is essential to prevent VERITAS-2026-0007 (gossip flooding).
+    /// The default configuration provides reasonable protection.
+    pub fn with_rate_limit(mut self, config: RateLimitConfig) -> Self {
+        self.rate_limit = config;
         self
     }
 
@@ -401,10 +418,55 @@ impl GossipState {
     }
 }
 
+/// Simple rate limiter for local (outgoing) announcements.
+///
+/// Prevents this node from flooding the network with its own announcements.
+/// Uses a simple sliding window approach for simplicity.
+#[derive(Debug)]
+struct LocalRateLimiter {
+    /// Maximum announcements per second.
+    max_per_second: u32,
+
+    /// Timestamps of recent announcements.
+    recent_timestamps: Vec<Instant>,
+}
+
+impl LocalRateLimiter {
+    fn new(max_per_second: u32) -> Self {
+        Self {
+            max_per_second,
+            recent_timestamps: Vec::with_capacity(max_per_second as usize * 2),
+        }
+    }
+
+    /// Check if a local announcement is allowed.
+    fn check(&mut self) -> bool {
+        let now = Instant::now();
+        let one_second_ago = now - Duration::from_secs(1);
+
+        // Remove timestamps older than 1 second
+        self.recent_timestamps.retain(|t| *t > one_second_ago);
+
+        // Check if we're under the limit
+        if self.recent_timestamps.len() < self.max_per_second as usize {
+            self.recent_timestamps.push(now);
+            true
+        } else {
+            false
+        }
+    }
+}
+
 /// Manager for gossip protocol operations.
 ///
 /// Handles topic subscriptions, message publishing, and peer mesh tracking.
 /// Provides a high-level interface over libp2p's Gossipsub.
+///
+/// # Security
+///
+/// This manager includes rate limiting to prevent VERITAS-2026-0007 (gossip flooding).
+/// All incoming announcements should be processed through `handle_announcement()`
+/// which enforces per-peer and global rate limits.
 pub struct GossipManager {
     /// Configuration for the gossip protocol.
     config: GossipConfig,
@@ -418,6 +480,14 @@ pub struct GossipManager {
 
     /// Local peer ID.
     local_peer_id: Option<PeerId>,
+
+    /// Rate limiter for incoming announcements.
+    /// SECURITY: Addresses VERITAS-2026-0007 - gossip flooding prevention.
+    rate_limiter: Arc<Mutex<RateLimiter>>,
+
+    /// Local rate limiter for outgoing announcements (self rate limiting).
+    /// Prevents this node from accidentally flooding the network.
+    local_rate_limiter: Arc<Mutex<LocalRateLimiter>>,
 }
 
 impl GossipManager {
@@ -436,11 +506,16 @@ impl GossipManager {
     /// let manager = GossipManager::new(config);
     /// ```
     pub fn new(config: GossipConfig) -> Self {
+        let rate_limiter = RateLimiter::new(config.rate_limit.clone());
+        let local_rate_limiter = LocalRateLimiter::new(config.rate_limit.per_peer_rate);
+
         Self {
             config,
             behaviour: None,
             state: Arc::new(RwLock::new(GossipState::new())),
             local_peer_id: None,
+            rate_limiter: Arc::new(Mutex::new(rate_limiter)),
+            local_rate_limiter: Arc::new(Mutex::new(local_rate_limiter)),
         }
     }
 
@@ -587,6 +662,15 @@ impl GossipManager {
     ///
     /// `Ok(())` if the announcement was published successfully.
     ///
+    /// # Errors
+    ///
+    /// Returns `NetError::RateLimitExceeded` if the local rate limit is exceeded.
+    ///
+    /// # Security
+    ///
+    /// This method includes local rate limiting to prevent this node from
+    /// accidentally flooding the network. See VERITAS-2026-0007.
+    ///
     /// # Example
     ///
     /// ```ignore
@@ -607,6 +691,17 @@ impl GossipManager {
     /// manager.announce_message(announcement).await?;
     /// ```
     pub async fn announce_message(&self, announcement: MessageAnnouncement) -> Result<()> {
+        // SECURITY: Check local rate limit BEFORE publishing (VERITAS-2026-0007)
+        {
+            let mut local_limiter = self.local_rate_limiter.lock().await;
+            if !local_limiter.check() {
+                warn!("Local rate limit exceeded for message announcements");
+                return Err(NetError::RateLimitExceeded(
+                    "local announcement rate limit exceeded".to_string(),
+                ));
+            }
+        }
+
         let data = announcement.to_bytes()?;
         self.publish(TOPIC_MESSAGES, data).await?;
 
@@ -686,9 +781,10 @@ impl GossipManager {
         Ok(())
     }
 
-    /// Handle an incoming gossip message.
+    /// Handle an incoming gossip message (without rate limiting).
     ///
     /// Called by the swarm event handler when a gossip message is received.
+    /// **Note**: For rate-limited handling, use `handle_announcement()` instead.
     ///
     /// # Arguments
     ///
@@ -732,6 +828,140 @@ impl GossipManager {
             }
             _ => Err(NetError::Gossip(format!("unknown topic: {}", topic))),
         }
+    }
+
+    /// Handle an incoming announcement from a peer with rate limiting.
+    ///
+    /// This is the **primary entry point** for processing incoming gossip
+    /// announcements. It enforces rate limits BEFORE processing.
+    ///
+    /// # Security
+    ///
+    /// This method addresses VERITAS-2026-0007 (gossip flooding):
+    /// - Checks if peer is banned before processing
+    /// - Applies per-peer and global rate limits
+    /// - Records violations and bans repeat offenders
+    ///
+    /// # Arguments
+    ///
+    /// * `peer_id` - The peer that sent the announcement
+    /// * `message` - The received gossipsub message
+    ///
+    /// # Returns
+    ///
+    /// The parsed announcement if rate limits pass and parsing succeeds.
+    ///
+    /// # Errors
+    ///
+    /// - `NetError::PeerBanned` - The peer is banned
+    /// - `NetError::RateLimitExceeded` - Rate limit exceeded
+    /// - `NetError::Gossip` - Parsing or validation error
+    pub async fn handle_announcement(
+        &self,
+        peer_id: &PeerId,
+        message: &GossipsubMessage,
+    ) -> Result<GossipAnnouncement> {
+        // SECURITY: Check rate limit BEFORE any processing (VERITAS-2026-0007)
+        let rate_limit_result = {
+            let mut limiter = self.rate_limiter.lock().await;
+            limiter.check_detailed(peer_id)
+        };
+
+        match rate_limit_result {
+            RateLimitResult::Allowed => {
+                // Proceed with normal message handling
+                self.handle_message(message).await
+            }
+            RateLimitResult::Banned => {
+                warn!(
+                    peer = %peer_id,
+                    "Rejected announcement from banned peer"
+                );
+                Err(NetError::PeerBanned(peer_id.to_string()))
+            }
+            RateLimitResult::PeerLimitExceeded => {
+                // Record violation and potentially ban
+                let banned = {
+                    let mut limiter = self.rate_limiter.lock().await;
+                    limiter.record_violation(peer_id)
+                };
+
+                if banned {
+                    warn!(
+                        peer = %peer_id,
+                        "Peer banned for repeated rate limit violations"
+                    );
+                } else {
+                    debug!(
+                        peer = %peer_id,
+                        "Rate limit exceeded for peer"
+                    );
+                }
+
+                Err(NetError::RateLimitExceeded(format!(
+                    "per-peer rate limit exceeded for {}",
+                    peer_id
+                )))
+            }
+            RateLimitResult::GlobalLimitExceeded => {
+                debug!("Global rate limit exceeded");
+                Err(NetError::RateLimitExceeded(
+                    "global rate limit exceeded".to_string(),
+                ))
+            }
+        }
+    }
+
+    /// Check if a peer is currently banned.
+    ///
+    /// # Arguments
+    ///
+    /// * `peer_id` - The peer to check
+    ///
+    /// # Returns
+    ///
+    /// `true` if the peer is banned, `false` otherwise.
+    pub async fn is_peer_banned(&self, peer_id: &PeerId) -> bool {
+        let mut limiter = self.rate_limiter.lock().await;
+        limiter.is_banned(peer_id)
+    }
+
+    /// Manually ban a peer.
+    ///
+    /// # Arguments
+    ///
+    /// * `peer_id` - The peer to ban
+    pub async fn ban_peer(&self, peer_id: &PeerId) {
+        let mut limiter = self.rate_limiter.lock().await;
+        limiter.ban_peer(peer_id);
+        warn!(peer = %peer_id, "Peer manually banned");
+    }
+
+    /// Manually unban a peer.
+    ///
+    /// # Arguments
+    ///
+    /// * `peer_id` - The peer to unban
+    pub async fn unban_peer(&self, peer_id: &PeerId) {
+        let mut limiter = self.rate_limiter.lock().await;
+        limiter.unban_peer(peer_id);
+        info!(peer = %peer_id, "Peer manually unbanned");
+    }
+
+    /// Get the list of currently banned peers.
+    pub async fn banned_peers(&self) -> Vec<PeerId> {
+        let limiter = self.rate_limiter.lock().await;
+        limiter.banned_peers()
+    }
+
+    /// Get the violation count for a peer.
+    ///
+    /// # Arguments
+    ///
+    /// * `peer_id` - The peer to check
+    pub async fn peer_violation_count(&self, peer_id: &PeerId) -> u32 {
+        let limiter = self.rate_limiter.lock().await;
+        limiter.violation_count(peer_id)
     }
 
     /// Add a peer to the mesh for a topic.
@@ -839,4 +1069,311 @@ pub fn bucket_start_timestamp(bucket: u64) -> u64 {
 /// Get the end of a timestamp bucket (exclusive).
 pub fn bucket_end_timestamp(bucket: u64) -> u64 {
     (bucket + 1) * TIMESTAMP_BUCKET_SECS
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ========================================================================
+    // Rate Limiting Tests (VERITAS-2026-0007)
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_rate_limit_config_in_gossip_config() {
+        let rate_config = RateLimitConfig::default()
+            .with_per_peer_rate(5)
+            .with_global_rate(100);
+
+        let gossip_config = GossipConfig::default().with_rate_limit(rate_config);
+
+        assert_eq!(gossip_config.rate_limit.per_peer_rate, 5);
+        assert_eq!(gossip_config.rate_limit.global_rate, 100);
+    }
+
+    #[tokio::test]
+    async fn test_gossip_manager_has_rate_limiter() {
+        let manager = GossipManager::with_defaults();
+
+        // Verify rate limiter is initialized
+        let peer = PeerId::random();
+        assert!(!manager.is_peer_banned(&peer).await);
+        assert_eq!(manager.peer_violation_count(&peer).await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_manual_peer_ban_unban() {
+        let manager = GossipManager::with_defaults();
+        let peer = PeerId::random();
+
+        // Initially not banned
+        assert!(!manager.is_peer_banned(&peer).await);
+
+        // Ban the peer
+        manager.ban_peer(&peer).await;
+        assert!(manager.is_peer_banned(&peer).await);
+
+        // Verify in banned list
+        let banned = manager.banned_peers().await;
+        assert!(banned.contains(&peer));
+
+        // Unban the peer
+        manager.unban_peer(&peer).await;
+        assert!(!manager.is_peer_banned(&peer).await);
+    }
+
+    #[tokio::test]
+    async fn test_local_rate_limiter_basic() {
+        let mut limiter = LocalRateLimiter::new(3);
+
+        // Should allow first 3 requests
+        assert!(limiter.check());
+        assert!(limiter.check());
+        assert!(limiter.check());
+
+        // 4th should fail
+        assert!(!limiter.check());
+    }
+
+    #[tokio::test]
+    async fn test_local_rate_limiter_recovery() {
+        use std::time::Duration;
+        use tokio::time::sleep;
+
+        let mut limiter = LocalRateLimiter::new(10);
+
+        // Exhaust the limit
+        for _ in 0..10 {
+            assert!(limiter.check());
+        }
+        assert!(!limiter.check());
+
+        // Wait for tokens to recover
+        sleep(Duration::from_millis(1100)).await;
+
+        // Should allow requests again
+        assert!(limiter.check());
+    }
+
+    // ========================================================================
+    // Announcement Tests
+    // ========================================================================
+
+    #[test]
+    fn test_message_announcement_creation() {
+        let mailbox_key = MailboxKey::from_bytes([1u8; 32]);
+        let message_hash = Hash256::hash(b"test message");
+
+        let announcement =
+            MessageAnnouncement::new(mailbox_key.clone(), message_hash.clone(), 1704067200, 256)
+                .unwrap();
+
+        assert_eq!(announcement.mailbox_key, mailbox_key);
+        assert_eq!(announcement.message_hash, message_hash);
+        assert_eq!(announcement.size_bucket, 256);
+        // 1704067200 / 3600 = 473352
+        assert_eq!(announcement.timestamp_bucket, 473352);
+    }
+
+    #[test]
+    fn test_message_announcement_invalid_size_bucket() {
+        let mailbox_key = MailboxKey::from_bytes([1u8; 32]);
+        let message_hash = Hash256::hash(b"test message");
+
+        // 100 is not a valid padding bucket (should be 256, 512, or 1024)
+        let result = MessageAnnouncement::new(mailbox_key, message_hash, 1704067200, 100);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_message_announcement_serialization_roundtrip() {
+        let mailbox_key = MailboxKey::from_bytes([2u8; 32]);
+        let message_hash = Hash256::hash(b"test");
+
+        let original = MessageAnnouncement::new(mailbox_key, message_hash, 1704067200, 512).unwrap();
+
+        let bytes = original.to_bytes().unwrap();
+        let deserialized = MessageAnnouncement::from_bytes(&bytes).unwrap();
+
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn test_block_announcement_creation() {
+        let block_hash = Hash256::hash(b"block data");
+        let announcement = BlockAnnouncement::new(block_hash.clone(), 42, 1704067200);
+
+        assert_eq!(announcement.block_hash, block_hash);
+        assert_eq!(announcement.height, 42);
+    }
+
+    #[test]
+    fn test_receipt_announcement_creation() {
+        let message_hash = Hash256::hash(b"message");
+        let receipt_hash = Hash256::hash(b"receipt");
+
+        let announcement =
+            ReceiptAnnouncement::new(message_hash.clone(), receipt_hash.clone(), 1704067200);
+
+        assert_eq!(announcement.message_hash, message_hash);
+        assert_eq!(announcement.receipt_hash, receipt_hash);
+    }
+
+    // ========================================================================
+    // Timestamp Bucket Tests
+    // ========================================================================
+
+    #[test]
+    fn test_timestamp_to_bucket() {
+        // 1704067200 = 2024-01-01 00:00:00 UTC
+        // 1704067200 / 3600 = 473352
+        assert_eq!(timestamp_to_bucket(1704067200), 473352);
+
+        // Same hour should be same bucket
+        assert_eq!(timestamp_to_bucket(1704067200 + 1800), 473352);
+
+        // Next hour should be next bucket
+        assert_eq!(timestamp_to_bucket(1704067200 + 3600), 473353);
+    }
+
+    #[test]
+    fn test_bucket_start_timestamp() {
+        let bucket = 473352_u64;
+        assert_eq!(bucket_start_timestamp(bucket), bucket * 3600);
+    }
+
+    #[test]
+    fn test_bucket_end_timestamp() {
+        let bucket = 473352_u64;
+        assert_eq!(bucket_end_timestamp(bucket), (bucket + 1) * 3600);
+    }
+
+    // ========================================================================
+    // Size Bucket Validation Tests
+    // ========================================================================
+
+    #[test]
+    fn test_validate_size_bucket_valid() {
+        assert!(validate_size_bucket(256).is_ok());
+        assert!(validate_size_bucket(512).is_ok());
+        assert!(validate_size_bucket(1024).is_ok());
+    }
+
+    #[test]
+    fn test_validate_size_bucket_invalid() {
+        assert!(validate_size_bucket(0).is_err());
+        assert!(validate_size_bucket(100).is_err());
+        assert!(validate_size_bucket(300).is_err());
+        assert!(validate_size_bucket(2048).is_err());
+    }
+
+    // ========================================================================
+    // GossipConfig Builder Tests
+    // ========================================================================
+
+    #[test]
+    fn test_gossip_config_default() {
+        let config = GossipConfig::default();
+
+        assert_eq!(config.heartbeat_interval, Duration::from_secs(1));
+        assert_eq!(config.max_transmit_size, 65536);
+        assert_eq!(config.mesh_n, 6);
+        assert_eq!(config.mesh_n_low, 4);
+        assert_eq!(config.mesh_n_high, 12);
+    }
+
+    #[test]
+    fn test_gossip_config_builder() {
+        let config = GossipConfig::new()
+            .with_heartbeat_interval(Duration::from_secs(2))
+            .with_max_transmit_size(32768)
+            .with_mesh_n(8)
+            .with_mesh_n_low(5)
+            .with_mesh_n_high(15)
+            .with_gossip_lazy(8)
+            .with_history_length(10)
+            .with_history_gossip(5);
+
+        assert_eq!(config.heartbeat_interval, Duration::from_secs(2));
+        assert_eq!(config.max_transmit_size, 32768);
+        assert_eq!(config.mesh_n, 8);
+        assert_eq!(config.mesh_n_low, 5);
+        assert_eq!(config.mesh_n_high, 15);
+        assert_eq!(config.gossip_lazy, 8);
+        assert_eq!(config.history_length, 10);
+        assert_eq!(config.history_gossip, 5);
+    }
+
+    // ========================================================================
+    // Security Tests (VERITAS-2026-0007)
+    // ========================================================================
+
+    /// Test that rate limiting configuration is properly propagated.
+    #[test]
+    fn test_security_rate_limit_config_propagation() {
+        let rate_config = RateLimitConfig::default()
+            .with_per_peer_rate(10)
+            .with_global_rate(1000)
+            .with_violations_before_ban(5)
+            .with_ban_duration_secs(300);
+
+        let gossip_config = GossipConfig::default().with_rate_limit(rate_config);
+
+        assert_eq!(gossip_config.rate_limit.per_peer_rate, 10);
+        assert_eq!(gossip_config.rate_limit.global_rate, 1000);
+        assert_eq!(gossip_config.rate_limit.violations_before_ban, 5);
+        assert_eq!(gossip_config.rate_limit.ban_duration_secs, 300);
+    }
+
+    /// Test that the GossipManager properly initializes with rate limiting.
+    #[tokio::test]
+    async fn test_security_gossip_manager_rate_limiter_initialized() {
+        let config = GossipConfig::default().with_rate_limit(
+            RateLimitConfig::default()
+                .with_per_peer_rate(5)
+                .with_violations_before_ban(3),
+        );
+
+        let manager = GossipManager::new(config);
+
+        // Verify the rate limiter is working
+        let peer = PeerId::random();
+
+        // Initially no violations
+        assert_eq!(manager.peer_violation_count(&peer).await, 0);
+        assert!(!manager.is_peer_banned(&peer).await);
+    }
+
+    /// Test that banned peers are properly tracked.
+    #[tokio::test]
+    async fn test_security_banned_peers_tracking() {
+        let manager = GossipManager::with_defaults();
+
+        let peer1 = PeerId::random();
+        let peer2 = PeerId::random();
+        let peer3 = PeerId::random();
+
+        // Ban multiple peers
+        manager.ban_peer(&peer1).await;
+        manager.ban_peer(&peer2).await;
+
+        let banned = manager.banned_peers().await;
+        assert_eq!(banned.len(), 2);
+        assert!(banned.contains(&peer1));
+        assert!(banned.contains(&peer2));
+        assert!(!banned.contains(&peer3));
+
+        // Unban one
+        manager.unban_peer(&peer1).await;
+
+        let banned = manager.banned_peers().await;
+        assert_eq!(banned.len(), 1);
+        assert!(!banned.contains(&peer1));
+        assert!(banned.contains(&peer2));
+    }
 }

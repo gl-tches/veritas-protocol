@@ -43,6 +43,7 @@ pub mod discovery;
 pub mod error;
 pub mod gossip;
 pub mod node;
+pub mod rate_limiter;
 pub mod relay;
 pub mod transport;
 pub mod transport_manager;
@@ -58,6 +59,11 @@ pub use error::{NetError, Result};
 pub use gossip::{
     BlockAnnouncement, GossipAnnouncement, GossipConfig, GossipManager, MessageAnnouncement,
     ReceiptAnnouncement, TOPIC_BLOCKS, TOPIC_MESSAGES, TOPIC_RECEIPTS,
+};
+pub use rate_limiter::{
+    RateLimitConfig, RateLimitResult, RateLimiter, DEFAULT_BAN_DURATION_SECS,
+    DEFAULT_BURST_MULTIPLIER, DEFAULT_GLOBAL_RATE, DEFAULT_PER_PEER_RATE,
+    DEFAULT_VIOLATIONS_BEFORE_BAN,
 };
 pub use node::{
     peer_id_from_multiaddr, NodeBehaviour, NodeConfig, NodeEvent, VeritasNode,

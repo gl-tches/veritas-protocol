@@ -73,6 +73,7 @@ pub mod groups;
 pub mod internal;
 pub mod messaging;
 pub mod safety;
+pub mod time;
 pub mod verification;
 
 // Main client export

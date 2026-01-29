@@ -2,6 +2,13 @@
 //!
 //! Provides key state tracking, expiry detection, and rotation support.
 //! Keys have a 30-day lifecycle with a 5-day warning period before expiry.
+//!
+//! ## Security: Time Validation (VERITAS-2026-0008)
+//!
+//! All time-based operations validate timestamps to prevent manipulation:
+//! - Future timestamps (beyond allowed clock skew) are treated as expired
+//! - Ancient timestamps (before protocol inception) are treated as expired
+//! - This prevents attackers from bypassing expiry checks with invalid times
 
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +26,18 @@ pub const KEY_WARNING_SECS: u64 = 5 * 24 * 60 * 60;
 
 /// Grace period after key expiry (24 hours).
 pub const EXPIRY_GRACE_PERIOD_SECS: u64 = 24 * 60 * 60;
+
+// === Time Validation Constants (VERITAS-2026-0008) ===
+// Duplicated from veritas-core::time to avoid circular dependency.
+
+/// Maximum allowed clock skew in seconds (5 minutes).
+pub const MAX_CLOCK_SKEW_SECS: u64 = 300;
+
+/// Minimum valid timestamp (2024-01-01 00:00:00 UTC).
+pub const MIN_VALID_TIMESTAMP: u64 = 1704067200;
+
+/// Maximum valid timestamp (2100-01-01 00:00:00 UTC).
+pub const MAX_VALID_TIMESTAMP: u64 = 4102444800;
 
 /// State of an identity key.
 ///
@@ -168,9 +187,54 @@ impl KeyLifecycle {
     }
 
     /// Check if the key has expired.
+    ///
+    /// ## Security (VERITAS-2026-0008)
+    ///
+    /// This method validates timestamps before use:
+    /// - Invalid timestamps (too old, too far in future, or malformed) are treated as expired
+    /// - This prevents attackers from manipulating time to bypass expiry checks
+    ///
+    /// # Arguments
+    ///
+    /// * `current_time` - The current Unix timestamp in seconds
+    ///
+    /// # Returns
+    ///
+    /// `true` if the key has expired or if timestamps are invalid, `false` otherwise.
     pub fn is_expired(&self, current_time: u64) -> bool {
+        // SECURITY: Validate created_at timestamp is reasonable
+        // Invalid created_at means the key data is corrupted or manipulated
+        if !Self::is_valid_timestamp(self.created_at) {
+            return true; // Treat as expired for safety
+        }
+
+        // SECURITY: Validate current_time is reasonable
+        // Future current_time beyond skew indicates time manipulation
+        if !Self::is_valid_timestamp(current_time) {
+            return true; // Treat as expired for safety
+        }
+
+        // SECURITY: Check if created_at is in the future (impossible for legitimate keys)
+        // Allow small clock skew between creation and checking
+        if self.created_at > current_time.saturating_add(MAX_CLOCK_SKEW_SECS) {
+            return true; // Future creation date is suspicious, treat as expired
+        }
+
         let elapsed = current_time.saturating_sub(self.created_at);
         elapsed >= KEY_EXPIRY_SECS
+    }
+
+    /// Validate that a timestamp is within acceptable bounds.
+    ///
+    /// # Arguments
+    ///
+    /// * `timestamp` - The Unix timestamp to validate
+    ///
+    /// # Returns
+    ///
+    /// `true` if the timestamp is valid, `false` otherwise.
+    fn is_valid_timestamp(timestamp: u64) -> bool {
+        (MIN_VALID_TIMESTAMP..=MAX_VALID_TIMESTAMP).contains(&timestamp)
     }
 
     /// Check if the key is in the grace period after expiry.
@@ -264,7 +328,9 @@ impl KeyLifecycle {
 mod tests {
     use super::*;
 
-    const BASE_TIME: u64 = 1700000000; // Arbitrary timestamp
+    // Use a timestamp after MIN_VALID_TIMESTAMP (2024-01-01)
+    // 1710000000 = March 2024
+    const BASE_TIME: u64 = 1710000000;
 
     #[test]
     fn test_identity_hash_from_public_key() {
@@ -508,5 +574,117 @@ mod tests {
             .rotate(IdentityHash::from_public_key(b"new"))
             .unwrap();
         assert!(lifecycle.can_use(BASE_TIME).is_err());
+    }
+
+    // === Security Tests for VERITAS-2026-0008 ===
+
+    #[test]
+    fn test_is_valid_timestamp() {
+        // Valid timestamps
+        assert!(KeyLifecycle::is_valid_timestamp(MIN_VALID_TIMESTAMP));
+        assert!(KeyLifecycle::is_valid_timestamp(MAX_VALID_TIMESTAMP));
+        assert!(KeyLifecycle::is_valid_timestamp(BASE_TIME));
+
+        // Invalid timestamps - too old
+        assert!(!KeyLifecycle::is_valid_timestamp(MIN_VALID_TIMESTAMP - 1));
+        assert!(!KeyLifecycle::is_valid_timestamp(0));
+        assert!(!KeyLifecycle::is_valid_timestamp(1000000000)); // 2001
+
+        // Invalid timestamps - too large
+        assert!(!KeyLifecycle::is_valid_timestamp(MAX_VALID_TIMESTAMP + 1));
+        assert!(!KeyLifecycle::is_valid_timestamp(u64::MAX));
+    }
+
+    #[test]
+    fn test_is_expired_rejects_ancient_created_at() {
+        // SECURITY: Keys with ancient created_at should be treated as expired
+        let mut lifecycle = KeyLifecycle::new(BASE_TIME);
+        lifecycle.created_at = 1000000000; // 2001 - before MIN_VALID_TIMESTAMP
+
+        // Even with valid current_time, should be treated as expired
+        assert!(lifecycle.is_expired(BASE_TIME));
+    }
+
+    #[test]
+    fn test_is_expired_rejects_ancient_current_time() {
+        // SECURITY: Ancient current_time indicates time manipulation
+        let lifecycle = KeyLifecycle::new(BASE_TIME);
+
+        // Passing ancient current_time should treat key as expired
+        assert!(lifecycle.is_expired(1000000000)); // 2001
+    }
+
+    #[test]
+    fn test_is_expired_rejects_far_future_current_time() {
+        // SECURITY: Far future current_time beyond MAX_VALID_TIMESTAMP
+        let lifecycle = KeyLifecycle::new(BASE_TIME);
+
+        // Passing far future time should treat key as expired
+        assert!(lifecycle.is_expired(MAX_VALID_TIMESTAMP + 1));
+        assert!(lifecycle.is_expired(u64::MAX));
+    }
+
+    #[test]
+    fn test_is_expired_rejects_future_created_at() {
+        // SECURITY: Keys created in the future are suspicious
+        let mut lifecycle = KeyLifecycle::new(BASE_TIME);
+        // Set created_at far in the future (beyond clock skew)
+        lifecycle.created_at = BASE_TIME + MAX_CLOCK_SKEW_SECS + 1000;
+
+        // Should be treated as expired (suspicious)
+        assert!(lifecycle.is_expired(BASE_TIME));
+    }
+
+    #[test]
+    fn test_is_expired_allows_small_clock_skew() {
+        // SECURITY: Small clock skew should be allowed
+        let mut lifecycle = KeyLifecycle::new(BASE_TIME);
+        // Set created_at slightly in the future (within clock skew)
+        lifecycle.created_at = BASE_TIME + MAX_CLOCK_SKEW_SECS - 10;
+
+        // Should NOT be treated as expired (within acceptable skew)
+        assert!(!lifecycle.is_expired(BASE_TIME));
+    }
+
+    #[test]
+    fn test_is_expired_zero_timestamp() {
+        // SECURITY: Zero timestamp should be rejected
+        let mut lifecycle = KeyLifecycle::new(BASE_TIME);
+        lifecycle.created_at = 0;
+
+        assert!(lifecycle.is_expired(BASE_TIME));
+
+        // Also check zero current_time
+        let lifecycle2 = KeyLifecycle::new(BASE_TIME);
+        assert!(lifecycle2.is_expired(0));
+    }
+
+    #[test]
+    fn test_is_expired_boundary_conditions() {
+        // Test at exact MIN_VALID_TIMESTAMP boundary
+        let lifecycle = KeyLifecycle::new(MIN_VALID_TIMESTAMP);
+        assert!(!lifecycle.is_expired(MIN_VALID_TIMESTAMP + 1000));
+
+        // Test at exact MAX_VALID_TIMESTAMP boundary
+        let mut lifecycle2 = KeyLifecycle::new(BASE_TIME);
+        lifecycle2.created_at = MAX_VALID_TIMESTAMP;
+        // This should fail because created_at > current_time + skew
+        assert!(lifecycle2.is_expired(BASE_TIME));
+    }
+
+    #[test]
+    fn test_time_constants_consistent() {
+        // Verify constants are in correct order
+        assert!(MIN_VALID_TIMESTAMP < MAX_VALID_TIMESTAMP);
+        assert!(MAX_CLOCK_SKEW_SECS < KEY_EXPIRY_SECS);
+
+        // Verify MIN_VALID_TIMESTAMP is 2024-01-01
+        assert_eq!(MIN_VALID_TIMESTAMP, 1704067200);
+
+        // Verify MAX_VALID_TIMESTAMP is 2100-01-01
+        assert_eq!(MAX_VALID_TIMESTAMP, 4102444800);
+
+        // Verify MAX_CLOCK_SKEW_SECS is 5 minutes
+        assert_eq!(MAX_CLOCK_SKEW_SECS, 300);
     }
 }

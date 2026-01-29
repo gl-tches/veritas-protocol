@@ -102,6 +102,14 @@ pub enum NetError {
     /// Listen error.
     #[error("Listen error: {0}")]
     Listen(String),
+
+    /// Peer is banned.
+    #[error("Peer is banned: {0}")]
+    PeerBanned(String),
+
+    /// Rate limit exceeded.
+    #[error("Rate limit exceeded: {0}")]
+    RateLimitExceeded(String),
 }
 
 /// Result type for networking operations.

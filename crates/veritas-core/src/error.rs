@@ -2,6 +2,8 @@
 
 use thiserror::Error;
 
+use crate::time::TimeError;
+
 /// Errors that can occur during core operations.
 #[derive(Error, Debug)]
 pub enum CoreError {
@@ -32,6 +34,10 @@ pub enum CoreError {
     /// Reputation error.
     #[error("Reputation error: {0}")]
     Reputation(#[from] veritas_reputation::ReputationError),
+
+    /// Time validation error.
+    #[error("Time error: {0}")]
+    Time(#[from] TimeError),
 
     /// Not initialized.
     #[error("Client not initialized")]

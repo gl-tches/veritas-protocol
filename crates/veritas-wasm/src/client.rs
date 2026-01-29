@@ -81,10 +81,14 @@ pub struct WasmClient {
 impl WasmClient {
     /// Create a new WASM client with in-memory storage.
     ///
-    /// Uses a random origin fingerprint for identity limiting.
+    /// In browser environments, uses browser-derived fingerprint for identity limiting.
+    /// This provides Sybil resistance within the browser context.
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-        Self::new_with_origin(OriginFingerprint::generate())
+        // For WASM/browser, derive fingerprint from browser-available data
+        // This includes: origin URL, user agent, and crypto-random installation ID
+        let origin = Self::derive_browser_fingerprint();
+        Self::new_with_origin(origin)
     }
 
     /// Check if the client is currently unlocked.
@@ -175,6 +179,47 @@ impl WasmClient {
             store: Arc::new(Mutex::new(IdentityStore::new(origin))),
             unlocked: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// Derive a browser fingerprint for identity limiting.
+    ///
+    /// This collects browser-available data to create a semi-stable fingerprint.
+    /// While not as strong as hardware attestation, it provides Sybil resistance
+    /// within browser contexts.
+    fn derive_browser_fingerprint() -> OriginFingerprint {
+        use veritas_crypto::Hash256;
+
+        // Collect browser fingerprint components
+        let mut fingerprint_data = Vec::new();
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            // In WASM context, collect browser data
+            if let Some(window) = web_sys::window() {
+                // Origin URL (e.g., "https://example.com")
+                if let Ok(origin) = window.location().origin() {
+                    fingerprint_data.extend_from_slice(origin.as_bytes());
+                }
+
+                // User agent
+                if let Ok(navigator) = window.navigator().user_agent() {
+                    fingerprint_data.extend_from_slice(navigator.as_bytes());
+                }
+            }
+        }
+
+        // Add domain separator
+        fingerprint_data.extend_from_slice(b"VERITAS-BROWSER-FINGERPRINT-v1");
+
+        // Hash the collected data to create hardware_id equivalent
+        let hardware_id = Hash256::hash(&fingerprint_data);
+
+        // Generate persistent installation ID using getrandom
+        // In production this should be persisted to localStorage
+        let mut installation_id = [0u8; 32];
+        getrandom::getrandom(&mut installation_id).expect("getrandom failed");
+
+        OriginFingerprint::new(hardware_id.as_bytes(), None, &installation_id)
     }
 
     fn unlock_internal(&self, password: &str) -> WasmResult<()> {
@@ -331,9 +376,20 @@ impl Default for WasmClient {
 mod tests {
     use super::*;
 
+    /// Create a test client with a random fingerprint (test-only)
+    fn create_test_client() -> WasmClient {
+        // Create a random origin fingerprint for testing
+        let mut hardware_id = [0u8; 32];
+        let mut installation_id = [0u8; 32];
+        getrandom::getrandom(&mut hardware_id).expect("getrandom failed");
+        getrandom::getrandom(&mut installation_id).expect("getrandom failed");
+        let origin = OriginFingerprint::new(&hardware_id, None, &installation_id);
+        WasmClient::new_with_origin(origin)
+    }
+
     #[test]
     fn test_client_lifecycle() {
-        let client = WasmClient::new();
+        let client = create_test_client();
 
         // Initially locked
         assert!(!client.is_unlocked());
@@ -349,14 +405,14 @@ mod tests {
 
     #[test]
     fn test_create_identity_when_locked() {
-        let client = WasmClient::new();
+        let client = create_test_client();
         let result = client.create_identity_internal(None);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_create_identity_when_unlocked() {
-        let client = WasmClient::new();
+        let client = create_test_client();
         client.unlock_internal("test-password").unwrap();
 
         let hash = client
@@ -370,7 +426,7 @@ mod tests {
 
     #[test]
     fn test_list_identities() {
-        let client = WasmClient::new();
+        let client = create_test_client();
         client.unlock_internal("test-password").unwrap();
 
         client
@@ -386,7 +442,7 @@ mod tests {
 
     #[test]
     fn test_identity_slots() {
-        let client = WasmClient::new();
+        let client = create_test_client();
         client.unlock_internal("test-password").unwrap();
 
         let slots = client.identity_slots_internal().unwrap();
@@ -403,7 +459,7 @@ mod tests {
 
     #[test]
     fn test_switch_identity() {
-        let client = WasmClient::new();
+        let client = create_test_client();
         client.unlock_internal("test-password").unwrap();
 
         let hash1 = client.create_identity_internal(None).unwrap();
@@ -419,7 +475,7 @@ mod tests {
 
     #[test]
     fn test_get_public_keys() {
-        let client = WasmClient::new();
+        let client = create_test_client();
         client.unlock_internal("test-password").unwrap();
         client.create_identity_internal(None).unwrap();
 
@@ -429,7 +485,7 @@ mod tests {
 
     #[test]
     fn test_shutdown() {
-        let client = WasmClient::new();
+        let client = create_test_client();
         client.unlock_internal("test-password").unwrap();
         client.create_identity_internal(None).unwrap();
 

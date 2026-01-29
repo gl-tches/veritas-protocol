@@ -2,12 +2,20 @@
 //!
 //! Provides the `ChunkReassembler` type for collecting message chunks
 //! and reassembling them into complete messages.
+//!
+//! # Security
+//!
+//! The reassembler includes DoS protections (VERITAS-2026-0003):
+//! - Maximum concurrent pending sessions (`MAX_PENDING_REASSEMBLIES`)
+//! - Maximum buffer size per session (`MAX_REASSEMBLY_BUFFER`)
+//! - Session timeout (`REASSEMBLY_TIMEOUT_SECS`)
 
 use std::collections::HashMap;
 
 use veritas_crypto::Hash256;
 
 use crate::error::{ProtocolError, Result};
+use crate::limits::{MAX_PENDING_REASSEMBLIES, MAX_REASSEMBLY_BUFFER, REASSEMBLY_TIMEOUT_SECS};
 
 use super::chunk::MessageChunk;
 
@@ -20,12 +28,15 @@ struct PendingMessage {
     chunks: HashMap<u8, MessageChunk>,
     /// Timestamp when the first chunk was received (Unix seconds).
     first_received: u64,
+    /// Total buffer size in bytes for this session (DoS tracking).
+    buffer_size: usize,
 }
 
 impl PendingMessage {
     /// Create a new pending message from its first received chunk.
     fn new(chunk: MessageChunk, timestamp: u64) -> Self {
         let total_chunks = chunk.info().total_chunks();
+        let buffer_size = chunk.content().len();
         let mut chunks = HashMap::with_capacity(total_chunks as usize);
         chunks.insert(chunk.info().chunk_index(), chunk);
 
@@ -33,21 +44,39 @@ impl PendingMessage {
             total_chunks,
             chunks,
             first_received: timestamp,
+            buffer_size,
         }
     }
 
     /// Add a chunk to this pending message.
     ///
-    /// Returns `true` if the message is now complete.
-    fn add_chunk(&mut self, chunk: MessageChunk) -> bool {
+    /// Returns `Ok(true)` if the message is now complete.
+    /// Returns `Err` if adding the chunk would exceed buffer limits.
+    fn add_chunk(&mut self, chunk: MessageChunk) -> Result<bool> {
         // Ignore duplicate chunks
         let index = chunk.info().chunk_index();
         if self.chunks.contains_key(&index) {
-            return self.is_complete();
+            return Ok(self.is_complete());
         }
 
+        // SECURITY: Check buffer size limit before adding (VERITAS-2026-0003)
+        let chunk_size = chunk.content().len();
+        let new_buffer_size = self.buffer_size.saturating_add(chunk_size);
+        if new_buffer_size > MAX_REASSEMBLY_BUFFER {
+            return Err(ProtocolError::ReassemblyBufferExceeded {
+                size: new_buffer_size,
+                max: MAX_REASSEMBLY_BUFFER,
+            });
+        }
+
+        self.buffer_size = new_buffer_size;
         self.chunks.insert(index, chunk);
-        self.is_complete()
+        Ok(self.is_complete())
+    }
+
+    /// Get the current buffer size in bytes.
+    fn buffer_size(&self) -> usize {
+        self.buffer_size
     }
 
     /// Check if all chunks have been received.
@@ -120,6 +149,13 @@ impl PendingMessage {
 /// Tracks partially received messages and automatically expires
 /// incomplete messages after a configurable timeout.
 ///
+/// # Security
+///
+/// Includes DoS protections (VERITAS-2026-0003):
+/// - Maximum `MAX_PENDING_REASSEMBLIES` concurrent sessions
+/// - Maximum `MAX_REASSEMBLY_BUFFER` bytes per session
+/// - Session timeout of `REASSEMBLY_TIMEOUT_SECS`
+///
 /// # Example
 ///
 /// ```
@@ -144,6 +180,10 @@ pub struct ChunkReassembler {
     pending: HashMap<Hash256, PendingMessage>,
     /// Maximum age in seconds before a pending message expires.
     max_pending_age_secs: u64,
+    /// Maximum number of concurrent pending sessions (DoS protection).
+    max_pending_sessions: usize,
+    /// Maximum buffer size per session in bytes (DoS protection).
+    max_buffer_per_session: usize,
 }
 
 impl ChunkReassembler {
@@ -153,10 +193,40 @@ impl ChunkReassembler {
     ///
     /// * `max_pending_age_secs` - Maximum time to wait for all chunks
     ///   before expiring a pending message.
+    ///
+    /// Uses default DoS protection limits from `crate::limits`.
     pub fn new(max_pending_age_secs: u64) -> Self {
         Self {
             pending: HashMap::new(),
             max_pending_age_secs,
+            max_pending_sessions: MAX_PENDING_REASSEMBLIES,
+            max_buffer_per_session: MAX_REASSEMBLY_BUFFER,
+        }
+    }
+
+    /// Create a new chunk reassembler with custom DoS protection limits.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_pending_age_secs` - Maximum time to wait for all chunks
+    /// * `max_pending_sessions` - Maximum concurrent pending sessions
+    /// * `max_buffer_per_session` - Maximum buffer size per session in bytes
+    ///
+    /// # Security Note
+    ///
+    /// Use this only for testing. Production code should use `new()` or `default()`
+    /// which use the security-audited limits from `crate::limits`.
+    #[cfg(test)]
+    pub fn new_with_limits(
+        max_pending_age_secs: u64,
+        max_pending_sessions: usize,
+        max_buffer_per_session: usize,
+    ) -> Self {
+        Self {
+            pending: HashMap::new(),
+            max_pending_age_secs,
+            max_pending_sessions,
+            max_buffer_per_session,
         }
     }
 
@@ -174,13 +244,15 @@ impl ChunkReassembler {
     ///
     /// - `Ok(Some(message))` - The complete reassembled message.
     /// - `Ok(None)` - More chunks are needed.
-    /// - `Err(...)` - An error occurred (invalid chunk, hash mismatch, etc.).
+    /// - `Err(...)` - An error occurred (invalid chunk, hash mismatch, limits exceeded, etc.).
     ///
     /// # Errors
     ///
     /// Returns an error if:
     /// - The chunk fails validation
     /// - Hash verification fails during reassembly
+    /// - Too many pending sessions (DoS protection, VERITAS-2026-0003)
+    /// - Buffer size exceeded (DoS protection, VERITAS-2026-0003)
     pub fn add_chunk(&mut self, chunk: MessageChunk, current_time: u64) -> Result<Option<String>> {
         // Validate chunk info
         chunk.info().validate()?;
@@ -201,7 +273,8 @@ impl ChunkReassembler {
 
         // Check if we already have a pending message for this hash
         if let Some(pending) = self.pending.get_mut(&message_hash) {
-            let is_complete = pending.add_chunk(chunk);
+            // SECURITY: Check buffer size limit (VERITAS-2026-0003)
+            let is_complete = pending.add_chunk(chunk)?;
 
             if is_complete {
                 // Remove from pending and reassemble
@@ -210,6 +283,23 @@ impl ChunkReassembler {
                 return Ok(Some(message));
             }
         } else {
+            // SECURITY: Check pending session limit before adding new session (VERITAS-2026-0003)
+            if self.pending.len() >= self.max_pending_sessions {
+                return Err(ProtocolError::TooManyPendingSessions {
+                    current: self.pending.len(),
+                    max: self.max_pending_sessions,
+                });
+            }
+
+            // SECURITY: Check initial chunk size against buffer limit (VERITAS-2026-0003)
+            let chunk_size = chunk.content().len();
+            if chunk_size > self.max_buffer_per_session {
+                return Err(ProtocolError::ReassemblyBufferExceeded {
+                    size: chunk_size,
+                    max: self.max_buffer_per_session,
+                });
+            }
+
             // Start tracking a new pending message
             let pending = PendingMessage::new(chunk, current_time);
 
@@ -265,12 +355,27 @@ impl ChunkReassembler {
             .get(message_hash)
             .map(|p| (p.chunks.len(), p.total_chunks))
     }
+
+    /// Get the maximum number of pending sessions allowed (DoS protection limit).
+    pub fn max_pending_sessions(&self) -> usize {
+        self.max_pending_sessions
+    }
+
+    /// Get the maximum buffer size per session in bytes (DoS protection limit).
+    pub fn max_buffer_per_session(&self) -> usize {
+        self.max_buffer_per_session
+    }
+
+    /// Get the total buffer size across all pending sessions in bytes.
+    pub fn total_buffer_size(&self) -> usize {
+        self.pending.values().map(|p| p.buffer_size()).sum()
+    }
 }
 
 impl Default for ChunkReassembler {
     fn default() -> Self {
-        // Default to 5 minutes
-        Self::new(300)
+        // Use security-audited timeout from limits module (VERITAS-2026-0003)
+        Self::new(REASSEMBLY_TIMEOUT_SECS)
     }
 }
 
@@ -470,6 +575,63 @@ mod tests {
     #[test]
     fn test_default_timeout() {
         let reassembler = ChunkReassembler::default();
-        assert_eq!(reassembler.max_pending_age_secs, 300);
+        assert_eq!(reassembler.max_pending_age_secs, REASSEMBLY_TIMEOUT_SECS);
+    }
+
+    // === Security Tests for VERITAS-2026-0003 ===
+
+    #[test]
+    fn test_max_pending_sessions_limit() {
+        // Create reassembler with very small limit for testing
+        let mut reassembler = ChunkReassembler::new_with_limits(300, 2, 4096);
+
+        // Create unique messages to fill up pending slots
+        let msg1: String = "a".repeat(450);
+        let msg2: String = "b".repeat(450);
+        let msg3: String = "c".repeat(450);
+
+        let chunks1 = split_into_chunks(&msg1).unwrap();
+        let chunks2 = split_into_chunks(&msg2).unwrap();
+        let chunks3 = split_into_chunks(&msg3).unwrap();
+
+        // First two messages should be accepted
+        reassembler.add_chunk(chunks1[0].clone(), 1000).unwrap();
+        reassembler.add_chunk(chunks2[0].clone(), 1001).unwrap();
+        assert_eq!(reassembler.pending_count(), 2);
+
+        // Third message should be rejected
+        let result = reassembler.add_chunk(chunks3[0].clone(), 1002);
+        assert!(matches!(
+            result,
+            Err(ProtocolError::TooManyPendingSessions { current: 2, max: 2 })
+        ));
+    }
+
+    #[test]
+    fn test_buffer_size_tracking() {
+        let mut reassembler = ChunkReassembler::new(300);
+        let message: String = "d".repeat(450);
+        let chunks = split_into_chunks(&message).unwrap();
+
+        // Before any chunks
+        assert_eq!(reassembler.total_buffer_size(), 0);
+
+        // After first chunk
+        reassembler.add_chunk(chunks[0].clone(), 1000).unwrap();
+        let first_chunk_size = chunks[0].content().len();
+        assert_eq!(reassembler.total_buffer_size(), first_chunk_size);
+
+        // After second chunk
+        reassembler.add_chunk(chunks[1].clone(), 1001).unwrap();
+        // Message complete, so buffer should be 0
+        assert_eq!(reassembler.total_buffer_size(), 0);
+    }
+
+    #[test]
+    fn test_default_uses_security_limits() {
+        let reassembler = ChunkReassembler::default();
+        assert_eq!(reassembler.max_pending_sessions(), MAX_PENDING_REASSEMBLIES);
+        assert_eq!(reassembler.max_buffer_per_session(), MAX_REASSEMBLY_BUFFER);
+        assert_eq!(reassembler.max_pending_age_secs, REASSEMBLY_TIMEOUT_SECS);
     }
 }

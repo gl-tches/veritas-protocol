@@ -15,6 +15,13 @@
 //! - Relays only see the envelope, never the inner payload
 //! - Message integrity is protected by the signature
 //! - TTL enforcement prevents stale message replay
+//!
+//! ## Security: Time Validation (VERITAS-2026-0009)
+//!
+//! All timestamp-based operations validate time bounds:
+//! - Future timestamps (beyond allowed clock skew) are rejected
+//! - Ancient timestamps (before protocol inception) are rejected
+//! - This prevents time manipulation attacks
 
 use serde::{Deserialize, Serialize};
 use veritas_crypto::Hash256;
@@ -25,6 +32,17 @@ use crate::limits::MESSAGE_TTL_SECS;
 use crate::receipts::DeliveryReceiptData;
 use crate::signing::MessageSignature;
 use crate::ProtocolError;
+
+// === Time Validation Constants (VERITAS-2026-0009) ===
+
+/// Maximum allowed clock skew in seconds (5 minutes).
+const MAX_CLOCK_SKEW_SECS: u64 = 300;
+
+/// Minimum valid timestamp (2024-01-01 00:00:00 UTC).
+const MIN_VALID_TIMESTAMP: u64 = 1704067200;
+
+/// Maximum valid timestamp (2100-01-01 00:00:00 UTC).
+const MAX_VALID_TIMESTAMP: u64 = 4102444800;
 
 /// Content types that can be carried in a message.
 ///
@@ -306,22 +324,126 @@ impl InnerPayload {
     ///
     /// Messages older than MESSAGE_TTL_SECS are considered expired
     /// and should be rejected.
+    ///
+    /// ## Security (VERITAS-2026-0009)
+    ///
+    /// This method validates timestamps:
+    /// - Future timestamps (beyond allowed clock skew) are treated as expired
+    /// - Ancient timestamps (before protocol inception) are treated as expired
+    /// - Invalid timestamps indicate manipulation and are rejected
+    ///
+    /// # Returns
+    ///
+    /// `true` if the message is expired or has invalid timestamps, `false` otherwise.
     pub fn is_expired(&self) -> bool {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("system time before UNIX epoch")
             .as_secs();
 
-        now.saturating_sub(self.timestamp) > MESSAGE_TTL_SECS
+        self.is_expired_at(now)
     }
 
     /// Check if the message has expired at a specific time.
     ///
+    /// ## Security (VERITAS-2026-0009)
+    ///
+    /// This method validates both the message timestamp and the reference time:
+    /// - Message timestamps in the future (beyond clock skew) are rejected
+    /// - Ancient timestamps (before protocol inception) are rejected
+    /// - Invalid reference times are rejected
+    ///
     /// # Arguments
     ///
     /// * `now_secs` - Current Unix timestamp in seconds
+    ///
+    /// # Returns
+    ///
+    /// `true` if the message is expired or has invalid timestamps, `false` otherwise.
     pub fn is_expired_at(&self, now_secs: u64) -> bool {
+        // SECURITY: Validate message timestamp is within valid bounds
+        if !Self::is_valid_timestamp(self.timestamp) {
+            return true; // Invalid timestamp = expired for safety
+        }
+
+        // SECURITY: Validate reference time is reasonable
+        if !Self::is_valid_timestamp(now_secs) {
+            return true; // Invalid reference time = expired for safety
+        }
+
+        // SECURITY: Reject future timestamps (beyond allowed clock skew)
+        // This prevents attackers from creating messages with future timestamps
+        // that would never expire
+        if self.timestamp > now_secs.saturating_add(MAX_CLOCK_SKEW_SECS) {
+            return true; // Future timestamp = expired for safety
+        }
+
+        // Standard TTL expiry check
         now_secs.saturating_sub(self.timestamp) > MESSAGE_TTL_SECS
+    }
+
+    /// Validate that a timestamp is within acceptable bounds.
+    ///
+    /// # Arguments
+    ///
+    /// * `timestamp` - The Unix timestamp to validate
+    ///
+    /// # Returns
+    ///
+    /// `true` if the timestamp is valid, `false` otherwise.
+    fn is_valid_timestamp(timestamp: u64) -> bool {
+        timestamp >= MIN_VALID_TIMESTAMP && timestamp <= MAX_VALID_TIMESTAMP
+    }
+
+    /// Validate the message timestamp.
+    ///
+    /// ## Security (VERITAS-2026-0009)
+    ///
+    /// Performs comprehensive timestamp validation:
+    /// - Rejects timestamps before MIN_VALID_TIMESTAMP (ancient)
+    /// - Rejects timestamps after MAX_VALID_TIMESTAMP (far future)
+    /// - Rejects timestamps more than MAX_CLOCK_SKEW_SECS in the future
+    ///
+    /// # Errors
+    ///
+    /// Returns `ProtocolError::MessageExpired` for invalid timestamps.
+    pub fn validate_timestamp(&self) -> Result<(), ProtocolError> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time before UNIX epoch")
+            .as_secs();
+
+        self.validate_timestamp_at(now)
+    }
+
+    /// Validate the message timestamp against a specific reference time.
+    ///
+    /// # Arguments
+    ///
+    /// * `now_secs` - The reference Unix timestamp in seconds
+    ///
+    /// # Errors
+    ///
+    /// Returns `ProtocolError::MessageExpired` for invalid timestamps.
+    pub fn validate_timestamp_at(&self, now_secs: u64) -> Result<(), ProtocolError> {
+        // Check for ancient timestamp
+        if self.timestamp < MIN_VALID_TIMESTAMP {
+            return Err(ProtocolError::MessageExpired);
+        }
+
+        // Check for far-future timestamp
+        if self.timestamp > MAX_VALID_TIMESTAMP {
+            return Err(ProtocolError::MessageExpired);
+        }
+
+        // Check for near-future timestamp (beyond clock skew)
+        if self.timestamp > now_secs.saturating_add(MAX_CLOCK_SKEW_SECS) {
+            return Err(ProtocolError::InvalidEnvelope(
+                "message timestamp is in the future".to_string(),
+            ));
+        }
+
+        Ok(())
     }
 
     /// Serialize the payload to bytes.
@@ -337,16 +459,33 @@ impl InnerPayload {
 
     /// Deserialize a payload from bytes.
     ///
+    /// # Security
+    ///
+    /// This function checks the input size BEFORE deserialization to prevent
+    /// OOM attacks from malicious size fields (VERITAS-2026-0003).
+    ///
     /// # Errors
     ///
-    /// Returns `ProtocolError::Serialization` if deserialization fails.
+    /// Returns `ProtocolError::InvalidEnvelope` if input exceeds `MAX_INNER_ENVELOPE_SIZE`,
+    /// or `ProtocolError::Serialization` if deserialization fails.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ProtocolError> {
+        // SECURITY: Check size BEFORE deserialization to prevent OOM attacks
+        // from malicious size fields in the serialized data (VERITAS-2026-0003)
+        if bytes.len() > crate::limits::MAX_INNER_ENVELOPE_SIZE {
+            return Err(ProtocolError::InvalidEnvelope(format!(
+                "inner payload too large: {} bytes exceeds maximum {} bytes",
+                bytes.len(),
+                crate::limits::MAX_INNER_ENVELOPE_SIZE
+            )));
+        }
+
         bincode::deserialize(bytes).map_err(|e| ProtocolError::Serialization(e.to_string()))
     }
 
     /// Validate the payload.
     ///
     /// Checks:
+    /// - Timestamp is valid (VERITAS-2026-0009)
     /// - Message is not expired
     /// - Content is valid
     /// - Message ID is not zero
@@ -355,6 +494,9 @@ impl InnerPayload {
     ///
     /// Returns appropriate `ProtocolError` if validation fails.
     pub fn validate(&self) -> Result<(), ProtocolError> {
+        // SECURITY: Validate timestamp first (VERITAS-2026-0009)
+        self.validate_timestamp()?;
+
         if self.is_expired() {
             return Err(ProtocolError::MessageExpired);
         }
@@ -557,7 +699,8 @@ mod tests {
         let sender = test_sender();
         let content = MessageContent::text("Test").unwrap();
 
-        let timestamp = 1000000;
+        // Use a valid timestamp within MIN_VALID_TIMESTAMP and MAX_VALID_TIMESTAMP
+        let timestamp = 1710000000u64; // March 2024
         let message_id = Hash256::hash(b"test");
 
         let payload = InnerPayload::new_with_values(
@@ -649,6 +792,326 @@ mod tests {
         .unwrap();
         payload.set_signature(sig);
         assert!(!payload.signature().is_placeholder());
+    }
+
+    // === Security Tests for VERITAS-2026-0003 ===
+
+    #[test]
+    fn test_oversized_inner_payload_rejected() {
+        // SECURITY: Verify that oversized inner payloads are rejected BEFORE deserialization
+        // This prevents OOM attacks from malicious size fields (VERITAS-2026-0003)
+        let oversized = vec![0u8; crate::limits::MAX_INNER_ENVELOPE_SIZE + 1];
+        let result = InnerPayload::from_bytes(&oversized);
+
+        assert!(matches!(
+            result,
+            Err(ProtocolError::InvalidEnvelope(msg)) if msg.contains("too large")
+        ));
+    }
+
+    #[test]
+    fn test_exactly_max_size_inner_payload_allowed_to_deserialize() {
+        // An inner payload at exactly MAX_INNER_ENVELOPE_SIZE should be allowed to attempt deserialization
+        // (it will fail deserialization due to invalid content, but not due to size check)
+        let at_limit = vec![0u8; crate::limits::MAX_INNER_ENVELOPE_SIZE];
+        let result = InnerPayload::from_bytes(&at_limit);
+
+        // Should fail, but NOT because it's "too large" - the size check should pass
+        match result {
+            Err(ProtocolError::InvalidEnvelope(msg)) => {
+                // Should NOT be the "too large" error
+                assert!(
+                    !msg.contains("too large"),
+                    "Size check should pass for data at exactly MAX_INNER_ENVELOPE_SIZE"
+                );
+            }
+            Err(_) => {
+                // Any other error is fine (serialization, validation, etc.)
+            }
+            Ok(_) => {
+                // Unlikely to succeed with zero bytes, but if it does, that's fine
+            }
+        }
+    }
+
+    #[test]
+    fn test_valid_inner_payload_within_size_limit() {
+        // Verify that valid inner payloads within the size limit work correctly
+        let sender = test_sender();
+        let content = MessageContent::text("Valid message").unwrap();
+        let payload = InnerPayload::new(sender, content, None);
+
+        let bytes = payload.to_bytes().unwrap();
+
+        // Ensure our test payload is within limits
+        assert!(bytes.len() <= crate::limits::MAX_INNER_ENVELOPE_SIZE);
+
+        // Should deserialize successfully
+        let restored = InnerPayload::from_bytes(&bytes).unwrap();
+        assert_eq!(payload.sender_id(), restored.sender_id());
+        assert_eq!(payload.message_id(), restored.message_id());
+    }
+
+    // === Security Tests for VERITAS-2026-0009 ===
+
+    // Use a valid base time (March 2024)
+    const TEST_BASE_TIME: u64 = 1710000000;
+
+    #[test]
+    fn test_is_valid_timestamp() {
+        // Valid timestamps
+        assert!(InnerPayload::is_valid_timestamp(MIN_VALID_TIMESTAMP));
+        assert!(InnerPayload::is_valid_timestamp(MAX_VALID_TIMESTAMP));
+        assert!(InnerPayload::is_valid_timestamp(TEST_BASE_TIME));
+
+        // Invalid timestamps - too old
+        assert!(!InnerPayload::is_valid_timestamp(MIN_VALID_TIMESTAMP - 1));
+        assert!(!InnerPayload::is_valid_timestamp(0));
+        assert!(!InnerPayload::is_valid_timestamp(1000000000)); // 2001
+
+        // Invalid timestamps - too large
+        assert!(!InnerPayload::is_valid_timestamp(MAX_VALID_TIMESTAMP + 1));
+        assert!(!InnerPayload::is_valid_timestamp(u64::MAX));
+    }
+
+    #[test]
+    fn test_is_expired_at_rejects_ancient_timestamp() {
+        // SECURITY: Messages with ancient timestamps should be treated as expired
+        let sender = test_sender();
+        let content = MessageContent::text("Test").unwrap();
+
+        let payload = InnerPayload::new_with_values(
+            sender,
+            1000000000, // 2001 - before MIN_VALID_TIMESTAMP
+            content,
+            MessageSignature::placeholder(),
+            Hash256::hash(b"test"),
+            None,
+        );
+
+        // Should be treated as expired due to ancient timestamp
+        assert!(payload.is_expired_at(TEST_BASE_TIME));
+    }
+
+    #[test]
+    fn test_is_expired_at_rejects_far_future_timestamp() {
+        // SECURITY: Messages with far-future timestamps should be treated as expired
+        let sender = test_sender();
+        let content = MessageContent::text("Test").unwrap();
+
+        let payload = InnerPayload::new_with_values(
+            sender,
+            MAX_VALID_TIMESTAMP + 1, // Beyond maximum valid
+            content,
+            MessageSignature::placeholder(),
+            Hash256::hash(b"test"),
+            None,
+        );
+
+        assert!(payload.is_expired_at(TEST_BASE_TIME));
+    }
+
+    #[test]
+    fn test_is_expired_at_rejects_future_timestamp_beyond_skew() {
+        // SECURITY: Messages with timestamps beyond clock skew should be treated as expired
+        let sender = test_sender();
+        let content = MessageContent::text("Test").unwrap();
+
+        let payload = InnerPayload::new_with_values(
+            sender,
+            TEST_BASE_TIME + MAX_CLOCK_SKEW_SECS + 1000, // Beyond clock skew
+            content,
+            MessageSignature::placeholder(),
+            Hash256::hash(b"test"),
+            None,
+        );
+
+        assert!(payload.is_expired_at(TEST_BASE_TIME));
+    }
+
+    #[test]
+    fn test_is_expired_at_allows_timestamp_within_skew() {
+        // SECURITY: Messages with timestamps within clock skew should be allowed
+        let sender = test_sender();
+        let content = MessageContent::text("Test").unwrap();
+
+        let payload = InnerPayload::new_with_values(
+            sender,
+            TEST_BASE_TIME + MAX_CLOCK_SKEW_SECS - 10, // Within clock skew
+            content,
+            MessageSignature::placeholder(),
+            Hash256::hash(b"test"),
+            None,
+        );
+
+        // Should NOT be expired (within acceptable skew)
+        assert!(!payload.is_expired_at(TEST_BASE_TIME));
+    }
+
+    #[test]
+    fn test_is_expired_at_rejects_invalid_reference_time() {
+        // SECURITY: Invalid reference time should cause message to be treated as expired
+        let sender = test_sender();
+        let content = MessageContent::text("Test").unwrap();
+
+        let payload = InnerPayload::new_with_values(
+            sender,
+            TEST_BASE_TIME,
+            content,
+            MessageSignature::placeholder(),
+            Hash256::hash(b"test"),
+            None,
+        );
+
+        // Ancient reference time should cause expiry
+        assert!(payload.is_expired_at(1000000000)); // 2001
+
+        // Far-future reference time should cause expiry
+        assert!(payload.is_expired_at(MAX_VALID_TIMESTAMP + 1));
+    }
+
+    #[test]
+    fn test_validate_timestamp_rejects_ancient() {
+        let sender = test_sender();
+        let content = MessageContent::text("Test").unwrap();
+
+        let payload = InnerPayload::new_with_values(
+            sender,
+            1000000000, // 2001
+            content,
+            MessageSignature::placeholder(),
+            Hash256::hash(b"test"),
+            None,
+        );
+
+        let result = payload.validate_timestamp_at(TEST_BASE_TIME);
+        assert!(matches!(result, Err(ProtocolError::MessageExpired)));
+    }
+
+    #[test]
+    fn test_validate_timestamp_rejects_far_future() {
+        let sender = test_sender();
+        let content = MessageContent::text("Test").unwrap();
+
+        let payload = InnerPayload::new_with_values(
+            sender,
+            MAX_VALID_TIMESTAMP + 1,
+            content,
+            MessageSignature::placeholder(),
+            Hash256::hash(b"test"),
+            None,
+        );
+
+        let result = payload.validate_timestamp_at(TEST_BASE_TIME);
+        assert!(matches!(result, Err(ProtocolError::MessageExpired)));
+    }
+
+    #[test]
+    fn test_validate_timestamp_rejects_near_future() {
+        let sender = test_sender();
+        let content = MessageContent::text("Test").unwrap();
+
+        let payload = InnerPayload::new_with_values(
+            sender,
+            TEST_BASE_TIME + MAX_CLOCK_SKEW_SECS + 1000, // Beyond clock skew but within valid range
+            content,
+            MessageSignature::placeholder(),
+            Hash256::hash(b"test"),
+            None,
+        );
+
+        let result = payload.validate_timestamp_at(TEST_BASE_TIME);
+        assert!(matches!(result, Err(ProtocolError::InvalidEnvelope(_))));
+    }
+
+    #[test]
+    fn test_validate_timestamp_accepts_valid() {
+        let sender = test_sender();
+        let content = MessageContent::text("Test").unwrap();
+
+        let payload = InnerPayload::new_with_values(
+            sender,
+            TEST_BASE_TIME,
+            content,
+            MessageSignature::placeholder(),
+            Hash256::hash(b"test"),
+            None,
+        );
+
+        let result = payload.validate_timestamp_at(TEST_BASE_TIME);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_rejects_future_timestamp() {
+        // SECURITY: Full validation should reject future timestamps
+        let sender = test_sender();
+        let content = MessageContent::text("Test").unwrap();
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let payload = InnerPayload::new_with_values(
+            sender,
+            now + MAX_CLOCK_SKEW_SECS + 1000, // Future timestamp
+            content,
+            MessageSignature::placeholder(),
+            Hash256::hash(b"test"),
+            None,
+        );
+
+        let result = payload.validate();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_time_constants_consistent() {
+        // Verify time constants are correctly defined
+        assert_eq!(MAX_CLOCK_SKEW_SECS, 300); // 5 minutes
+        assert_eq!(MIN_VALID_TIMESTAMP, 1704067200); // 2024-01-01
+        assert_eq!(MAX_VALID_TIMESTAMP, 4102444800); // 2100-01-01
+
+        // Verify ordering
+        assert!(MIN_VALID_TIMESTAMP < MAX_VALID_TIMESTAMP);
+        assert!(MAX_CLOCK_SKEW_SECS < MESSAGE_TTL_SECS);
+    }
+
+    #[test]
+    fn test_is_expired_at_zero_timestamp() {
+        // SECURITY: Zero timestamp should be rejected
+        let sender = test_sender();
+        let content = MessageContent::text("Test").unwrap();
+
+        let payload = InnerPayload::new_with_values(
+            sender,
+            0,
+            content,
+            MessageSignature::placeholder(),
+            Hash256::hash(b"test"),
+            None,
+        );
+
+        assert!(payload.is_expired_at(TEST_BASE_TIME));
+    }
+
+    #[test]
+    fn test_is_expired_at_max_u64_timestamp() {
+        // SECURITY: Max u64 timestamp should be rejected
+        let sender = test_sender();
+        let content = MessageContent::text("Test").unwrap();
+
+        let payload = InnerPayload::new_with_values(
+            sender,
+            u64::MAX,
+            content,
+            MessageSignature::placeholder(),
+            Hash256::hash(b"test"),
+            None,
+        );
+
+        assert!(payload.is_expired_at(TEST_BASE_TIME));
     }
 }
 

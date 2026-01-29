@@ -4017,10 +4017,12 @@ dependencies = [
  "bincode",
  "chrono",
  "getrandom 0.2.17",
+ "hex",
  "proptest",
  "rand 0.8.5",
  "serde",
  "thiserror 1.0.69",
+ "veritas-crypto",
 ]
 
 [[package]]

@@ -7,6 +7,7 @@
 //! - Weighted negative reports
 //! - Collusion detection via graph analysis
 //! - Reputation decay and effects
+//! - Cryptographic proof verification for interactions (VERITAS-2026-0010)
 //!
 //! ## Overview
 //!
@@ -24,6 +25,14 @@
 //! - Minimum 60 seconds between messages to same peer
 //! - Maximum 30 points from any single peer per day
 //! - Maximum 100 points total per day
+//!
+//! ## Security (VERITAS-2026-0010)
+//!
+//! All reputation-changing interactions now require cryptographic proofs:
+//!
+//! - Both parties must sign the interaction proof
+//! - Nonces prevent replay attacks
+//! - Self-interaction is explicitly prevented
 //!
 //! ## Example
 //!
@@ -55,6 +64,7 @@ pub mod decay;
 pub mod effects;
 pub mod error;
 pub mod manager;
+pub mod proof;
 pub mod rate_limiter;
 pub mod report;
 pub mod score;
@@ -67,7 +77,11 @@ pub use collusion::{
 pub use decay::{apply_decay, DecayConfig, DecayState};
 pub use effects::{get_effects, get_tier, ReputationTier, TierEffects};
 pub use error::{ReputationError, Result};
-pub use manager::{ReputationManager, ReputationStats};
+pub use manager::{ReputationManager, ReputationStats, MAX_TRACKED_NONCES};
+pub use proof::{
+    generate_nonce, InteractionProof, InteractionType, PubkeyRegistry, Signature,
+    MAX_CLOCK_SKEW_SECS, MAX_PROOF_AGE_SECS, MAX_SIGNATURE_SIZE, NONCE_SIZE,
+};
 pub use rate_limiter::{
     PeerInteraction, RateLimitResult, ScoreRateLimiter, MAX_DAILY_GAIN_PER_PEER,
     MAX_DAILY_GAIN_TOTAL, MIN_MESSAGE_INTERVAL_SECS,

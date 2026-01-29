@@ -60,6 +60,24 @@ pub enum ProtocolError {
         expected: usize,
     },
 
+    /// Too many pending reassembly sessions (DoS prevention).
+    #[error("Too many pending reassembly sessions: {current} exceeds maximum {max}")]
+    TooManyPendingSessions {
+        /// Current number of pending sessions.
+        current: usize,
+        /// Maximum allowed sessions.
+        max: usize,
+    },
+
+    /// Reassembly buffer size exceeded (DoS prevention).
+    #[error("Reassembly buffer size exceeded: {size} bytes exceeds maximum {max} bytes")]
+    ReassemblyBufferExceeded {
+        /// Current buffer size in bytes.
+        size: usize,
+        /// Maximum allowed size.
+        max: usize,
+    },
+
     /// Invalid envelope format.
     #[error("Invalid envelope: {0}")]
     InvalidEnvelope(String),

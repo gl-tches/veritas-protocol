@@ -21,6 +21,35 @@ pub enum ChainError {
     #[error("Invalid block: {0}")]
     InvalidBlock(String),
 
+    /// Invalid block signature.
+    ///
+    /// SECURITY: This error indicates that a block's cryptographic signature
+    /// could not be verified. This could be a forged block attack.
+    /// See VERITAS-2026-0002.
+    #[error("Invalid block signature: {0}")]
+    InvalidSignature(String),
+
+    /// Validator public key mismatch.
+    ///
+    /// SECURITY: The validator's public key does not derive to the claimed
+    /// validator identity. This could indicate a validator impersonation attack.
+    /// See VERITAS-2026-0002.
+    #[error("Validator key mismatch: claimed {claimed}, derived {derived}")]
+    ValidatorKeyMismatch {
+        /// The claimed validator identity hash.
+        claimed: String,
+        /// The identity hash derived from the public key.
+        derived: String,
+    },
+
+    /// Missing block signature.
+    ///
+    /// SECURITY: A block that requires a signature was submitted without one.
+    /// Non-genesis blocks MUST be signed by an authorized validator.
+    /// See VERITAS-2026-0002.
+    #[error("Missing block signature: non-genesis blocks must be signed")]
+    MissingSignature,
+
     /// Invalid proof.
     #[error("Invalid merkle proof")]
     InvalidProof,
