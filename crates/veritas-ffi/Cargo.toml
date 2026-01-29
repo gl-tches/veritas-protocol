@@ -14,6 +14,10 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 veritas-core.workspace = true
+veritas-identity.workspace = true
+
+# Async runtime
+tokio.workspace = true
 
 # FFI
 libc.workspace = true

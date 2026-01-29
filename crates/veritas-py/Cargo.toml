@@ -15,6 +15,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 veritas-core.workspace = true
+veritas-identity.workspace = true
 
 # Python
 pyo3.workspace = true
