@@ -21,8 +21,21 @@ veritas-reputation.workspace = true
 # Async
 tokio.workspace = true
 
+# Time
+chrono.workspace = true
+
+# Security
+zeroize.workspace = true
+
+# Storage
+sled.workspace = true
+
+# Serialization
+bincode.workspace = true
+
 # Serialization
 serde.workspace = true
+serde_json.workspace = true
 
 # Error handling
 thiserror.workspace = true
@@ -31,5 +44,9 @@ anyhow.workspace = true
 # Logging
 tracing.workspace = true
 
+# Platform directories
+dirs = "5"
+
 [dev-dependencies]
 proptest.workspace = true
+tempfile = "3"

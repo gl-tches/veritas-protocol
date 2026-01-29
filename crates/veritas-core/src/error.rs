@@ -44,6 +44,39 @@ pub enum CoreError {
     /// Configuration error.
     #[error("Configuration error: {0}")]
     Config(String),
+
+    /// Client is locked.
+    #[error("Client is locked - call unlock() first")]
+    Locked,
+
+    /// Client is shutting down.
+    #[error("Client is shutting down")]
+    ShuttingDown,
+
+    /// Invalid client state for operation.
+    #[error("Invalid state for operation: expected {expected}, got {actual}")]
+    InvalidState {
+        /// Expected state.
+        expected: String,
+        /// Actual state.
+        actual: String,
+    },
+
+    /// No primary identity set.
+    #[error("No primary identity set - create or set an identity first")]
+    NoPrimaryIdentity,
+
+    /// Identity not found.
+    #[error("Identity not found: {0}")]
+    IdentityNotFound(String),
+
+    /// Authentication failed.
+    #[error("Authentication failed: incorrect password")]
+    AuthenticationFailed,
+
+    /// Feature not implemented.
+    #[error("Feature not yet implemented: {0}")]
+    NotImplemented(String),
 }
 
 /// Result type for core operations.

@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-beta.1] - 2026
+
+### Added
+
+- **Task 035**: Client Interface
+  - `VeritasClient` struct - Main entry point for VERITAS protocol
+  - `ClientState` enum (Created, Locked, Unlocked, ShuttingDown)
+  - `ClientConfig` with comprehensive configuration options:
+    - `StorageConfig` - data directory, in-memory mode, encryption
+    - `NetworkConfig` - transports, bootstrap peers, timeouts
+    - `ReputationConfig` - reputation tracking settings
+    - `FeatureConfig` - timing jitter, receipts, queue limits
+  - `ClientConfigBuilder` for fluent configuration
+  - Lifecycle methods: `new()`, `unlock()`, `lock()`, `shutdown()`
+  - Identity management: `identity_hash()`, `public_keys()`, `create_identity()`, `list_identities()`, `set_primary_identity()`
+  - Identity slot tracking: `identity_slots()` with max 3 identities per device
+
+- **Task 036**: Messaging API
+  - `MessageHash` type alias for message tracking
+  - `ReceivedMessage` struct with:
+    - Message metadata (id, hash, sender, timestamp)
+    - Content access (`text()`, `is_receipt()`, `receipt()`)
+    - Verification status (`signature_verified`, `sender_public_keys`)
+  - `MessageStatus` enum (Pending, Sending, Sent, Delivered, Read, Failed)
+  - `SendOptions` for configuring message delivery:
+    - Receipt requests
+    - Reply threading
+    - Timing jitter control
+
+- **Task 037**: Group API
+  - `GroupInfo` struct for group metadata
+  - `GroupMessage` struct for group messages
+  - Re-exports of `GroupId` and `GroupRole` from veritas-protocol
+
+- **Task 038**: Verification API
+  - `MessageProof` struct for blockchain verification:
+    - Merkle proof
+    - Block height and hash
+    - Chain entry
+    - `verify_inclusion()` method
+  - `SyncStatus` struct for chain sync status:
+    - Local and network heights
+    - Pending headers/blocks counts
+    - Progress percentage
+    - `is_synced()`, `blocks_behind()`, `has_pending_work()` methods
+
+- **Task 039**: Safety Numbers
+  - `SafetyNumber` struct for identity verification
+  - Domain-separated BLAKE3 hashing (`VERITAS-SAFETY-NUMBER-v1`)
+  - Symmetric computation (A,B == B,A)
+  - Display formats:
+    - `to_numeric_string()` - 60 digits in 12 groups of 5
+    - `to_qr_string()` - 64-character hex string
+  - `Display` and `Debug` trait implementations
+
+- **Internal Services Architecture**
+  - `IdentityManager` for identity/keyring coordination
+  - `MessageService` placeholder for message handling
+  - `ChainService` placeholder for blockchain operations
+  - `ReputationService` placeholder for reputation tracking
+  - `PersistentIdentityManager` for full encrypted keyring support
+
+### Security
+
+- Safety numbers use domain-separated hashing to prevent cross-protocol attacks
+- Keys are sorted consistently for symmetric safety number computation
+- All sensitive data implements `Zeroize` and `ZeroizeOnDrop`
+- Password handling does not leak information in error messages
+- Debug implementations redact all sensitive data
+- Services are zeroized when client is locked
+- State machine enforces valid operation sequences
+
+### Testing
+
+- 55 integration tests covering:
+  - Client lifecycle (13 tests)
+  - Identity management (11 tests)
+  - Safety numbers (14 tests)
+  - Configuration (17 tests)
+- Security review: All checks PASS
+- Doc tests for public API examples
+
+### Crates Updated
+
+| Crate | Version | Status |
+|-------|---------|--------|
+| veritas-core | 0.1.0-beta.1 | Core API complete |
+
 ## [0.1.0-alpha.7] - 2026
 
 ### Added
