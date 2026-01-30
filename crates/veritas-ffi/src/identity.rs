@@ -37,12 +37,12 @@ use crate::ErrorCode;
 ///     printf("Identity: %s\n", hash);
 /// }
 /// ```
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn veritas_identity_hash(
     handle: *mut VeritasHandle,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode {
+) -> ErrorCode { unsafe {
     // Check null pointers
     if handle.is_null() {
         return ErrorCode::NullPointer;
@@ -60,13 +60,13 @@ pub unsafe extern "C" fn veritas_identity_hash(
         Ok(code) => code,
         Err(_) => ErrorCode::Unknown,
     }
-}
+}}
 
 unsafe fn identity_hash_impl(
     handle: *mut VeritasHandle,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode {
+) -> ErrorCode { unsafe {
     let client_handle = match ClientHandle::from_ptr(handle) {
         Some(h) => h,
         None => return ErrorCode::NullPointer,
@@ -102,7 +102,7 @@ unsafe fn identity_hash_impl(
     *out_buf.add(bytes.len()) = 0; // Null terminator
 
     ErrorCode::Success
-}
+}}
 
 // ============================================================================
 // Create Identity
@@ -137,13 +137,13 @@ unsafe fn identity_hash_impl(
 ///     printf("Created identity: %s\n", hash);
 /// }
 /// ```
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn veritas_create_identity(
     handle: *mut VeritasHandle,
     label: *const libc::c_char,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode {
+) -> ErrorCode { unsafe {
     // Check null pointers
     if handle.is_null() {
         return ErrorCode::NullPointer;
@@ -161,14 +161,14 @@ pub unsafe extern "C" fn veritas_create_identity(
         Ok(code) => code,
         Err(_) => ErrorCode::Unknown,
     }
-}
+}}
 
 unsafe fn create_identity_impl(
     handle: *mut VeritasHandle,
     label: *const libc::c_char,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode {
+) -> ErrorCode { unsafe {
     let client_handle = match ClientHandle::from_ptr(handle) {
         Some(h) => h,
         None => return ErrorCode::NullPointer,
@@ -214,7 +214,7 @@ unsafe fn create_identity_impl(
     *out_buf.add(bytes.len()) = 0;
 
     ErrorCode::Success
-}
+}}
 
 // ============================================================================
 // Identity Slots
@@ -247,13 +247,13 @@ unsafe fn create_identity_impl(
 ///     printf("Identity slots: %u/%u (%u available)\n", used, max, available);
 /// }
 /// ```
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn veritas_identity_slots(
     handle: *mut VeritasHandle,
     out_used: *mut u32,
     out_max: *mut u32,
     out_available: *mut u32,
-) -> ErrorCode {
+) -> ErrorCode { unsafe {
     // Check null pointers
     if handle.is_null() {
         return ErrorCode::NullPointer;
@@ -271,14 +271,14 @@ pub unsafe extern "C" fn veritas_identity_slots(
         Ok(code) => code,
         Err(_) => ErrorCode::Unknown,
     }
-}
+}}
 
 unsafe fn identity_slots_impl(
     handle: *mut VeritasHandle,
     out_used: *mut u32,
     out_max: *mut u32,
     out_available: *mut u32,
-) -> ErrorCode {
+) -> ErrorCode { unsafe {
     let client_handle = match ClientHandle::from_ptr(handle) {
         Some(h) => h,
         None => return ErrorCode::NullPointer,
@@ -304,4 +304,4 @@ unsafe fn identity_slots_impl(
     *out_available = slots.available;
 
     ErrorCode::Success
-}
+}}

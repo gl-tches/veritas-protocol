@@ -2,8 +2,8 @@
 name = "veritas-wasm"
 description = "WebAssembly bindings for VERITAS protocol"
 version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
+edition = "2024"
+rust-version = "1.85"
 license.workspace = true
 repository.workspace = true
 keywords = ["wasm", "webassembly", "browser"]

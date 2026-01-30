@@ -212,7 +212,7 @@ impl NetworkAddress {
     pub fn with_peer_id(self, peer_id: &PeerId) -> Self {
         Self(
             self.0
-                .with(libp2p::multiaddr::Protocol::P2p(peer_id.inner().clone())),
+                .with(libp2p::multiaddr::Protocol::P2p(*peer_id.inner())),
         )
     }
 }

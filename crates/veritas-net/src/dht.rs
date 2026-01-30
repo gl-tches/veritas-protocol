@@ -218,11 +218,7 @@ impl DhtRecord {
     /// Returns 0 if the record has expired.
     pub fn remaining_ttl(&self) -> u64 {
         let now = current_timestamp();
-        if now >= self.expires_at {
-            0
-        } else {
-            self.expires_at - now
-        }
+        self.expires_at.saturating_sub(now)
     }
 
     /// Serialize this record for DHT storage.

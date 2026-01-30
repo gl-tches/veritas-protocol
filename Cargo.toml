@@ -19,8 +19,8 @@ members = [
 
 [workspace.package]
 version = "0.1.0-alpha.1"
-edition = "2021"
-rust-version = "1.75"
+edition = "2024"
+rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/gl-tches/veritas-protocol"
 keywords = ["cryptography", "messaging", "post-quantum", "blockchain", "p2p"]
@@ -84,7 +84,7 @@ js-sys = "0.3"
 web-sys = { version = "0.3", features = ["console", "Window", "Storage"] }
 
 # Python
-pyo3 = { version = "0.20", features = ["extension-module"] }
+pyo3 = { version = "0.23", features = ["extension-module"] }
 
 # Internal crates
 veritas-crypto = { path = "crates/veritas-crypto" }

@@ -675,8 +675,8 @@ mod tests {
     #[test]
     fn test_time_constants_consistent() {
         // Verify constants are in correct order
-        assert!(MIN_VALID_TIMESTAMP < MAX_VALID_TIMESTAMP);
-        assert!(MAX_CLOCK_SKEW_SECS < KEY_EXPIRY_SECS);
+        const { assert!(MIN_VALID_TIMESTAMP < MAX_VALID_TIMESTAMP) }
+        const { assert!(MAX_CLOCK_SKEW_SECS < KEY_EXPIRY_SECS) }
 
         // Verify MIN_VALID_TIMESTAMP is 2024-01-01
         assert_eq!(MIN_VALID_TIMESTAMP, 1704067200);

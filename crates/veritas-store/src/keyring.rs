@@ -240,10 +240,10 @@ impl Keyring {
             .map_err(|e| StoreError::Database(e.to_string()))?;
 
         // Check if keyring exists (has password verification)
-        if let Some(verification_bytes) = meta_tree
+        match meta_tree
             .get(VERIFICATION_KEY)
             .map_err(|e| StoreError::Database(e.to_string()))?
-        {
+        { Some(verification_bytes) => {
             // Existing keyring - verify password
             let verification: PasswordVerification = bincode::deserialize(&verification_bytes)
                 .map_err(|e| StoreError::Serialization(e.to_string()))?;
@@ -261,7 +261,7 @@ impl Keyring {
             } else {
                 Err(StoreError::InvalidPassword)
             }
-        } else {
+        } _ => {
             // New keyring - create with password
             let mut salt = [0u8; 32];
             OsRng.fill_bytes(&mut salt);
@@ -299,7 +299,7 @@ impl Keyring {
                 meta_tree,
                 password_key,
             })
-        }
+        }}
     }
 
     /// Change the keyring password.

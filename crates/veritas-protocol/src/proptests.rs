@@ -7,8 +7,6 @@
 //! - Padding correctly hides message size within buckets
 //! - Signature verification is deterministic and correct
 
-#![cfg(test)]
-
 use proptest::prelude::*;
 
 use crate::chunking::{split_into_chunks, ChunkReassembler};
@@ -41,7 +39,7 @@ proptest! {
     /// Messages of exactly MAX_MESSAGE_CHARS should produce one chunk.
     #[test]
     fn exactly_max_chars_single_chunk(c in prop::char::any()) {
-        let content: String = std::iter::repeat(c).take(MAX_MESSAGE_CHARS).collect();
+        let content: String = std::iter::repeat_n(c, MAX_MESSAGE_CHARS).collect();
         let chunks = split_into_chunks(&content).unwrap();
         prop_assert_eq!(chunks.len(), 1);
     }
@@ -336,7 +334,7 @@ proptest! {
         base_char in prop::char::range('\u{1F600}', '\u{1F64F}'),  // Emoji range
         count in 1usize..350
     ) {
-        let content: String = std::iter::repeat(base_char).take(count).collect();
+        let content: String = std::iter::repeat_n(base_char, count).collect();
         let result = split_into_chunks(&content);
 
         if count <= MAX_TOTAL_MESSAGE_CHARS {

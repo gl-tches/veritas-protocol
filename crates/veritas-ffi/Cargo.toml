@@ -2,8 +2,8 @@
 name = "veritas-ffi"
 description = "C FFI bindings for VERITAS protocol"
 version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
+edition = "2024"
+rust-version = "1.85"
 license.workspace = true
 repository.workspace = true
 keywords = ["ffi", "c", "bindings"]
@@ -26,4 +26,4 @@ libc.workspace = true
 thiserror.workspace = true
 
 [build-dependencies]
-cbindgen = "0.26"
+cbindgen = "0.29"

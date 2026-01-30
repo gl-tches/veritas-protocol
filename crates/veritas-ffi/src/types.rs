@@ -45,24 +45,24 @@ impl ClientHandle {
     /// # Safety
     ///
     /// The pointer must be a valid handle created by `new()` and not yet freed.
-    pub(crate) unsafe fn from_ptr<'a>(ptr: *mut VeritasHandle) -> Option<&'a mut ClientHandle> {
+    pub(crate) unsafe fn from_ptr<'a>(ptr: *mut VeritasHandle) -> Option<&'a mut ClientHandle> { unsafe {
         if ptr.is_null() {
             None
         } else {
             Some(&mut *(ptr as *mut ClientHandle))
         }
-    }
+    }}
 
     /// Consume the handle and free memory.
     ///
     /// # Safety
     ///
     /// The pointer must be a valid handle created by `new()` and not yet freed.
-    pub(crate) unsafe fn free(ptr: *mut VeritasHandle) {
+    pub(crate) unsafe fn free(ptr: *mut VeritasHandle) { unsafe {
         if !ptr.is_null() {
             let _ = Box::from_raw(ptr as *mut ClientHandle);
         }
-    }
+    }}
 }
 
 // ============================================================================

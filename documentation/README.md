@@ -44,7 +44,7 @@
 ## Version Information
 
 - **Current Version**: 0.1.0-rc.1
-- **Minimum Rust Version**: 1.75
+- **Minimum Rust Version**: 1.85
 - **License**: MIT OR Apache-2.0
 
 ## Getting Help
