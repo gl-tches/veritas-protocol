@@ -384,19 +384,19 @@ impl PersistentIdentityManager {
 
         let key = b"limiter";
 
-        if let Some(bytes) = limiter_tree.get(key).map_err(|e| {
+        match limiter_tree.get(key).map_err(|e| {
             CoreError::Store(veritas_store::StoreError::Database(format!(
                 "Failed to get limiter: {}",
                 e
             )))
-        })? {
+        })? { Some(bytes) => {
             bincode::deserialize(&bytes).map_err(|e| {
                 CoreError::Store(veritas_store::StoreError::Serialization(format!(
                     "Failed to deserialize limiter: {}",
                     e
                 )))
             })
-        } else {
+        } _ => {
             // Create origin fingerprint from hardware attestation
             let attestation = HardwareAttestation::collect().map_err(CoreError::Identity)?;
             let origin = OriginFingerprint::from_hardware(&attestation).map_err(CoreError::Identity)?;
@@ -424,7 +424,7 @@ impl PersistentIdentityManager {
             })?;
 
             Ok(limiter)
-        }
+        }}
     }
 
     /// Save the identity limiter to the database.

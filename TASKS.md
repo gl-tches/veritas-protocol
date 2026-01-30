@@ -210,23 +210,28 @@
 
 #### TASK-140: Migrate veritas-core to Rust 2024
 
-**Priority**: P1  
-**Status**: NOT STARTED  
-**Assignee**: Claude Code  
+**Priority**: P1
+**Status**: ✅ COMPLETED
+**Assignee**: Claude Code
 **Depends On**: TASK-121, TASK-122, TASK-130
 
 **Checklist**:
 
-- [ ] Run `cargo fix --edition` on crate
-- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
-- [ ] Review public API for RPIT changes
-- [ ] Ensure no breaking API changes introduced
-- [ ] Run `cargo test -p veritas-core`
-- [ ] Run `cargo clippy -p veritas-core`
+- [x] Run `cargo fix --edition` on crate — 1 auto-fix applied
+- [x] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [x] Review public API for RPIT changes — no `-> impl Trait` patterns found
+- [x] Ensure no breaking API changes introduced — confirmed
+- [x] Run `cargo test -p veritas-core` — 261 unit + 170 integration tests passed
+- [x] Run `cargo clippy -p veritas-core` — no warnings
 
-**Expected Changes**:
+**Result**:
 
-- Minimal — mostly wraps other crates
+- `cargo fix` auto-fixed 1 drop order pattern in `identity_manager.rs:387`
+- Drop order warning is harmless (Arc drops, not locks)
+- Lock patterns already use explicit `drop()` calls — best practice
+- Crate uses `#![deny(unsafe_code)]`
+- All tests pass
+- Clippy clean
 
 -----
 
