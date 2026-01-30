@@ -176,40 +176,33 @@
 
 #### TASK-130: Migrate veritas-net to Rust 2024
 
-**Priority**: P1  
-**Status**: NOT STARTED  
-**Assignee**: Claude Code  
+**Priority**: P1
+**Status**: ✅ COMPLETED
+**Assignee**: Claude Code
 **Depends On**: TASK-120, TASK-112
 
 **Checklist**:
 
-- [ ] Run `cargo fix --edition` on crate
-- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
-- [ ] **OPPORTUNITY**: Refactor to use async closures where beneficial
-- [ ] Review gossip.rs for async patterns
-- [ ] Review dht.rs for async patterns
-- [ ] Review transport_manager.rs for lock patterns
-- [ ] Check rate_limiter.rs (new file from security fixes)
-- [ ] Run `cargo test -p veritas-net`
-- [ ] Run `cargo clippy -p veritas-net`
+- [x] Run `cargo fix --edition` on crate
+- [x] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [x] **OPPORTUNITY**: Reviewed — no async closure refactoring opportunities found
+- [x] Review gossip.rs for async patterns — 8 lock operations, all safe
+- [x] Review dht.rs for async patterns — 6 lock operations, all safe
+- [x] Review transport_manager.rs for lock patterns — 19 lock operations, all safe
+- [x] Check rate_limiter.rs — no async locks, uses `#![deny(unsafe_code)]`
+- [x] Run `cargo test -p veritas-net` — 44 tests passed
+- [x] Run `cargo clippy -p veritas-net` — clean (3 fixes applied)
 
-**Expected Changes**:
+**Result**:
 
-- **Async closures** — Can simplify many patterns (optional refactor)
-- Lock scoping in connection management
-
-**Refactor Opportunity** (optional):
-
-```rust
-// Before (2021)
-peers.iter().map(|p| {
-    let p = p.clone();
-    async move { send_to(&p).await }
-})
-
-// After (2024) — cleaner
-peers.iter().map(async |p| { send_to(p).await })
-```
+- Fixed clippy warnings:
+  - `bluetooth.rs:214`: `map_or` → `is_none_or`
+  - `dht.rs:221`: manual arithmetic → `saturating_sub`
+  - `transport.rs:215`: clone on Copy → dereference
+- Lock pattern audit: 33 operations reviewed, all safe for Rust 2024
+- Crate uses `#![deny(unsafe_code)]`
+- All 44 unit tests pass
+- Clippy clean
 
 -----
 

@@ -211,7 +211,7 @@ impl BlePeer {
     /// Returns `true` if RSSI >= -70 dBm (good signal).
     /// Returns `true` if RSSI is unknown (optimistic assumption).
     pub fn has_good_signal(&self) -> bool {
-        self.signal_strength.map_or(true, |rssi| rssi >= -70)
+        self.signal_strength.is_none_or(|rssi| rssi >= -70)
     }
 }
 
