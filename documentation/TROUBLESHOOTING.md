@@ -20,7 +20,7 @@ Common issues and solutions for VERITAS.
 **Symptom:**
 ```
 error: package `veritas-core v0.1.0-rc.1` cannot be built because it requires
-rustc 1.75 or newer
+rustc 1.85 or newer
 ```
 
 **Solution:**
@@ -31,7 +31,7 @@ rustup default stable
 
 # Verify version
 rustc --version
-# Should be 1.75.0 or higher
+# Should be 1.85.0 or higher
 ```
 
 ### Missing System Dependencies

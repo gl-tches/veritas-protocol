@@ -36,7 +36,7 @@ Complete installation instructions for all platforms and deployment methods.
 
 | Software | Version | Purpose |
 |----------|---------|---------|
-| **Rust** | 1.75+ | Build toolchain |
+| **Rust** | 1.85+ | Build toolchain |
 | **Git** | 2.x | Source control |
 | **OpenSSL** | 1.1+ | TLS support |
 | **pkg-config** | Any | Build dependency resolution |
@@ -54,10 +54,10 @@ source $HOME/.cargo/env
 
 # Verify installation
 rustc --version
-# Output: rustc 1.75.0 (or higher)
+# Output: rustc 1.85.0 (or higher)
 
 cargo --version
-# Output: cargo 1.75.0 (or higher)
+# Output: cargo 1.85.0 (or higher)
 ```
 
 ### Windows Installation
