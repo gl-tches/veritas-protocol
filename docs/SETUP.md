@@ -32,7 +32,7 @@ Installation, configuration, and running guide for the VERITAS Protocol.
 
 #### Rust Toolchain
 
-VERITAS requires Rust 1.75 or later.
+VERITAS requires Rust 1.85 or later.
 
 ```bash
 # Install Rust via rustup
@@ -40,7 +40,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Verify installation
 rustc --version
-# rustc 1.75.0 or later
+# rustc 1.85.0 or later
 
 # Update if needed
 rustup update stable
@@ -376,7 +376,7 @@ Create a `Dockerfile` in the project root:
 
 ```dockerfile
 # Build stage
-FROM rust:1.75-bookworm as builder
+FROM rust:1.85-bookworm as builder
 
 WORKDIR /app
 

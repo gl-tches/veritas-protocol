@@ -4,7 +4,7 @@ Get up and running with VERITAS in 5 minutes.
 
 ## Prerequisites
 
-- **Rust 1.75+** - Install from [rustup.rs](https://rustup.rs)
+- **Rust 1.85+** - Install from [rustup.rs](https://rustup.rs)
 - **Git** - For cloning the repository
 
 ## Option 1: Run with Docker (Fastest)

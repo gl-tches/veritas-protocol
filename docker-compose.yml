@@ -142,7 +142,7 @@ services:
   # Prometheus for metrics collection
   prometheus:
     profiles: ["monitoring", "dev"]
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.48.0
     container_name: veritas-prometheus
     restart: unless-stopped
 
@@ -164,7 +164,7 @@ services:
   # Grafana for visualization
   grafana:
     profiles: ["monitoring", "dev"]
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.2.0
     container_name: veritas-grafana
     restart: unless-stopped
 
