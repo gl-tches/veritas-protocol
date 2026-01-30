@@ -2,8 +2,8 @@
 name = "veritas-protocol"
 description = "Wire protocol and message formats for VERITAS"
 version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
+edition = "2024"
+rust-version = "1.85"
 license.workspace = true
 repository.workspace = true
 keywords = ["protocol", "messaging", "encryption"]

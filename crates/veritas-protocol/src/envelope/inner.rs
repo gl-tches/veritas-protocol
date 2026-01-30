@@ -392,7 +392,7 @@ impl InnerPayload {
     ///
     /// `true` if the timestamp is valid, `false` otherwise.
     fn is_valid_timestamp(timestamp: u64) -> bool {
-        timestamp >= MIN_VALID_TIMESTAMP && timestamp <= MAX_VALID_TIMESTAMP
+        (MIN_VALID_TIMESTAMP..=MAX_VALID_TIMESTAMP).contains(&timestamp)
     }
 
     /// Validate the message timestamp.

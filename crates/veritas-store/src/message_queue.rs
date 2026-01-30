@@ -194,7 +194,7 @@ impl QueuedMessage {
     /// Check if this message is ready for retry now.
     fn is_ready_for_retry(&self, now: i64) -> bool {
         matches!(self.status, MessageStatus::Pending)
-            && self.next_retry_at.map_or(true, |t| now >= t)
+            && self.next_retry_at.is_none_or(|t| now >= t)
     }
 
     /// Check if this message has expired (older than MESSAGE_TTL_SECS).

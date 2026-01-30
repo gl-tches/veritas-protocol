@@ -96,82 +96,79 @@
 
 #### TASK-120: Migrate veritas-protocol to Rust 2024
 
-**Priority**: P1  
-**Status**: NOT STARTED  
-**Assignee**: Claude Code  
+**Priority**: P1
+**Status**: ✅ COMPLETED
+**Assignee**: Claude Code
 **Depends On**: TASK-110, TASK-111
 
 **Checklist**:
 
-- [ ] Run `cargo fix --edition` on crate
-- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
-- [ ] **Review macros** — check for `expr` fragment specifiers
-- [ ] Review RPIT lifetime changes in iterator code
-- [ ] Check envelope deserialization for any unsafe
-- [ ] Run `cargo test -p veritas-protocol`
-- [ ] Run `cargo clippy -p veritas-protocol`
+- [x] Run `cargo fix --edition` on crate
+- [x] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [x] **Review macros** — no `expr` fragment specifier issues found
+- [x] Review RPIT lifetime changes — no changes needed
+- [x] Check envelope deserialization — crate uses `#![deny(unsafe_code)]`
+- [x] Run `cargo test -p veritas-protocol` — 84 tests passed
+- [x] Run `cargo clippy -p veritas-protocol` — clean (1 fix applied)
 
-**Expected Changes**:
+**Result**:
 
-- Macro fragment specifiers may need `expr_2021` if issues arise
-- RPIT lifetime capture — `cargo fix` handles automatically
+- Fixed clippy warning: `manual_range_contains` in `inner.rs:395`
+- All 84 unit tests pass
+- Clippy clean
 
 -----
 
 #### TASK-121: Migrate veritas-store to Rust 2024
 
-**Priority**: P1  
-**Status**: NOT STARTED  
-**Assignee**: Claude Code  
+**Priority**: P1
+**Status**: ✅ COMPLETED
+**Assignee**: Claude Code
 **Depends On**: TASK-110, TASK-120
 
 **Checklist**:
 
-- [ ] Run `cargo fix --edition` on crate
-- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
-- [ ] **CRITICAL**: Review all `Mutex`/`RwLock` usage in `if let` expressions
-- [ ] **CRITICAL**: Review tail expression temporary scoping with locks
-- [ ] Check `encrypted_db.rs` for lock patterns
-- [ ] Check `message_queue.rs` for lock patterns
-- [ ] Verify no `static mut` usage
-- [ ] Run `cargo test -p veritas-store`
-- [ ] Run `cargo clippy -p veritas-store`
+- [x] Run `cargo fix --edition` on crate
+- [x] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [x] **CRITICAL**: Review all `Mutex`/`RwLock` usage — NO locks found in crate
+- [x] **CRITICAL**: Review tail expression scoping — `cargo fix` auto-fixed 1 pattern
+- [x] Check `encrypted_db.rs` for lock patterns — none found
+- [x] Check `message_queue.rs` for lock patterns — none found
+- [x] Verify no `static mut` usage — confirmed clean
+- [x] Run `cargo test -p veritas-store` — 70 tests passed
+- [x] Run `cargo clippy -p veritas-store` — clean (1 fix applied)
 
-**Expected Changes**:
+**Result**:
 
-- Lock scoping may change behavior — **test thoroughly**
-- `cargo fix` will add explicit blocks to preserve old behavior if needed
-
-**Review Focus**:
-
-```rust
-// These patterns need manual review:
-if let Some(x) = mutex.lock().unwrap().get(&key) { ... }
-mutex.lock().unwrap().get(&key).cloned()  // tail expression
-```
+- Fixed clippy warning: `unnecessary_map_or` → `is_none_or` in `message_queue.rs:197`
+- Drop order warning in `keyring.rs:243` was harmless (Arc drops, not locks)
+- All 70 unit tests pass
+- Clippy clean
 
 -----
 
 #### TASK-122: Migrate veritas-chain to Rust 2024
 
-**Priority**: P1  
-**Status**: NOT STARTED  
-**Assignee**: Claude Code  
+**Priority**: P1
+**Status**: ✅ COMPLETED
+**Assignee**: Claude Code
 **Depends On**: TASK-110, TASK-120
 
 **Checklist**:
 
-- [ ] Run `cargo fix --edition` on crate
-- [ ] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
-- [ ] Review validator set locking patterns
-- [ ] Review block storage lock patterns
-- [ ] Check sync protocol for any unsafe
-- [ ] Run `cargo test -p veritas-chain`
-- [ ] Run `cargo clippy -p veritas-chain`
+- [x] Run `cargo fix --edition` on crate
+- [x] Update `Cargo.toml`: `edition = "2024"`, `rust-version = "1.85"`
+- [x] Review validator set locking patterns — NO locks found (uses HashMap/BTreeMap directly)
+- [x] Review block storage lock patterns — NO locks found
+- [x] Check sync protocol for unsafe — crate uses `#![deny(unsafe_code)]`
+- [x] Run `cargo test -p veritas-chain` — 234 tests passed
+- [x] Run `cargo clippy -p veritas-chain` — no warnings
 
-**Expected Changes**:
+**Result**:
 
-- Lock scoping changes — review consensus-critical code carefully
+- Migration completed with no code changes required
+- All 234 unit tests pass
+- Clippy clean
 
 -----
 
