@@ -25,6 +25,15 @@ RUN useradd --create-home --uid 1000 builder
 USER builder
 WORKDIR /home/builder
 
+# =============================================================================
+# OOM Prevention Settings for CI environments (GitHub Actions has ~7GB RAM)
+# =============================================================================
+# Limit parallel codegen units to reduce peak memory
+ENV CARGO_BUILD_JOBS=2
+ENV CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
+# Use less memory-intensive linker settings
+ENV RUSTFLAGS="-C link-arg=-Wl,--no-keep-memory"
+
 # Copy manifests first for better layer caching
 COPY --chown=builder:builder Cargo.toml Cargo.lock ./
 
