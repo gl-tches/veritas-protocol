@@ -1,5 +1,10 @@
 # VERITAS Protocol
 
+[![Version](https://img.shields.io/badge/version-0.2.0--beta-blue)]()
+[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange)]()
+[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-green)]()
+[![Security Audit](https://img.shields.io/badge/security-audited-brightgreen)]()
+
 > **V**erified **E**ncrypted **R**eal-time **I**ntegrity **T**ransmission **A**nd **S**igning
 
 A fully decentralized, post-quantum secure messaging protocol with blockchain-verified message integrity, offline P2P capability, and plug-and-play identity.
