@@ -1074,8 +1074,8 @@ mod tests {
         assert_eq!(MAX_VALID_TIMESTAMP, 4102444800); // 2100-01-01
 
         // Verify ordering
-        assert!(MIN_VALID_TIMESTAMP < MAX_VALID_TIMESTAMP);
-        assert!(MAX_CLOCK_SKEW_SECS < MESSAGE_TTL_SECS);
+        const { assert!(MIN_VALID_TIMESTAMP < MAX_VALID_TIMESTAMP) }
+        const { assert!(MAX_CLOCK_SKEW_SECS < MESSAGE_TTL_SECS) }
     }
 
     #[test]

@@ -20,7 +20,7 @@ VERITAS is a Rust library that enables secure, verifiable messaging without cent
 
 |Layer               |Technology                |
 |--------------------|--------------------------|
-|Language            |Rust 2021 (MSRV 1.75+)    |
+|Language            |Rust 2024 (MSRV 1.85)     |
 |Key Encapsulation   |ML-KEM-768 (NIST FIPS 203)|
 |Signatures          |ML-DSA-65 (NIST FIPS 204) |
 |Symmetric Encryption|ChaCha20-Poly1305         |

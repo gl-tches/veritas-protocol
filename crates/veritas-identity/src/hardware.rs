@@ -142,7 +142,7 @@ impl HardwareAttestation {
 
         #[cfg(any(target_os = "linux", target_os = "windows"))]
         {
-            Self::collect_tpm2()
+            Self::_collect_tpm2()
         }
 
         #[cfg(not(any(
@@ -228,7 +228,7 @@ impl HardwareAttestation {
 
     /// Collect attestation from TPM 2.0.
     #[cfg(any(target_os = "linux", target_os = "windows"))]
-    fn collect_tpm2() -> Result<Self> {
+    fn _collect_tpm2() -> Result<Self> {
         // TODO: Implement actual TPM 2.0 attestation
         // This requires:
         // 1. Connect to TPM via TCTI/TBS
@@ -513,7 +513,7 @@ mod tests {
         let debug = format!("{:?}", attestation);
         // Should not expose sensitive data
         assert!(debug.contains("[REDACTED]"));
-        assert!(!debug.contains(&hex::encode(&attestation.nonce)));
+        assert!(!debug.contains(&hex::encode(attestation.nonce)));
     }
 
     #[test]

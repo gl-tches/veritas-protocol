@@ -7,8 +7,6 @@
 //! - Key generation produces unique identities
 //! - Serialization roundtrips work correctly
 
-#![cfg(test)]
-
 use proptest::prelude::*;
 
 use crate::{IdentityHash, IdentityKeyPair, Username, MAX_USERNAME_LEN, MIN_USERNAME_LEN};

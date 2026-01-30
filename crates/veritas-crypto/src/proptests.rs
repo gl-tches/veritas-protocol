@@ -8,8 +8,6 @@
 //! - Consistency properties (same input produces same output)
 //! - Error handling properties (invalid inputs are rejected)
 
-#![cfg(test)]
-
 use proptest::prelude::*;
 
 use crate::{

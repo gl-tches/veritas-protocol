@@ -39,7 +39,7 @@ use veritas_store::{MessageQueue, MessageStatus};
 struct TestNode {
     identity: IdentityKeyPair,
     inbox: Vec<MinimalEnvelope>,
-    relay: RelayManager,
+    _relay: RelayManager,
 }
 
 impl TestNode {
@@ -47,7 +47,7 @@ impl TestNode {
         Self {
             identity: IdentityKeyPair::generate(),
             inbox: Vec::new(),
-            relay: RelayManager::with_defaults(),
+            _relay: RelayManager::with_defaults(),
         }
     }
 
@@ -486,9 +486,7 @@ mod chunking {
     #[test]
     fn test_unicode_chunking() {
         // Unicode characters - each emoji is multiple bytes but 1 character
-        let emoji_message: String = std::iter::repeat("\u{1F600}") // grinning face
-            .take(MAX_MESSAGE_CHARS)
-            .collect();
+        let emoji_message: String = "\u{1F600}".repeat(MAX_MESSAGE_CHARS); // grinning face
 
         let chunks = split_into_chunks(&emoji_message).unwrap();
         assert_eq!(chunks.len(), 1);

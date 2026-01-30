@@ -1174,32 +1174,32 @@ mod tests {
         // retry 0: 30s
         msg.retry_count = 0;
         let delay0 = msg.calculate_next_retry() - Utc::now().timestamp();
-        assert!(delay0 >= 29 && delay0 <= 31);
+        assert!((29..=31).contains(&delay0));
 
         // retry 1: 60s
         msg.retry_count = 1;
         let delay1 = msg.calculate_next_retry() - Utc::now().timestamp();
-        assert!(delay1 >= 59 && delay1 <= 61);
+        assert!((59..=61).contains(&delay1));
 
         // retry 2: 120s
         msg.retry_count = 2;
         let delay2 = msg.calculate_next_retry() - Utc::now().timestamp();
-        assert!(delay2 >= 119 && delay2 <= 121);
+        assert!((119..=121).contains(&delay2));
 
         // retry 3: 240s
         msg.retry_count = 3;
         let delay3 = msg.calculate_next_retry() - Utc::now().timestamp();
-        assert!(delay3 >= 239 && delay3 <= 241);
+        assert!((239..=241).contains(&delay3));
 
         // retry 4: 480s (capped)
         msg.retry_count = 4;
         let delay4 = msg.calculate_next_retry() - Utc::now().timestamp();
-        assert!(delay4 >= 479 && delay4 <= 481);
+        assert!((479..=481).contains(&delay4));
 
         // retry 5+: still 480s (capped at MAX_RETRY_DELAY_SECS)
         msg.retry_count = 10;
         let delay_max = msg.calculate_next_retry() - Utc::now().timestamp();
-        assert!(delay_max >= 479 && delay_max <= 481);
+        assert!((479..=481).contains(&delay_max));
     }
 
     // =========================================================================
@@ -1396,7 +1396,7 @@ mod tests {
 
                 // Look for the distinctive byte pattern
                 for window in raw_bytes.windows(8) {
-                    if window == &[0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE] {
+                    if window == [0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE] {
                         panic!(
                             "SECURITY FAILURE: Recipient identity visible in raw storage at {:?} (VERITAS-2026-0005)",
                             path

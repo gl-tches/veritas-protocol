@@ -506,7 +506,7 @@ mod tests {
 
         // Should have ~10 tokens now
         let tokens = bucket.token_count();
-        assert!(tokens >= 8.0 && tokens <= 12.0, "Expected ~10 tokens, got {}", tokens);
+        assert!((8.0..=12.0).contains(&tokens), "Expected ~10 tokens, got {}", tokens);
     }
 
     #[test]
