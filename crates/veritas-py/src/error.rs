@@ -31,7 +31,7 @@ impl IntoPyErr for CoreError {
 }
 
 /// Register the error type with Python.
-pub fn register_error(py: Python<'_>, m: &PyModule) -> PyResult<()> {
-    m.add("VeritasError", py.get_type::<VeritasError>())?;
+pub fn register_error(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("VeritasError", m.py().get_type::<VeritasError>())?;
     Ok(())
 }

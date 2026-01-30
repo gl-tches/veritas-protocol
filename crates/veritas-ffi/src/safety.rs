@@ -47,7 +47,7 @@ use crate::ErrorCode;
 ///     // Use safety_number
 /// }
 /// ```
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn veritas_safety_number_compute(
     our_keys: *const u8,
     our_len: usize,
@@ -55,7 +55,7 @@ pub unsafe extern "C" fn veritas_safety_number_compute(
     their_len: usize,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode {
+) -> ErrorCode { unsafe {
     // Check null pointers
     if our_keys.is_null() || their_keys.is_null() || out_buf.is_null() {
         return ErrorCode::NullPointer;
@@ -70,7 +70,7 @@ pub unsafe extern "C" fn veritas_safety_number_compute(
         Ok(code) => code,
         Err(_) => ErrorCode::Unknown,
     }
-}
+}}
 
 unsafe fn safety_number_compute_impl(
     our_keys: *const u8,
@@ -79,7 +79,7 @@ unsafe fn safety_number_compute_impl(
     their_len: usize,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode {
+) -> ErrorCode { unsafe {
     // Check buffer size
     if out_len < 32 {
         return FfiError::BufferTooSmall {
@@ -116,7 +116,7 @@ unsafe fn safety_number_compute_impl(
     std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, 32);
 
     ErrorCode::Success
-}
+}}
 
 // ============================================================================
 // Safety Number Formatting
@@ -156,13 +156,13 @@ unsafe fn safety_number_compute_impl(
 ///     printf("Safety Number: %s\n", numeric);
 /// }
 /// ```
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn veritas_safety_number_to_numeric(
     raw: *const u8,
     raw_len: usize,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode {
+) -> ErrorCode { unsafe {
     // Check null pointers
     if raw.is_null() || out_buf.is_null() {
         return ErrorCode::NullPointer;
@@ -177,14 +177,14 @@ pub unsafe extern "C" fn veritas_safety_number_to_numeric(
         Ok(code) => code,
         Err(_) => ErrorCode::Unknown,
     }
-}
+}}
 
 unsafe fn safety_number_to_numeric_impl(
     raw: *const u8,
     raw_len: usize,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode {
+) -> ErrorCode { unsafe {
     // Verify raw length
     if raw_len != 32 {
         return FfiError::InvalidArgument(format!(
@@ -219,7 +219,7 @@ unsafe fn safety_number_to_numeric_impl(
     *out_buf.add(str_bytes.len()) = 0; // Null terminator
 
     ErrorCode::Success
-}
+}}
 
 /// Format safety number bytes as numeric string.
 ///
@@ -277,13 +277,13 @@ fn format_safety_number_numeric(bytes: &[u8; 32]) -> String {
 ///     printf("QR Data: %s\n", qr);
 /// }
 /// ```
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn veritas_safety_number_to_qr(
     raw: *const u8,
     raw_len: usize,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode {
+) -> ErrorCode { unsafe {
     // Check null pointers
     if raw.is_null() || out_buf.is_null() {
         return ErrorCode::NullPointer;
@@ -298,14 +298,14 @@ pub unsafe extern "C" fn veritas_safety_number_to_qr(
         Ok(code) => code,
         Err(_) => ErrorCode::Unknown,
     }
-}
+}}
 
 unsafe fn safety_number_to_qr_impl(
     raw: *const u8,
     raw_len: usize,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode {
+) -> ErrorCode { unsafe {
     // Verify raw length
     if raw_len != 32 {
         return FfiError::InvalidArgument(format!(
@@ -338,4 +338,4 @@ unsafe fn safety_number_to_qr_impl(
     *out_buf.add(hex_bytes.len()) = 0; // Null terminator
 
     ErrorCode::Success
-}
+}}

@@ -38,9 +38,9 @@ fn version() -> &'static str {
 ///     >>> client.unlock(b"password")
 ///     >>> identity = client.create_identity("My Identity")
 #[pymodule]
-fn veritas(py: Python<'_>, m: &PyModule) -> PyResult<()> {
+fn veritas(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register error type
-    register_error(py, m)?;
+    register_error(m)?;
 
     // Register classes
     m.add_class::<VeritasClient>()?;

@@ -84,7 +84,7 @@ js-sys = "0.3"
 web-sys = { version = "0.3", features = ["console", "Window", "Storage"] }
 
 # Python
-pyo3 = { version = "0.20", features = ["extension-module"] }
+pyo3 = { version = "0.23", features = ["extension-module"] }
 
 # Internal crates
 veritas-crypto = { path = "crates/veritas-crypto" }

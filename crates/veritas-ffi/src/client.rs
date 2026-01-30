@@ -37,8 +37,8 @@ use crate::ErrorCode;
 /// // Create persistent client
 /// VeritasHandle* client = veritas_client_create("/path/to/data");
 /// ```
-#[no_mangle]
-pub unsafe extern "C" fn veritas_client_create(config_path: *const libc::c_char) -> *mut VeritasHandle {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn veritas_client_create(config_path: *const libc::c_char) -> *mut VeritasHandle { unsafe {
     // Catch panics at FFI boundary
     let result = std::panic::catch_unwind(|| {
         create_client_impl(config_path)
@@ -48,9 +48,9 @@ pub unsafe extern "C" fn veritas_client_create(config_path: *const libc::c_char)
         Ok(handle) => handle,
         Err(_) => std::ptr::null_mut(),
     }
-}
+}}
 
-unsafe fn create_client_impl(config_path: *const libc::c_char) -> *mut VeritasHandle {
+unsafe fn create_client_impl(config_path: *const libc::c_char) -> *mut VeritasHandle { unsafe {
     // Create runtime for async operations
     let runtime = match tokio::runtime::Runtime::new() {
         Ok(rt) => rt,
@@ -76,7 +76,7 @@ unsafe fn create_client_impl(config_path: *const libc::c_char) -> *mut VeritasHa
     };
 
     ClientHandle::new(client)
-}
+}}
 
 // ============================================================================
 // Client Unlock/Lock
@@ -110,12 +110,12 @@ unsafe fn create_client_impl(config_path: *const libc::c_char) -> *mut VeritasHa
 ///     // Handle error
 /// }
 /// ```
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn veritas_client_unlock(
     handle: *mut VeritasHandle,
     password: *const u8,
     password_len: usize,
-) -> ErrorCode {
+) -> ErrorCode { unsafe {
     // Check null pointers first
     if handle.is_null() {
         return ErrorCode::NullPointer;
@@ -133,13 +133,13 @@ pub unsafe extern "C" fn veritas_client_unlock(
         Ok(code) => code,
         Err(_) => ErrorCode::Unknown,
     }
-}
+}}
 
 unsafe fn unlock_impl(
     handle: *mut VeritasHandle,
     password: *const u8,
     password_len: usize,
-) -> ErrorCode {
+) -> ErrorCode { unsafe {
     let client_handle = match ClientHandle::from_ptr(handle) {
         Some(h) => h,
         None => return ErrorCode::NullPointer,
@@ -163,7 +163,7 @@ unsafe fn unlock_impl(
         Ok(_) => ErrorCode::Success,
         Err(e) => FfiError::from(e).into(),
     }
-}
+}}
 
 /// Lock the client and zeroize sensitive data.
 ///
@@ -186,8 +186,8 @@ unsafe fn unlock_impl(
 /// ```c
 /// veritas_client_lock(client);
 /// ```
-#[no_mangle]
-pub unsafe extern "C" fn veritas_client_lock(handle: *mut VeritasHandle) -> ErrorCode {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn veritas_client_lock(handle: *mut VeritasHandle) -> ErrorCode { unsafe {
     if handle.is_null() {
         return ErrorCode::NullPointer;
     }
@@ -200,9 +200,9 @@ pub unsafe extern "C" fn veritas_client_lock(handle: *mut VeritasHandle) -> Erro
         Ok(code) => code,
         Err(_) => ErrorCode::Unknown,
     }
-}
+}}
 
-unsafe fn lock_impl(handle: *mut VeritasHandle) -> ErrorCode {
+unsafe fn lock_impl(handle: *mut VeritasHandle) -> ErrorCode { unsafe {
     let client_handle = match ClientHandle::from_ptr(handle) {
         Some(h) => h,
         None => return ErrorCode::NullPointer,
@@ -217,7 +217,7 @@ unsafe fn lock_impl(handle: *mut VeritasHandle) -> ErrorCode {
         Ok(_) => ErrorCode::Success,
         Err(e) => FfiError::from(e).into(),
     }
-}
+}}
 
 // ============================================================================
 // Client Shutdown
@@ -246,8 +246,8 @@ unsafe fn lock_impl(handle: *mut VeritasHandle) -> ErrorCode {
 /// veritas_client_shutdown(client);
 /// veritas_client_free(client);
 /// ```
-#[no_mangle]
-pub unsafe extern "C" fn veritas_client_shutdown(handle: *mut VeritasHandle) -> ErrorCode {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn veritas_client_shutdown(handle: *mut VeritasHandle) -> ErrorCode { unsafe {
     if handle.is_null() {
         return ErrorCode::NullPointer;
     }
@@ -260,9 +260,9 @@ pub unsafe extern "C" fn veritas_client_shutdown(handle: *mut VeritasHandle) -> 
         Ok(code) => code,
         Err(_) => ErrorCode::Unknown,
     }
-}
+}}
 
-unsafe fn shutdown_impl(handle: *mut VeritasHandle) -> ErrorCode {
+unsafe fn shutdown_impl(handle: *mut VeritasHandle) -> ErrorCode { unsafe {
     let client_handle = match ClientHandle::from_ptr(handle) {
         Some(h) => h,
         None => return ErrorCode::NullPointer,
@@ -277,7 +277,7 @@ unsafe fn shutdown_impl(handle: *mut VeritasHandle) -> ErrorCode {
         Ok(_) => ErrorCode::Success,
         Err(e) => FfiError::from(e).into(),
     }
-}
+}}
 
 // ============================================================================
 // Client Free
@@ -302,12 +302,12 @@ unsafe fn shutdown_impl(handle: *mut VeritasHandle) -> ErrorCode {
 /// veritas_client_free(client);
 /// client = NULL;
 /// ```
-#[no_mangle]
-pub unsafe extern "C" fn veritas_client_free(handle: *mut VeritasHandle) {
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn veritas_client_free(handle: *mut VeritasHandle) { unsafe {
     let _ = std::panic::catch_unwind(|| {
         ClientHandle::free(handle);
     });
-}
+}}
 
 // ============================================================================
 // Version
@@ -326,7 +326,7 @@ pub unsafe extern "C" fn veritas_client_free(handle: *mut VeritasHandle) {
 /// const char* version = veritas_version();
 /// printf("VERITAS version: %s\n", version);
 /// ```
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn veritas_version() -> *const libc::c_char {
     concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr() as *const libc::c_char
 }
