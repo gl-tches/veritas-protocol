@@ -62,7 +62,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+          # Build amd64 only - arm64 cross-compile causes OOM on GitHub runners
+          # Add arm64 back once you have a self-hosted runner or use native arm64 runners
+          platforms: linux/amd64
 
       - name: Generate artifact attestation
         if: github.event_name != 'pull_request'
