@@ -19,7 +19,7 @@ Practical code examples for using the VERITAS API.
 
 ```toml
 [dependencies]
-veritas-core = "0.1.0-rc.1"
+veritas-core = "0.2.1-beta"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 ```

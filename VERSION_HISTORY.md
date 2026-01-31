@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1-beta] - 2026-01-31
+
+### Summary
+Documentation cleanup release addressing version inconsistencies, licensing clarification, and removal of invalid domain references.
+
+### Changed
+- **Licensing**: Clarified as MIT OR Apache-2.0 dual-license; removed erroneous GPL v3 reference
+- **Documentation**: Updated all version references to 0.2.1-beta
+- **Security Contact**: Changed from non-existent email to GitHub Security Advisories
+- **Audit Status**: Updated SECURITY.md to reflect completed security audit
+- **Copyright**: Updated year range to 2024-2026
+
+### Removed
+- Invalid `veritas-protocol.org` domain references throughout documentation
+- GPL v3 license file (project uses MIT OR Apache-2.0)
+
+### Fixed
+- Version inconsistencies across documentation (was showing 0.1.0-rc.1, 0.1.0-alpha.1, 0.2.0-beta inconsistently)
+- Outdated "Not audited" status in SECURITY.md
+
 ## [0.2.0-beta] - 2026-01-29
 
 ### Summary

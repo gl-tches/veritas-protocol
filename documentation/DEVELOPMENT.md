@@ -463,8 +463,8 @@ cargo build --release
 
 ```bash
 # Tag the release
-git tag -a v0.1.0-rc.1 -m "Release v0.1.0-rc.1"
-git push origin v0.1.0-rc.1
+git tag -a v0.2.1-beta -m "Release v0.2.1-beta"
+git push origin v0.2.1-beta
 
 # Build release artifacts
 cargo build --release

@@ -1,6 +1,6 @@
 # VERITAS Protocol
 
-[![Version](https://img.shields.io/badge/version-0.2.0--beta-blue)]()
+[![Version](https://img.shields.io/badge/version-0.2.1--beta-blue)]()
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange)]()
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-green)]()
 [![Security Audit](https://img.shields.io/badge/security-audited-brightgreen)]()
