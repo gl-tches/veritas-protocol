@@ -331,7 +331,7 @@ nssm start VeritasNode
 ```bash
 # Version check
 veritas-node --version
-# Output: veritas-node 0.1.0-rc.1
+# Output: veritas-node 0.2.1-beta
 
 # Help
 veritas-node --help
