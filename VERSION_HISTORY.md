@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-beta] - 2026-02-01
+
+### Summary
+Version 0.3.0-beta marks a significant milestone with the completion of the security audit compliance process and continued progress on the Rust 2024 edition migration.
+
+### Highlights
+- **Security Audit Compliance**: All 90 vulnerabilities identified in SECURITY_AUDIT_REPORT.md have been addressed
+- **Rust 2024 Edition Migration**: Migration work is in progress (see TASKS.md for detailed status)
+- **Documentation Updates**: Version references updated across all documentation to reflect v0.3.0-beta
+
+### Changed
+- Updated version badge in README.md to 0.3.0-beta
+- Updated VERSION_HISTORY.md with v0.3.0-beta release notes
+
+### Maturity Status
+- **Previous**: v0.2.1-beta (documentation cleanup)
+- **Current**: v0.3.0-beta (security audit compliance complete, Rust 2024 migration in progress)
+- **Next milestone**: v1.0.0 (stable release after production testing and Rust 2024 migration completion)
+
 ## [0.2.1-beta] - 2026-01-31
 
 ### Summary
