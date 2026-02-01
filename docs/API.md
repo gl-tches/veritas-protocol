@@ -19,6 +19,15 @@ Complete API reference for the VERITAS Protocol library.
 - [FFI Bindings](#ffi-bindings)
 - [WASM Bindings](#wasm-bindings)
 - [Python Bindings](#python-bindings)
+- [Security APIs (v0.3.0-beta)](#security-apis-v030-beta)
+  - [Hardware Attestation API](#hardware-attestation-api)
+  - [Rate Limiting API](#rate-limiting-api)
+  - [Subnet Limiting API](#subnet-limiting-api)
+  - [Interaction Proofs API](#interaction-proofs-api)
+  - [Trusted Time API](#trusted-time-api)
+  - [Block Signature API](#block-signature-api)
+  - [Username Registration API](#username-registration-api)
+- [Protocol Limits Reference](#protocol-limits-reference)
 
 ---
 
@@ -833,6 +842,703 @@ try:
 except VeritasError as e:
     print(f"Error: {e}")
 ```
+
+---
+
+## Security APIs (v0.3.0-beta)
+
+The following APIs were added in v0.3.0-beta to address security vulnerabilities identified in the security audit.
+
+---
+
+### Hardware Attestation API
+
+**Module**: `veritas-identity::hardware`
+
+Hardware attestation provides cryptographic proof that operations originate from genuine secure hardware, preventing Sybil attacks via unlimited identity creation.
+
+#### Platform Support
+
+| Platform | Attestation Type |
+|----------|------------------|
+| Linux/Windows | TPM 2.0 |
+| macOS/iOS | Secure Enclave |
+| Android | Hardware-backed Keystore |
+
+#### HardwareAttestation
+
+```rust
+use veritas_identity::hardware::{HardwareAttestation, AttestationPlatform};
+
+// Collect attestation from secure hardware (platform-specific)
+let attestation = HardwareAttestation::collect()?;
+
+// Verify the attestation is valid
+attestation.verify()?;
+
+// Check attestation properties
+if attestation.is_strong_binding() {
+    println!("Platform: {:?}", attestation.platform());
+    println!("Timestamp: {}", attestation.timestamp());
+}
+
+// Get deterministic fingerprint for identity limiting
+let fingerprint = attestation.fingerprint();
+```
+
+#### OriginFingerprint
+
+```rust
+use veritas_identity::limits::OriginFingerprint;
+use veritas_identity::hardware::HardwareAttestation;
+
+// Create a hardware-bound origin fingerprint (PRODUCTION)
+let attestation = HardwareAttestation::collect()?;
+let origin = OriginFingerprint::from_hardware(&attestation)?;
+
+// The same hardware always produces the same fingerprint
+// This limits each device to MAX_IDENTITIES_PER_ORIGIN (3) identities
+```
+
+#### AttestationPlatform
+
+| Variant | Strong Binding | Description |
+|---------|----------------|-------------|
+| `Tpm2` | Yes | TPM 2.0 attestation |
+| `SecureEnclave` | Yes | Apple Secure Enclave |
+| `AndroidKeystore` | Yes | Android hardware keystore |
+| `GenericHardware` | No | Fallback (rejected in production) |
+
+#### Error Types
+
+| Error | Description |
+|-------|-------------|
+| `IdentityError::HardwareNotAvailable` | No supported secure hardware detected |
+| `IdentityError::HardwareAttestationFailed` | Attestation collection or verification failed |
+
+#### Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `ATTESTATION_MAX_AGE_SECS` | 300 | Attestation staleness threshold (5 min) |
+| `MIN_HARDWARE_ID_LEN` | 16 | Minimum hardware ID length |
+| `MAX_HARDWARE_ID_LEN` | 256 | Maximum hardware ID length |
+| `MAX_ATTESTATION_SIGNATURE_LEN` | 512 | Maximum signature length |
+
+#### Security Considerations
+
+- **Production Requirement**: `OriginFingerprint::from_hardware()` is the ONLY way to create fingerprints in production. The `generate()` method is only available in tests.
+- **Replay Prevention**: Attestations include timestamps and nonces to prevent replay attacks.
+- **Platform Verification**: In production, only strong binding platforms (TPM, Secure Enclave, Android Keystore) are accepted.
+
+---
+
+### Rate Limiting API
+
+**Module**: `veritas-net::rate_limiter`
+
+Rate limiting prevents gossip protocol flooding attacks that could exhaust network resources.
+
+#### RateLimiter
+
+```rust
+use veritas_net::rate_limiter::{RateLimiter, RateLimitConfig, RateLimitResult};
+use libp2p::PeerId;
+
+// Create with default configuration
+let mut limiter = RateLimiter::with_defaults();
+
+// Or with custom configuration
+let config = RateLimitConfig::new()
+    .with_per_peer_rate(10)      // 10 requests/second per peer
+    .with_global_rate(1000)       // 1000 requests/second globally
+    .with_burst_multiplier(3)     // Allow 3x burst
+    .with_violations_before_ban(5)
+    .with_ban_duration_secs(300);
+let mut limiter = RateLimiter::new(config);
+
+// Check if a request is allowed
+let peer_id: PeerId = /* ... */;
+if limiter.check(&peer_id) {
+    // Process the request
+    process_announcement(&peer_id);
+} else {
+    // Rate limit exceeded - record violation
+    if limiter.record_violation(&peer_id) {
+        println!("Peer {} has been banned", peer_id);
+    }
+}
+```
+
+#### Detailed Rate Limit Checking
+
+```rust
+use veritas_net::rate_limiter::RateLimitResult;
+
+match limiter.check_detailed(&peer_id) {
+    RateLimitResult::Allowed => {
+        // Process request
+    }
+    RateLimitResult::Banned => {
+        // Peer is banned, reject silently
+    }
+    RateLimitResult::PeerLimitExceeded => {
+        // This specific peer is rate limited
+        limiter.record_violation(&peer_id);
+    }
+    RateLimitResult::GlobalLimitExceeded => {
+        // System-wide limit reached, don't penalize peer
+    }
+}
+```
+
+#### Ban Management
+
+```rust
+// Manually ban a peer
+limiter.ban_peer(&peer_id);
+
+// Check ban status
+if limiter.is_banned(&peer_id) {
+    println!("Peer is banned");
+}
+
+// Unban a peer
+limiter.unban_peer(&peer_id);
+
+// Get all banned peers
+let banned: Vec<PeerId> = limiter.banned_peers();
+println!("Banned peer count: {}", limiter.banned_peer_count());
+
+// Get violation count for a peer
+let violations = limiter.violation_count(&peer_id);
+```
+
+#### RateLimitConfig Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `per_peer_rate` | 10 | Max requests per peer per second |
+| `global_rate` | 1000 | Max requests globally per second |
+| `burst_multiplier` | 3 | Burst capacity multiplier |
+| `violations_before_ban` | 5 | Violations before automatic ban |
+| `ban_duration_secs` | 300 | Ban duration (5 minutes) |
+
+#### Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `DEFAULT_PER_PEER_RATE` | 10 | Default per-peer rate |
+| `DEFAULT_GLOBAL_RATE` | 1000 | Default global rate |
+| `DEFAULT_BURST_MULTIPLIER` | 3 | Default burst multiplier |
+| `DEFAULT_VIOLATIONS_BEFORE_BAN` | 5 | Default violation threshold |
+| `DEFAULT_BAN_DURATION_SECS` | 300 | Default ban duration |
+
+---
+
+### Subnet Limiting API
+
+**Module**: `veritas-net::subnet_limiter`
+
+Subnet limiting enforces DHT routing table diversity to prevent eclipse attacks where an attacker controls all peers used for DHT queries.
+
+#### SubnetLimiter
+
+```rust
+use veritas_net::subnet_limiter::{SubnetLimiter, SubnetLimiterConfig, PeerAcceptResult};
+use libp2p::{PeerId, Multiaddr};
+
+// Create with default configuration
+let mut limiter = SubnetLimiter::new();
+
+// Or with custom configuration
+let config = SubnetLimiterConfig {
+    max_peers_per_subnet: 2,
+    allow_unknown_subnets: true,
+    max_unknown_subnet_peers: 5,
+    min_acceptance_reputation: -100,
+    prefer_higher_reputation: true,
+};
+let mut limiter = SubnetLimiter::with_config(config);
+
+// Attempt to add a peer
+let peer_id: PeerId = /* ... */;
+let addr: Multiaddr = "/ip4/192.168.1.100/tcp/9000".parse()?;
+
+match limiter.try_add_peer(peer_id, &addr) {
+    PeerAcceptResult::Accepted => {
+        println!("Peer accepted");
+    }
+    PeerAcceptResult::RejectedSubnetLimit { subnet, current_count } => {
+        println!("Subnet {} at capacity ({} peers)", subnet, current_count);
+    }
+    PeerAcceptResult::RejectedLowReputation { reputation } => {
+        println!("Peer reputation too low: {}", reputation);
+    }
+    PeerAcceptResult::ReplacedLowerReputation { replaced_peer } => {
+        println!("Replaced peer {} with lower reputation", replaced_peer);
+    }
+    PeerAcceptResult::AlreadyPresent => {
+        println!("Peer already in routing table");
+    }
+}
+```
+
+#### Read-Only Checks
+
+```rust
+// Check without modifying state
+if limiter.can_accept_peer(&peer_id, &addr) {
+    // Peer would be accepted
+}
+
+// Get peer count for a subnet
+let subnet_key = SubnetKey::from_multiaddr(&addr);
+let count = limiter.subnet_peer_count(&subnet_key);
+```
+
+#### Reputation Tracking
+
+```rust
+// Record successful DHT operation
+limiter.record_success(&peer_id);
+
+// Record failed DHT operation
+limiter.record_failure(&peer_id);
+
+// Record suspicious behavior
+limiter.record_suspicious(&peer_id, "invalid response format");
+
+// Check reputation
+if let Some(rep) = limiter.get_reputation(&peer_id) {
+    println!("Reputation: {}", rep);
+}
+
+// Check if peer is trusted
+if limiter.is_trusted(&peer_id) {
+    // Use peer for sensitive operations
+}
+```
+
+#### Diverse Peer Selection
+
+```rust
+// Select diverse peers for DHT queries (from different subnets)
+let peers = limiter.select_diverse_peers(5);
+for peer in peers {
+    query_dht(&peer);
+}
+```
+
+#### Statistics
+
+```rust
+let stats = limiter.stats();
+println!("Peers accepted: {}", stats.peers_accepted);
+println!("Rejected (subnet): {}", stats.peers_rejected_subnet);
+println!("Rejected (reputation): {}", stats.peers_rejected_reputation);
+println!("Total peers: {}", limiter.total_peer_count());
+println!("Unique subnets: {}", limiter.subnet_count());
+```
+
+#### Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `MAX_PEERS_PER_SUBNET` | 2 | Max peers per /24 (IPv4) or /48 (IPv6) |
+| `SUBNET_MASK_V4` | 24 | IPv4 subnet mask bits |
+| `SUBNET_MASK_V6` | 48 | IPv6 subnet mask bits |
+| `MIN_TRUSTED_REPUTATION` | 10 | Reputation threshold for trusted peers |
+| `REPUTATION_GAIN_SUCCESS` | 1 | Points gained per success |
+| `REPUTATION_LOSS_FAILURE` | 5 | Points lost per failure |
+| `REPUTATION_LOSS_SUSPICIOUS` | 20 | Points lost for suspicious behavior |
+
+---
+
+### Interaction Proofs API
+
+**Module**: `veritas-reputation::proof`
+
+Interaction proofs provide cryptographic evidence that interactions occurred, preventing unauthorized reputation farming.
+
+#### InteractionProof
+
+```rust
+use veritas_reputation::proof::{
+    InteractionProof, InteractionType, Signature, generate_nonce
+};
+
+// Generate a unique nonce for replay protection
+let nonce = generate_nonce();
+
+// Create signatures (implementation depends on key type)
+let from_signature = Signature::from_bytes(sign(&payload, &from_key))?;
+let to_signature = Signature::from_bytes(sign(&payload, &to_key))?;
+
+// Create an interaction proof
+let proof = InteractionProof::new(
+    from_identity,           // Initiating party
+    to_identity,             // Receiving party
+    InteractionType::MessageDelivery,
+    timestamp,
+    nonce,
+    from_signature,
+    Some(to_signature),      // Required for most interaction types
+)?;
+
+// Verify the proof
+proof.verify(|identity, message, signature| {
+    // Your signature verification logic
+    verify_signature(identity, message, signature)
+})?;
+
+// Validate timestamp
+proof.validate_timestamp(current_time)?;
+```
+
+#### InteractionType
+
+| Type | Base Gain | Counter-Sig Required | Description |
+|------|-----------|---------------------|-------------|
+| `MessageRelay` | 3 | Yes | Relayed a message |
+| `MessageStorage` | 5 | Yes | Stored for offline delivery |
+| `MessageDelivery` | 5 | Yes | Delivered to recipient |
+| `DhtParticipation` | 2 | Yes | DHT operations |
+| `BlockValidation` | 10 | No | Validated a block |
+
+#### Using Proofs with ReputationManager
+
+```rust
+use veritas_reputation::manager::ReputationManager;
+
+// Proofs are REQUIRED for reputation changes
+let result = manager.record_positive_interaction(
+    from_identity,
+    to_identity,
+    &proof,  // Must provide valid proof
+)?;
+
+println!("New reputation score: {}", result);
+```
+
+#### Replay Protection
+
+```rust
+// Each nonce can only be used once
+let nonce = proof.nonce();
+
+// Track used nonces to prevent replay
+if used_nonces.contains(nonce) {
+    return Err(ReputationError::NonceAlreadyUsed);
+}
+used_nonces.insert(*nonce);
+```
+
+#### Error Types
+
+| Error | Description |
+|-------|-------------|
+| `ReputationError::SelfInteractionNotAllowed` | from == to |
+| `ReputationError::MissingCounterSignature` | Required counter-sig not provided |
+| `ReputationError::InvalidSignature` | Signature verification failed |
+| `ReputationError::InvalidProof` | Timestamp validation failed |
+| `ReputationError::NonceAlreadyUsed` | Replay attack detected |
+
+#### Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `MAX_CLOCK_SKEW_SECS` | 300 | Allowed clock skew (5 min) |
+| `MAX_PROOF_AGE_SECS` | 86400 | Max proof age (24 hours) |
+| `NONCE_SIZE` | 32 | Nonce size in bytes |
+| `MAX_SIGNATURE_SIZE` | 4096 | Max signature size |
+
+---
+
+### Trusted Time API
+
+**Module**: `veritas-core::time`
+
+Trusted time validation prevents time manipulation attacks that could bypass key expiry or message TTL.
+
+#### Basic Time Functions
+
+```rust
+use veritas_core::time::{now, now_or_safe_fallback, validate_timestamp};
+
+// Get current timestamp (may fail)
+let current_time = now()?;
+
+// Get current timestamp with fallback (never fails)
+let safe_time = now_or_safe_fallback();
+
+// Validate a timestamp
+match validate_timestamp(some_timestamp) {
+    Ok(()) => println!("Timestamp is valid"),
+    Err(e) => println!("Invalid timestamp: {}", e),
+}
+```
+
+#### Timestamp Validation
+
+```rust
+use veritas_core::time::{
+    validate_timestamp, validate_timestamp_at,
+    is_future_timestamp, is_ancient_timestamp,
+    TimeError
+};
+
+// Validate against current time
+validate_timestamp(message_timestamp)?;
+
+// Validate against a specific reference time (for testing)
+validate_timestamp_at(timestamp, reference_time)?;
+
+// Quick checks
+if is_future_timestamp(timestamp) {
+    return Err("timestamp is in the future");
+}
+
+if is_ancient_timestamp(timestamp) {
+    return Err("timestamp is too old");
+}
+```
+
+#### TimeError Types
+
+```rust
+use veritas_core::time::TimeError;
+
+match validate_timestamp(timestamp) {
+    Err(TimeError::TimestampInFuture { timestamp, max_skew }) => {
+        println!("Too far in future: {} (max skew: {}s)", timestamp, max_skew);
+    }
+    Err(TimeError::TimestampTooOld { timestamp, min_valid }) => {
+        println!("Too old: {} (min valid: {})", timestamp, min_valid);
+    }
+    Err(TimeError::TimestampTooLarge { timestamp, max_valid }) => {
+        println!("Exceeds max: {} (max: {})", timestamp, max_valid);
+    }
+    Err(TimeError::SystemTimeError(msg)) => {
+        println!("System time error: {}", msg);
+    }
+    Ok(()) => {
+        println!("Timestamp is valid");
+    }
+}
+```
+
+#### Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `MAX_CLOCK_SKEW_SECS` | 300 | Allowed future skew (5 min) |
+| `MIN_VALID_TIMESTAMP` | 1704067200 | 2024-01-01 00:00:00 UTC |
+| `MAX_VALID_TIMESTAMP` | 4102444800 | 2100-01-01 00:00:00 UTC |
+
+#### Security Considerations
+
+- Timestamps beyond `MAX_CLOCK_SKEW_SECS` in the future are rejected
+- Timestamps before `MIN_VALID_TIMESTAMP` (protocol inception) are rejected
+- The fallback function returns `MIN_VALID_TIMESTAMP` on system time errors, ensuring conservative security behavior
+
+---
+
+### Block Signature API
+
+**Module**: `veritas-chain::block`
+
+Block signatures provide cryptographic proof that blocks were produced by authorized validators, preventing block forgery attacks.
+
+#### Creating Signed Blocks
+
+```rust
+use veritas_chain::{Block, BlockHeader};
+use veritas_crypto::MlDsaPrivateKey;
+
+// Generate or load validator keys
+let validator_private_key: MlDsaPrivateKey = /* ... */;
+
+// Create a SIGNED block (required for production)
+let block = Block::new_signed(
+    parent_hash,
+    height,
+    timestamp,
+    entries,
+    validator_identity,
+    &validator_private_key,
+)?;
+
+// Verify the block has a signature
+assert!(block.has_signature());
+```
+
+#### Verifying Block Signatures
+
+```rust
+use veritas_chain::Block;
+
+// CRITICAL: Always verify signatures before trusting block data
+block.verify_with_signature()?;
+
+// Or verify just the header signature
+block.header.verify_signature()?;
+```
+
+#### BlockHeader Signature Methods
+
+```rust
+use veritas_chain::BlockHeader;
+
+// Get the signing payload (domain-separated)
+let payload = header.compute_signing_payload();
+// payload = "VERITAS-BLOCK-SIGNATURE-v1" || block_hash
+
+// Check if signature is present
+if header.has_signature() {
+    // Verify the signature
+    header.verify_signature()?;
+}
+```
+
+#### Verification Steps
+
+`verify_signature()` performs the following checks for non-genesis blocks:
+
+1. Signature is present (non-empty)
+2. Public key is present (non-empty)
+3. Public key derives to the claimed validator identity
+4. ML-DSA signature is valid over the signing payload
+
+#### Error Types
+
+| Error | Description |
+|-------|-------------|
+| `ChainError::MissingSignature` | Block lacks required signature |
+| `ChainError::ValidatorKeyMismatch` | Public key doesn't match validator ID |
+| `ChainError::InvalidSignature` | Signature verification failed |
+
+#### Block Validation with Signatures
+
+```rust
+use veritas_chain::chain::BlockValidation;
+
+// Validate a block including signature verification
+BlockValidation::validate_producer(&block, &authorized_validators)?;
+
+// This checks:
+// 1. Genesis blocks have the correct genesis validator
+// 2. Non-genesis blocks have valid signatures
+// 3. The validator is in the authorized set
+```
+
+#### Security Considerations
+
+- Genesis blocks (height 0) are exempt from signature requirements
+- `Block::new()` creates UNSIGNED blocks (test only)
+- `Block::new_signed()` creates SIGNED blocks (required for production)
+- Signature verification happens BEFORE checking the validator set
+- The signing payload includes a domain separator to prevent cross-protocol attacks
+
+---
+
+### Username Registration API
+
+**Module**: `veritas-chain::chain`
+
+Username registration provides case-insensitive unique username allocation on the blockchain.
+
+#### Looking Up Usernames
+
+```rust
+use veritas_chain::chain::Blockchain;
+
+// Look up the owner of a username (case-insensitive)
+if let Some(owner) = blockchain.lookup_username("Alice") {
+    println!("Username 'Alice' is owned by: {}", owner.to_hex());
+} else {
+    println!("Username 'Alice' is available");
+}
+
+// Check availability
+if blockchain.is_username_available("alice") {
+    println!("Username is available for registration");
+}
+
+// All case variants resolve to the same owner
+assert_eq!(
+    blockchain.lookup_username("alice"),
+    blockchain.lookup_username("ALICE")
+);
+assert_eq!(
+    blockchain.lookup_username("alice"),
+    blockchain.lookup_username("Alice")
+);
+```
+
+#### Registering Usernames
+
+```rust
+use veritas_chain::chain::Blockchain;
+use veritas_identity::IdentityHash;
+
+let identity: IdentityHash = /* your identity */;
+
+// Register a username
+match blockchain.register_username("alice", &identity) {
+    Ok(()) => println!("Username registered successfully"),
+    Err(ChainError::UsernameTaken { username, owner }) => {
+        println!("'{}' is already taken by {}", username, owner);
+    }
+    Err(ChainError::InvalidUsername(reason)) => {
+        println!("Invalid username: {}", reason);
+    }
+    Err(e) => println!("Error: {}", e),
+}
+
+// Re-registration by same owner is idempotent (succeeds)
+blockchain.register_username("alice", &identity)?; // OK
+```
+
+#### Username Validation Rules
+
+| Rule | Example |
+|------|---------|
+| Minimum length | "ab" rejected (too short) |
+| Cannot start with underscore | "_alice" rejected |
+| Alphanumeric + underscore only | "alice@bob" rejected |
+| Reserved names blocked | "admin", "system", "veritas", "support" |
+| Case-insensitive uniqueness | "Alice" and "ALICE" are the same |
+
+#### Error Types
+
+| Error | Description |
+|-------|-------------|
+| `ChainError::UsernameTaken` | Username registered to different identity |
+| `ChainError::InvalidUsername` | Format violation or reserved name |
+
+#### Username Count
+
+```rust
+// Get total registered usernames
+let count = blockchain.username_count();
+println!("Total registered usernames: {}", count);
+```
+
+#### Index Rebuilding
+
+```rust
+// Rebuild username index from blockchain (used during sync/reorg)
+blockchain.rebuild_username_index()?;
+```
+
+#### Security Considerations
+
+- Usernames are normalized to lowercase for storage and lookup
+- Case-insensitive collision detection prevents spoofing (e.g., "Admin" vs "admin")
+- Reserved names are blocked to prevent impersonation
+- Same-owner re-registration is allowed (idempotent) for update/renewal scenarios
+- The index survives chain reorganizations via rebuilding
 
 ---
 
