@@ -27,6 +27,20 @@ pub const KEY_WARNING_SECS: u64 = 5 * 24 * 60 * 60;
 /// Grace period after key expiry (24 hours).
 pub const EXPIRY_GRACE_PERIOD_SECS: u64 = 24 * 60 * 60;
 
+// === Rotation Grace Period (VERITAS-2026-0091) ===
+
+/// Grace period after key rotation before old key is destroyed (1 hour).
+///
+/// SECURITY (VERITAS-2026-0091): This grace period allows pending messages encrypted
+/// with the old key to be decrypted before the key is permanently destroyed.
+/// After this period, the old key MUST be removed from storage to enforce
+/// Perfect Forward Secrecy (PFS).
+///
+/// **Important**: The old key WILL be destroyed after this period. Any messages
+/// encrypted with the old key that are not received within this window will be
+/// permanently unreadable.
+pub const ROTATION_GRACE_PERIOD_SECS: u64 = 60 * 60; // 1 hour
+
 // === Time Validation Constants (VERITAS-2026-0008) ===
 // Duplicated from veritas-core::time to avoid circular dependency.
 
@@ -43,6 +57,12 @@ pub const MAX_VALID_TIMESTAMP: u64 = 4102444800;
 ///
 /// Keys progress through states: Active -> Expiring -> Expired.
 /// Keys can also be manually Rotated or Revoked.
+///
+/// ## Security (VERITAS-2026-0091)
+///
+/// When a key is rotated, it enters the `Rotated` state with a timestamp.
+/// After `ROTATION_GRACE_PERIOD_SECS` (1 hour), the old key should be
+/// destroyed from storage to enforce Perfect Forward Secrecy (PFS).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum KeyState {
     /// Key is active and valid for use.
@@ -52,9 +72,15 @@ pub enum KeyState {
     /// Key has expired and cannot be used for new operations.
     Expired,
     /// Key has been rotated to a new identity.
+    ///
+    /// SECURITY (VERITAS-2026-0091): After `ROTATION_GRACE_PERIOD_SECS`,
+    /// the old key material should be destroyed from storage.
     Rotated {
         /// The new identity that this key was rotated to.
         new_identity: [u8; 32],
+        /// Unix timestamp when the rotation occurred (for PFS grace period).
+        #[serde(default)]
+        rotated_at: u64,
     },
     /// Key has been manually revoked.
     Revoked,
@@ -86,14 +112,60 @@ impl KeyState {
     }
 }
 
+impl KeyState {
+    /// Check if this rotated key's grace period has expired.
+    ///
+    /// SECURITY (VERITAS-2026-0091): After the rotation grace period expires,
+    /// the old key material should be destroyed from storage to enforce PFS.
+    ///
+    /// Returns `None` if the key is not in Rotated state, otherwise returns
+    /// `Some(true)` if the grace period has expired.
+    pub fn rotation_grace_expired(&self, current_time: u64) -> Option<bool> {
+        if let KeyState::Rotated { rotated_at, .. } = self {
+            let elapsed = current_time.saturating_sub(*rotated_at);
+            Some(elapsed >= ROTATION_GRACE_PERIOD_SECS)
+        } else {
+            None
+        }
+    }
+
+    /// Get the rotation timestamp if this key is in Rotated state.
+    pub fn rotation_time(&self) -> Option<u64> {
+        if let KeyState::Rotated { rotated_at, .. } = self {
+            Some(*rotated_at)
+        } else {
+            None
+        }
+    }
+
+    /// Check if decryption with this key should still be allowed.
+    ///
+    /// SECURITY (VERITAS-2026-0091): For rotated keys, decryption is only
+    /// allowed during the grace period. After that, decryption fails even
+    /// if the key material still exists (defensive check).
+    ///
+    /// For other terminated states (Expired, Revoked), decryption is never allowed.
+    pub fn allows_decryption(&self, current_time: u64) -> bool {
+        match self {
+            KeyState::Active | KeyState::Expiring => true,
+            KeyState::Rotated { rotated_at, .. } => {
+                // Allow decryption only during grace period
+                let elapsed = current_time.saturating_sub(*rotated_at);
+                elapsed < ROTATION_GRACE_PERIOD_SECS
+            }
+            KeyState::Expired | KeyState::Revoked => false,
+        }
+    }
+}
+
 impl std::fmt::Display for KeyState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             KeyState::Active => write!(f, "Active"),
             KeyState::Expiring => write!(f, "Expiring"),
             KeyState::Expired => write!(f, "Expired"),
-            KeyState::Rotated { new_identity } => {
-                write!(f, "Rotated({}...)", hex::encode(&new_identity[..8]))
+            KeyState::Rotated { new_identity, rotated_at } => {
+                write!(f, "Rotated({}... at {})", hex::encode(&new_identity[..8]), rotated_at)
             }
             KeyState::Revoked => write!(f, "Revoked"),
         }
@@ -265,10 +337,19 @@ impl KeyLifecycle {
 
     /// Rotate this key to a new identity.
     ///
+    /// SECURITY (VERITAS-2026-0091): This method now records the rotation timestamp
+    /// for PFS enforcement. After `ROTATION_GRACE_PERIOD_SECS`, the old key material
+    /// should be destroyed from storage.
+    ///
+    /// # Arguments
+    ///
+    /// * `new_identity` - The identity hash of the new key
+    /// * `current_time` - The current Unix timestamp (for PFS tracking)
+    ///
     /// # Errors
     ///
     /// Returns an error if the key is not in a rotatable state.
-    pub fn rotate(&mut self, new_identity: IdentityHash) -> crate::Result<()> {
+    pub fn rotate(&mut self, new_identity: IdentityHash, current_time: u64) -> crate::Result<()> {
         if !self.state.is_usable() {
             return Err(crate::IdentityError::InvalidStateTransition {
                 from: self.state.as_str().to_string(),
@@ -278,8 +359,34 @@ impl KeyLifecycle {
 
         self.state = KeyState::Rotated {
             new_identity: new_identity.to_bytes(),
+            rotated_at: current_time,
         };
         Ok(())
+    }
+
+    /// Check if the rotation grace period has expired and the key should be destroyed.
+    ///
+    /// SECURITY (VERITAS-2026-0091): This method should be called periodically
+    /// to check if rotated keys should be purged from storage.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the key is in Rotated state and the grace period has expired,
+    /// `false` otherwise.
+    pub fn should_destroy_for_pfs(&self, current_time: u64) -> bool {
+        self.state.rotation_grace_expired(current_time).unwrap_or(false)
+    }
+
+    /// Check if decryption is allowed based on key state and PFS grace period.
+    ///
+    /// SECURITY (VERITAS-2026-0091): Decryption is only allowed for:
+    /// - Active or Expiring keys
+    /// - Rotated keys within the grace period
+    ///
+    /// This is a defensive check to prevent decryption even if the key
+    /// material hasn't been destroyed yet.
+    pub fn can_decrypt(&self, current_time: u64) -> bool {
+        self.state.allows_decryption(current_time)
     }
 
     /// Revoke this key.
@@ -356,7 +463,8 @@ mod tests {
         assert!(!KeyState::Expired.is_usable());
         assert!(!KeyState::Revoked.is_usable());
         assert!(!KeyState::Rotated {
-            new_identity: [0; 32]
+            new_identity: [0; 32],
+            rotated_at: BASE_TIME,
         }
         .is_usable());
     }
@@ -368,7 +476,8 @@ mod tests {
         assert!(KeyState::Expired.is_terminated());
         assert!(KeyState::Revoked.is_terminated());
         assert!(KeyState::Rotated {
-            new_identity: [0; 32]
+            new_identity: [0; 32],
+            rotated_at: BASE_TIME,
         }
         .is_terminated());
     }
@@ -491,11 +600,13 @@ mod tests {
     fn test_key_lifecycle_rotate() {
         let mut lifecycle = KeyLifecycle::new(BASE_TIME);
         let new_id = IdentityHash::from_public_key(b"new_key");
-        lifecycle.rotate(new_id.clone()).unwrap();
+        let rotation_time = BASE_TIME + 1000;
+        lifecycle.rotate(new_id.clone(), rotation_time).unwrap();
 
         match lifecycle.state {
-            KeyState::Rotated { new_identity } => {
+            KeyState::Rotated { new_identity, rotated_at } => {
                 assert_eq!(new_identity, new_id.to_bytes());
+                assert_eq!(rotated_at, rotation_time);
             }
             _ => panic!("Expected Rotated state"),
         }
@@ -506,7 +617,7 @@ mod tests {
         let mut lifecycle = KeyLifecycle::new(BASE_TIME);
         lifecycle.state = KeyState::Expired;
         let new_id = IdentityHash::from_public_key(b"new_key");
-        assert!(lifecycle.rotate(new_id).is_err());
+        assert!(lifecycle.rotate(new_id, BASE_TIME).is_err());
     }
 
     #[test]
@@ -514,7 +625,7 @@ mod tests {
         let mut lifecycle = KeyLifecycle::new(BASE_TIME);
         lifecycle.state = KeyState::Revoked;
         let new_id = IdentityHash::from_public_key(b"new_key");
-        assert!(lifecycle.rotate(new_id).is_err());
+        assert!(lifecycle.rotate(new_id, BASE_TIME).is_err());
     }
 
     #[test]
@@ -536,7 +647,7 @@ mod tests {
     fn test_key_lifecycle_revoke_fails_when_rotated() {
         let mut lifecycle = KeyLifecycle::new(BASE_TIME);
         let new_id = IdentityHash::from_public_key(b"new_key");
-        lifecycle.rotate(new_id).unwrap();
+        lifecycle.rotate(new_id, BASE_TIME).unwrap();
         assert!(lifecycle.revoke().is_err());
     }
 
@@ -571,7 +682,7 @@ mod tests {
     fn test_key_lifecycle_can_use_rotated() {
         let mut lifecycle = KeyLifecycle::new(BASE_TIME);
         lifecycle
-            .rotate(IdentityHash::from_public_key(b"new"))
+            .rotate(IdentityHash::from_public_key(b"new"), BASE_TIME)
             .unwrap();
         assert!(lifecycle.can_use(BASE_TIME).is_err());
     }
@@ -686,5 +797,142 @@ mod tests {
 
         // Verify MAX_CLOCK_SKEW_SECS is 5 minutes
         assert_eq!(MAX_CLOCK_SKEW_SECS, 300);
+    }
+
+    // === Security Tests for VERITAS-2026-0091 (PFS) ===
+
+    #[test]
+    fn test_rotation_grace_period_constant() {
+        // Verify rotation grace period is 1 hour
+        assert_eq!(ROTATION_GRACE_PERIOD_SECS, 3600);
+    }
+
+    #[test]
+    fn test_rotation_grace_expired_during_grace_period() {
+        let state = KeyState::Rotated {
+            new_identity: [0; 32],
+            rotated_at: BASE_TIME,
+        };
+
+        // Immediately after rotation: not expired
+        assert_eq!(state.rotation_grace_expired(BASE_TIME), Some(false));
+
+        // 30 minutes after rotation: not expired
+        assert_eq!(state.rotation_grace_expired(BASE_TIME + 30 * 60), Some(false));
+
+        // 59 minutes after rotation: not expired
+        assert_eq!(state.rotation_grace_expired(BASE_TIME + 59 * 60), Some(false));
+    }
+
+    #[test]
+    fn test_rotation_grace_expired_after_grace_period() {
+        let state = KeyState::Rotated {
+            new_identity: [0; 32],
+            rotated_at: BASE_TIME,
+        };
+
+        // Exactly 1 hour after rotation: expired
+        assert_eq!(state.rotation_grace_expired(BASE_TIME + ROTATION_GRACE_PERIOD_SECS), Some(true));
+
+        // 2 hours after rotation: expired
+        assert_eq!(state.rotation_grace_expired(BASE_TIME + 2 * ROTATION_GRACE_PERIOD_SECS), Some(true));
+    }
+
+    #[test]
+    fn test_rotation_grace_expired_non_rotated_state() {
+        // Non-rotated states return None
+        assert_eq!(KeyState::Active.rotation_grace_expired(BASE_TIME), None);
+        assert_eq!(KeyState::Expiring.rotation_grace_expired(BASE_TIME), None);
+        assert_eq!(KeyState::Expired.rotation_grace_expired(BASE_TIME), None);
+        assert_eq!(KeyState::Revoked.rotation_grace_expired(BASE_TIME), None);
+    }
+
+    #[test]
+    fn test_allows_decryption_during_grace_period() {
+        let state = KeyState::Rotated {
+            new_identity: [0; 32],
+            rotated_at: BASE_TIME,
+        };
+
+        // During grace period: decryption allowed
+        assert!(state.allows_decryption(BASE_TIME));
+        assert!(state.allows_decryption(BASE_TIME + 30 * 60));
+        assert!(state.allows_decryption(BASE_TIME + ROTATION_GRACE_PERIOD_SECS - 1));
+    }
+
+    #[test]
+    fn test_denies_decryption_after_grace_period() {
+        let state = KeyState::Rotated {
+            new_identity: [0; 32],
+            rotated_at: BASE_TIME,
+        };
+
+        // After grace period: decryption denied
+        assert!(!state.allows_decryption(BASE_TIME + ROTATION_GRACE_PERIOD_SECS));
+        assert!(!state.allows_decryption(BASE_TIME + 2 * ROTATION_GRACE_PERIOD_SECS));
+    }
+
+    #[test]
+    fn test_allows_decryption_active_expiring() {
+        assert!(KeyState::Active.allows_decryption(BASE_TIME));
+        assert!(KeyState::Expiring.allows_decryption(BASE_TIME));
+    }
+
+    #[test]
+    fn test_denies_decryption_expired_revoked() {
+        assert!(!KeyState::Expired.allows_decryption(BASE_TIME));
+        assert!(!KeyState::Revoked.allows_decryption(BASE_TIME));
+    }
+
+    #[test]
+    fn test_should_destroy_for_pfs() {
+        let mut lifecycle = KeyLifecycle::new(BASE_TIME);
+        let new_id = IdentityHash::from_public_key(b"new_key");
+        let rotation_time = BASE_TIME + 1000;
+
+        // Before rotation: should not destroy
+        assert!(!lifecycle.should_destroy_for_pfs(BASE_TIME));
+
+        // Rotate the key
+        lifecycle.rotate(new_id, rotation_time).unwrap();
+
+        // During grace period: should not destroy
+        assert!(!lifecycle.should_destroy_for_pfs(rotation_time));
+        assert!(!lifecycle.should_destroy_for_pfs(rotation_time + 30 * 60));
+
+        // After grace period: should destroy
+        assert!(lifecycle.should_destroy_for_pfs(rotation_time + ROTATION_GRACE_PERIOD_SECS));
+        assert!(lifecycle.should_destroy_for_pfs(rotation_time + 2 * ROTATION_GRACE_PERIOD_SECS));
+    }
+
+    #[test]
+    fn test_can_decrypt_follows_pfs_rules() {
+        let mut lifecycle = KeyLifecycle::new(BASE_TIME);
+        let new_id = IdentityHash::from_public_key(b"new_key");
+        let rotation_time = BASE_TIME + 1000;
+
+        // Active key: can decrypt
+        assert!(lifecycle.can_decrypt(BASE_TIME));
+
+        // Rotate the key
+        lifecycle.rotate(new_id, rotation_time).unwrap();
+
+        // During grace period: can decrypt
+        assert!(lifecycle.can_decrypt(rotation_time + 30 * 60));
+
+        // After grace period: cannot decrypt
+        assert!(!lifecycle.can_decrypt(rotation_time + ROTATION_GRACE_PERIOD_SECS));
+    }
+
+    #[test]
+    fn test_rotation_time_accessor() {
+        let state = KeyState::Rotated {
+            new_identity: [0; 32],
+            rotated_at: BASE_TIME + 5000,
+        };
+        assert_eq!(state.rotation_time(), Some(BASE_TIME + 5000));
+
+        assert_eq!(KeyState::Active.rotation_time(), None);
+        assert_eq!(KeyState::Expired.rotation_time(), None);
     }
 }

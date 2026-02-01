@@ -20,6 +20,29 @@ pub const MIN_USERNAME_LEN: usize = 3;
 /// Maximum username length in characters.
 pub const MAX_USERNAME_LEN: usize = 32;
 
+/// Reserved usernames that cannot be registered.
+///
+/// SECURITY (VERITAS-2026-0090): These usernames are reserved to prevent
+/// impersonation of system accounts, administrators, or official channels.
+pub const RESERVED_USERNAMES: &[&str] = &[
+    "admin",
+    "administrator",
+    "system",
+    "veritas",
+    "support",
+    "help",
+    "root",
+    "moderator",
+    "mod",
+    "official",
+    "verified",
+    "security",
+    "bot",
+    "null",
+    "undefined",
+    "anonymous",
+];
+
 /// A validated username (3-32 characters).
 ///
 /// Usernames provide human-readable aliases for identity hashes.
@@ -62,7 +85,34 @@ impl Username {
     /// ```
     pub fn new(username: &str) -> Result<Self> {
         Self::validate(username)?;
+        Self::check_reserved(username)?;
         Ok(Self(username.to_string()))
+    }
+
+    /// Check if a username is reserved.
+    ///
+    /// SECURITY (VERITAS-2026-0090): Reserved usernames cannot be registered
+    /// to prevent impersonation of system accounts.
+    ///
+    /// # Errors
+    ///
+    /// Returns `IdentityError::InvalidUsername` if the username is reserved.
+    pub fn check_reserved(username: &str) -> Result<()> {
+        let normalized = username.to_ascii_lowercase();
+        if RESERVED_USERNAMES.contains(&normalized.as_str()) {
+            return Err(IdentityError::InvalidUsername {
+                reason: format!("'{}' is a reserved username", username),
+            });
+        }
+        Ok(())
+    }
+
+    /// Check if a username string is reserved (without other validation).
+    ///
+    /// Returns `true` if the username is in the reserved list.
+    pub fn is_reserved(username: &str) -> bool {
+        let normalized = username.to_ascii_lowercase();
+        RESERVED_USERNAMES.contains(&normalized.as_str())
     }
 
     /// Validate a username string without creating a Username instance.
