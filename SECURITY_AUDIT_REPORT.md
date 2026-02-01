@@ -1,21 +1,26 @@
 # VERITAS Protocol Security Audit Report
 
 **Protocol Version Audited**: v0.1.0-alpha → v0.2.0-beta
-**Audit Date**: 2026-01-29
+**Audit Date**: 2026-01-29 (Updated: 2026-01-31)
 **Auditor**: Claude Code Security Team
-**Status**: ✅ ALL CRITICAL AND HIGH ISSUES RESOLVED
+**Status**: ⚠️ NEW CRITICAL VULNERABILITY DISCOVERED (VERITAS-2026-0090)
 **Repository**: https://github.com/gl-tches/veritas-protocol
 
 ---
 
 ## Executive Summary
 
-This comprehensive security audit of the VERITAS Protocol identified **22 CRITICAL**, **31 HIGH**, **26 MEDIUM**, and **11 LOW** severity vulnerabilities across 7 core crates. While the protocol demonstrates strong foundational security practices (proper use of audited cryptographic libraries, zeroization, constant-time operations, domain separation), several fundamental security assumptions are undermined by implementation gaps.
+This comprehensive security audit of the VERITAS Protocol identified **23 CRITICAL**, **31 HIGH**, **26 MEDIUM**, and **11 LOW** severity vulnerabilities across 7 core crates.
+
+> **⚠️ 2026-01-31 UPDATE**: New CRITICAL vulnerability discovered (VERITAS-2026-0090: Username Uniqueness Not Enforced). Username spoofing attacks are possible due to missing blockchain-level uniqueness validation.
+
+While the protocol demonstrates strong foundational security practices (proper use of audited cryptographic libraries, zeroization, constant-time operations, domain separation), several fundamental security assumptions are undermined by implementation gaps.
 
 ### Critical Risk Areas
 
 | Category | Risk Level | Key Issues |
 |----------|------------|------------|
+| **Identity Spoofing** | **CRITICAL** | Username uniqueness not enforced (VERITAS-2026-0090) |
 | Sybil Resistance | **CRITICAL** | Origin fingerprinting trivially bypassed |
 | Consensus | **CRITICAL** | Missing block signature verification |
 | DoS Protection | **CRITICAL** | Unbounded deserialization, memory exhaustion |
@@ -77,18 +82,18 @@ This comprehensive security audit of the VERITAS Protocol identified **22 CRITIC
 
 | Severity | Count | Description |
 |----------|-------|-------------|
-| CRITICAL | 22 | Immediate exploitation risk, system compromise |
+| CRITICAL | 23 | Immediate exploitation risk, system compromise |
 | HIGH | 31 | Significant security impact, requires prompt attention |
 | MEDIUM | 26 | Moderate risk, should be addressed before production |
 | LOW | 11 | Minor issues or hardening recommendations |
-| **TOTAL** | **90** | |
+| **TOTAL** | **91** | |
 
 ### By Category
 
 | Category | Critical | High | Medium | Low |
 |----------|----------|------|--------|-----|
 | Cryptography | 0 | 2 | 3 | 3 |
-| Identity | 3 | 4 | 4 | 2 |
+| Identity | 4 | 4 | 4 | 2 |
 | Protocol | 3 | 3 | 3 | 2 |
 | Blockchain | 4 | 5 | 6 | 4 |
 | Networking | 3 | 4 | 5 | 3 |
@@ -496,6 +501,156 @@ pub fn record_positive_interaction(
 
 ---
 
+### VERITAS-2026-0090: Username Uniqueness Not Enforced at Blockchain Level
+
+**Severity**: CRITICAL
+**CVSS**: 9.3
+**Component**: veritas-chain, veritas-identity
+**Location**: `crates/veritas-chain/src/block.rs:795-804`, `crates/veritas-chain/src/chain.rs`
+**Discovered**: 2026-01-31
+
+#### Description
+
+The blockchain layer accepts `ChainEntry::UsernameRegistration` entries without verifying that the username is unique. Multiple users can register the same `@username` with different DIDs (Decentralized Identifiers), creating a social engineering attack vector where attackers can impersonate legitimate users.
+
+The `IdentityError::UsernameTaken` error type is defined in `veritas-identity/src/error.rs` but is **never used** anywhere in the codebase. There is no `lookup_username()` function or uniqueness validation in the chain layer.
+
+```rust
+// Current: No uniqueness check in block validation
+pub enum ChainEntry {
+    UsernameRegistration {
+        username: String,  // NOT the validated Username type!
+        identity_hash: IdentityHash,
+        signature: Vec<u8>,
+        timestamp: u64,
+    },
+    // ...
+}
+
+// Missing: No code like this exists
+fn validate_username_registration(&self, entry: &ChainEntry) -> Result<()> {
+    if let Some(existing_owner) = self.lookup_username(&username)? {
+        if existing_owner != identity_hash {
+            return Err(ChainError::UsernameTaken);  // Error type doesn't exist
+        }
+    }
+    Ok(())
+}
+```
+
+#### Attack Vector
+
+1. Alice registers `@alice` with `DID_A`, establishing her identity
+2. Attacker monitors the blockchain and observes Alice's registration
+3. Attacker registers `@alice` with `DID_B` (succeeds because no uniqueness check)
+4. Bob wants to message Alice and searches for `@alice`
+5. Bob gets `DID_B` instead of `DID_A` (or gets both with no clear resolution)
+6. Bob's messages go to the attacker
+7. Even if Bob checks safety numbers, social engineering may succeed before verification
+
+#### Related Attack Scenarios
+
+| Scenario | Description | Severity |
+|----------|-------------|----------|
+| **Direct Impersonation** | Register same username as target | CRITICAL |
+| **Case Squatting** | Register `@Alice` when `@alice` exists (VERITAS-2026-0047) | HIGH |
+| **Race Condition** | Two users register simultaneously, both succeed | HIGH |
+| **Fork Confusion** | During chain fork, different branches have different owners | HIGH |
+| **Enumeration Attack** | Query all usernames to find high-value targets | MEDIUM |
+
+#### Impact
+
+- **User Impersonation**: Attacker can receive messages intended for legitimate user
+- **Message Interception**: End-to-end encryption provides no protection if user contacts wrong DID
+- **Social Engineering**: Users develop false trust based on familiar usernames
+- **Trust Model Violation**: Undermines the fundamental identity verification system
+- **Safety Number Bypass**: Users may not verify safety numbers for "known" contacts
+
+#### Evidence
+
+1. **No lookup function**: `grep -r "lookup_username" crates/` returns no results
+2. **Unused error type**: `IdentityError::UsernameTaken` defined but never returned
+3. **No index structure**: No HashMap or database index maps usernames to DIDs
+4. **Type mismatch**: Chain uses `String`, not validated `Username` type
+5. **Test gaps**: 0% test coverage for duplicate username rejection
+
+#### Remediation
+
+```rust
+// 1. Add ChainError variant
+#[derive(Error, Debug)]
+pub enum ChainError {
+    #[error("Username already registered: {0}")]
+    UsernameTaken(String),
+    // ...
+}
+
+// 2. Add username index to Blockchain
+pub struct Blockchain {
+    // ... existing fields
+    username_index: HashMap<String, IdentityHash>,  // normalized -> owner
+}
+
+// 3. Add lookup function
+impl Blockchain {
+    pub fn lookup_username(&self, username: &str) -> Option<&IdentityHash> {
+        let normalized = username.to_ascii_lowercase();
+        self.username_index.get(&normalized)
+    }
+}
+
+// 4. Add validation in block processing
+fn process_username_registration(
+    &mut self,
+    username: &str,
+    identity: &IdentityHash,
+) -> Result<()> {
+    let normalized = username.to_ascii_lowercase();
+
+    if let Some(existing) = self.username_index.get(&normalized) {
+        if existing != identity {
+            return Err(ChainError::UsernameTaken(username.to_string()));
+        }
+    }
+
+    self.username_index.insert(normalized, identity.clone());
+    Ok(())
+}
+```
+
+#### Testing Requirements
+
+```rust
+#[test]
+fn test_duplicate_username_rejected() {
+    let mut chain = Blockchain::new().unwrap();
+    let alice_did = IdentityHash::from_bytes(&[1u8; 32]).unwrap();
+    let attacker_did = IdentityHash::from_bytes(&[2u8; 32]).unwrap();
+
+    // First registration succeeds
+    assert!(chain.register_username("alice", &alice_did).is_ok());
+
+    // Duplicate registration fails
+    let result = chain.register_username("alice", &attacker_did);
+    assert!(matches!(result, Err(ChainError::UsernameTaken(_))));
+}
+
+#[test]
+fn test_case_insensitive_duplicate_rejected() {
+    let mut chain = Blockchain::new().unwrap();
+    let alice_did = IdentityHash::from_bytes(&[1u8; 32]).unwrap();
+    let attacker_did = IdentityHash::from_bytes(&[2u8; 32]).unwrap();
+
+    assert!(chain.register_username("alice", &alice_did).is_ok());
+
+    // Case variants should collide
+    assert!(chain.register_username("Alice", &attacker_did).is_err());
+    assert!(chain.register_username("ALICE", &attacker_did).is_err());
+}
+```
+
+---
+
 ### VERITAS-2026-0011 through VERITAS-2026-0022: Additional Critical Findings
 
 | ID | Component | Issue | Location |
@@ -704,6 +859,7 @@ The audit identified numerous positive security practices:
 
 | Priority | Issue | Effort |
 |----------|-------|--------|
+| P1 | **Username uniqueness enforcement (0090)** | **Medium** |
 | P1 | Block signature verification (0002) | High |
 | P1 | Unbounded deserialization (0003) | Medium |
 | P1 | Origin fingerprint hardening (0001, 0014) | High |
@@ -760,7 +916,7 @@ The audit identified numerous positive security practices:
 | Threat | Status | Notes |
 |--------|--------|-------|
 | Identity spoofing via DID | **VULNERABLE** | Origin fingerprint bypassed |
-| Username impersonation | **VULNERABLE** | Case sensitivity issues |
+| Username impersonation | **CRITICAL** | No uniqueness enforcement (VERITAS-2026-0090) |
 | Validator identity spoofing | **CRITICAL** | No signature verification |
 | Message sender spoofing | Protected | Sender in encrypted payload |
 
@@ -813,10 +969,11 @@ The audit identified numerous positive security practices:
 
 The VERITAS Protocol demonstrates strong foundational security architecture with proper use of post-quantum cryptography, metadata protection, and defense-in-depth design. However, the implementation has significant gaps that undermine these design goals:
 
-1. **Sybil resistance is completely broken** due to trivially spoofable origin fingerprints
-2. **Blockchain consensus is insecure** without cryptographic block signatures
-3. **DoS protection is absent** at multiple layers (deserialization, gossip, storage)
-4. **Privacy guarantees are violated** by plaintext message queue metadata
+1. **Username spoofing is trivially possible** due to missing blockchain-level uniqueness enforcement (VERITAS-2026-0090)
+2. **Sybil resistance is completely broken** due to trivially spoofable origin fingerprints
+3. **Blockchain consensus is insecure** without cryptographic block signatures
+4. **DoS protection is absent** at multiple layers (deserialization, gossip, storage)
+5. **Privacy guarantees are violated** by plaintext message queue metadata
 
 **Immediate Action Required**: Address all CRITICAL findings before any deployment beyond development testing.
 
@@ -827,3 +984,13 @@ The VERITAS Protocol demonstrates strong foundational security architecture with
 **Report Prepared By**: Claude Code Security Team
 **Session**: https://claude.ai/code/session_01X1hTwx6Fw1Gu7xa9jXFnBa
 **Date**: 2026-01-29
+
+---
+
+### 2026-01-31 Addendum: Username Spoofing Audit
+
+**Session**: https://claude.ai/code/session_014QKiSThRWboAM5SuMgQPYA
+**Auditor**: Claude Code Security Team
+
+New vulnerability discovered: VERITAS-2026-0090 (Username Uniqueness Not Enforced).
+See Critical Findings section for full details and remediation.
