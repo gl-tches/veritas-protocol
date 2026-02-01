@@ -20,7 +20,7 @@ const GROUP_MESSAGE_CONTEXT: &str = "VERITAS group message v1";
 /// A symmetric key for group encryption.
 ///
 /// The key is automatically zeroized when dropped.
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct GroupKey {
     /// The underlying symmetric key.
     key: SymmetricKey,
