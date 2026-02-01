@@ -2,7 +2,7 @@
 
 Complete API reference for the VERITAS Protocol library.
 
-**Version**: 0.2.1-beta
+**Version**: 0.3.0-beta
 
 ## Table of Contents
 

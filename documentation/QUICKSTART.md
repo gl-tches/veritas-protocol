@@ -66,7 +66,7 @@ curl http://localhost:8080/ready
 
 ```toml
 [dependencies]
-veritas-core = "0.2.1-beta"
+veritas-core = "0.3.0-beta"
 tokio = { version = "1", features = ["full"] }
 ```
 

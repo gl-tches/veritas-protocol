@@ -43,7 +43,7 @@
 
 ## Version Information
 
-- **Current Version**: 0.2.1-beta
+- **Current Version**: 0.3.0-beta
 - **Minimum Rust Version**: 1.85
 - **License**: MIT OR Apache-2.0
 

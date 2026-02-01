@@ -19,7 +19,7 @@ Common issues and solutions for VERITAS.
 
 **Symptom:**
 ```
-error: package `veritas-core v0.2.1-beta` cannot be built because it requires
+error: package `veritas-core v0.3.0-beta` cannot be built because it requires
 rustc 1.85 or newer
 ```
 

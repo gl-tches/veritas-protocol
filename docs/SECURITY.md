@@ -585,13 +585,13 @@ let config = ClientConfigBuilder::new()
 
 | Component | Audit Status | Notes |
 |-----------|--------------|-------|
-| veritas-crypto | ✅ Audited (v0.2.0) | Uses audited cryptographic libraries |
-| veritas-identity | ✅ Audited (v0.2.0) | Sybil resistance hardened with hardware attestation |
-| veritas-protocol | ✅ Audited (v0.2.0) | DoS protections and size validation added |
-| veritas-chain | ✅ Audited (v0.2.0) | Block signature verification implemented |
-| veritas-net | ✅ Audited (v0.2.0) | Rate limiting and peer authentication added |
-| veritas-store | ✅ Audited (v0.2.0) | Encrypted metadata storage |
-| veritas-reputation | ✅ Audited (v0.2.0) | Cryptographic interaction proofs required |
+| veritas-crypto | ✅ Audited (v0.3.0) | Uses audited cryptographic libraries |
+| veritas-identity | ✅ Audited (v0.3.0) | Sybil resistance hardened with hardware attestation |
+| veritas-protocol | ✅ Audited (v0.3.0) | DoS protections and size validation added |
+| veritas-chain | ✅ Audited (v0.3.0) | Block signature verification implemented |
+| veritas-net | ✅ Audited (v0.3.0) | Rate limiting and peer authentication added |
+| veritas-store | ✅ Audited (v0.3.0) | Encrypted metadata storage |
+| veritas-reputation | ✅ Audited (v0.3.0) | Cryptographic interaction proofs required |
 
 ### Audit Details
 
