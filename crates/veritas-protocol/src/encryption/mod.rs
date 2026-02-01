@@ -49,13 +49,29 @@
 //! let payload2 = ctx.decrypt(&envelope2)?;
 //! ```
 //!
-//! ### Adding Timing Jitter
+//! ### Sending with Mandatory Timing Jitter (Recommended)
+//!
+//! ```ignore
+//! use veritas_protocol::encryption::{prepare_for_send, SendConfig};
+//! use tokio::time::sleep;
+//!
+//! // Prepare message with mandatory jitter
+//! let prepared = prepare_for_send(&sender, recipient_public, content, None, SendConfig::default())?;
+//!
+//! // MANDATORY: Apply the jitter before sending
+//! sleep(prepared.required_jitter).await;
+//!
+//! // Now safe to send
+//! send(prepared.into_message()).await;
+//! ```
+//!
+//! ### Legacy: Manual Timing Jitter (Deprecated)
 //!
 //! ```ignore
 //! use veritas_protocol::encryption::add_timing_jitter;
 //! use tokio::time::sleep;
 //!
-//! // Before sending
+//! // Before sending (caller must remember to apply jitter)
 //! let jitter = add_timing_jitter();
 //! sleep(jitter).await;
 //! send(encrypted).await;
@@ -65,5 +81,6 @@ pub mod e2e;
 
 pub use e2e::{
     add_timing_jitter, decrypt_and_verify, decrypt_as_recipient, encrypt_for_recipient,
-    DecryptionContext, EncryptedMessage, MESSAGE_ENCRYPTION_CONTEXT,
+    prepare_for_send, DecryptionContext, EncryptedMessage, PreparedMessage, SendConfig,
+    MESSAGE_ENCRYPTION_CONTEXT,
 };

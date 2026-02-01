@@ -45,6 +45,7 @@ pub mod gossip;
 pub mod node;
 pub mod rate_limiter;
 pub mod relay;
+pub mod subnet_limiter;
 pub mod transport;
 pub mod transport_manager;
 
@@ -64,6 +65,10 @@ pub use rate_limiter::{
     RateLimitConfig, RateLimitResult, RateLimiter, DEFAULT_BAN_DURATION_SECS,
     DEFAULT_BURST_MULTIPLIER, DEFAULT_GLOBAL_RATE, DEFAULT_PER_PEER_RATE,
     DEFAULT_VIOLATIONS_BEFORE_BAN,
+};
+pub use subnet_limiter::{
+    PeerAcceptResult, SubnetKey, SubnetLimiter, SubnetLimiterConfig, SubnetLimiterStats,
+    SubnetLimiterStatsSnapshot, MAX_PEERS_PER_SUBNET, SUBNET_MASK_V4, SUBNET_MASK_V6,
 };
 pub use node::{
     peer_id_from_multiaddr, NodeBehaviour, NodeConfig, NodeEvent, VeritasNode,

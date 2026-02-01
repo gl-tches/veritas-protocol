@@ -101,6 +101,26 @@ pub enum ChainError {
     /// Storage error.
     #[error("Storage error: {0}")]
     Storage(String),
+
+    /// Username already registered to a different identity.
+    ///
+    /// SECURITY (VERITAS-2026-0090): This error indicates that a username
+    /// registration was rejected because another identity already owns
+    /// this username. This prevents username impersonation attacks.
+    #[error("Username already registered: {username} (owned by {owner})")]
+    UsernameTaken {
+        /// The username that was attempted to be registered.
+        username: String,
+        /// The hex-encoded identity hash of the current owner.
+        owner: String,
+    },
+
+    /// Invalid username format or reserved username.
+    ///
+    /// SECURITY (VERITAS-2026-0090): This error indicates that a username
+    /// failed validation (format, length, reserved name, etc.).
+    #[error("Invalid username: {0}")]
+    InvalidUsername(String),
 }
 
 /// Result type for blockchain operations.

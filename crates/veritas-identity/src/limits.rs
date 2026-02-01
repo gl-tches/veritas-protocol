@@ -321,8 +321,8 @@ impl IdentityLimiter {
             .position(|(id, _)| id == old_identity)
             .ok_or_else(|| crate::IdentityError::NotFound(old_identity.to_hex()))?;
 
-        // Rotate the old identity
-        self.identities[old_idx].1.rotate(new_identity.clone())?;
+        // Rotate the old identity (with PFS timestamp for VERITAS-2026-0091)
+        self.identities[old_idx].1.rotate(new_identity.clone(), current_time)?;
 
         // Create new lifecycle linked to old
         let lifecycle = KeyLifecycle::new_from_rotation(current_time, old_identity.clone());
