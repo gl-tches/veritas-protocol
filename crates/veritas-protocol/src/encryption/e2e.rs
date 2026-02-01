@@ -9,7 +9,26 @@
 //! - The encryption key is derived from the ECDH shared secret using BLAKE3
 //! - Nonces are randomly generated and included in the envelope
 //! - Messages are padded before encryption to resist traffic analysis
-//! - Timing jitter can be added before sending to prevent timing correlation
+//! - **MANDATORY**: Timing jitter is enforced before sending to prevent timing correlation
+//!
+//! ## Timing Jitter (VERITAS-2026-0015)
+//!
+//! Timing jitter is **mandatory** for privacy. Without it, traffic analysis can
+//! correlate message creation with network transmission, enabling deanonymization.
+//!
+//! Use [`prepare_for_send`] to get a [`PreparedMessage`] that includes the required
+//! jitter duration. The caller **MUST** wait for the jitter duration before sending:
+//!
+//! ```ignore
+//! use veritas_protocol::encryption::{prepare_for_send, SendConfig};
+//! use tokio::time::sleep;
+//!
+//! let prepared = prepare_for_send(&sender, recipient.public_keys(), content, None, SendConfig::default())?;
+//! sleep(prepared.required_jitter).await;  // MANDATORY
+//! network.send(prepared.message).await;
+//! ```
+//!
+//! For testing only, jitter can be disabled via [`SendConfig::testing()`].
 
 use std::time::Duration;
 
@@ -391,6 +410,17 @@ impl std::fmt::Debug for DecryptionContext {
 /// timing correlation attacks where an observer could link message
 /// creation to network transmission.
 ///
+/// # Security Note
+///
+/// **DEPRECATED**: Use [`prepare_for_send`] instead, which automatically
+/// enforces timing jitter. This function is kept for backward compatibility
+/// but callers are responsible for actually applying the jitter.
+///
+/// For maximum privacy:
+/// - Apply jitter to ALL messages, not just some
+/// - Don't log the jitter duration
+/// - Consider additional application-level delays
+///
 /// # Example
 ///
 /// ```ignore
@@ -402,17 +432,223 @@ impl std::fmt::Debug for DecryptionContext {
 /// sleep(jitter).await;
 /// network.send(encrypted).await;
 /// ```
-///
-/// # Security Note
-///
-/// For maximum privacy:
-/// - Apply jitter to ALL messages, not just some
-/// - Don't log the jitter duration
-/// - Consider additional application-level delays
 pub fn add_timing_jitter() -> Duration {
     use rand::rngs::OsRng;
     let jitter_ms = OsRng.gen_range(0..=MAX_JITTER_MS);
     Duration::from_millis(jitter_ms)
+}
+
+/// Configuration for message sending.
+///
+/// Controls privacy-enhancing behaviors during message preparation.
+/// By default, all privacy features (including timing jitter) are enabled.
+///
+/// # Example
+///
+/// ```ignore
+/// use veritas_protocol::encryption::SendConfig;
+///
+/// // Production use: all privacy features enabled
+/// let config = SendConfig::default();
+///
+/// // Testing only: disable jitter for deterministic tests
+/// let test_config = SendConfig::testing();
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct SendConfig {
+    /// Whether to enforce timing jitter.
+    ///
+    /// **SECURITY WARNING**: Setting this to `false` disables timing jitter,
+    /// which makes messages vulnerable to traffic analysis. Only disable
+    /// for testing purposes.
+    ///
+    /// Default: `true`
+    pub enforce_jitter: bool,
+}
+
+impl Default for SendConfig {
+    /// Returns the default configuration with all privacy features enabled.
+    ///
+    /// - Timing jitter: enabled (0-3000ms random delay)
+    fn default() -> Self {
+        Self {
+            enforce_jitter: true,
+        }
+    }
+}
+
+impl SendConfig {
+    /// Create a configuration for testing with privacy features disabled.
+    ///
+    /// **WARNING**: This disables timing jitter. NEVER use in production.
+    /// Only use for deterministic testing where timing behavior must be predictable.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// #[cfg(test)]
+    /// let config = SendConfig::testing();
+    /// ```
+    pub fn testing() -> Self {
+        Self {
+            enforce_jitter: false,
+        }
+    }
+
+    /// Check if this is a testing configuration (jitter disabled).
+    pub fn is_testing(&self) -> bool {
+        !self.enforce_jitter
+    }
+}
+
+/// A prepared message ready for sending with mandatory timing jitter.
+///
+/// This struct wraps an [`EncryptedMessage`] along with the required timing
+/// jitter that **MUST** be applied before sending. The jitter prevents timing
+/// correlation attacks (VERITAS-2026-0015).
+///
+/// # Security Requirement
+///
+/// The caller **MUST** wait for `required_jitter` before transmitting the message:
+///
+/// ```ignore
+/// use tokio::time::sleep;
+///
+/// let prepared = prepare_for_send(&sender, recipient.public_keys(), content, None, SendConfig::default())?;
+///
+/// // MANDATORY: Wait for jitter before sending
+/// sleep(prepared.required_jitter).await;
+///
+/// network.send(prepared.message).await;
+/// ```
+///
+/// Failure to apply the jitter defeats the timing privacy protection.
+#[derive(Clone, Debug)]
+pub struct PreparedMessage {
+    /// The encrypted message to send.
+    pub message: EncryptedMessage,
+
+    /// The required timing jitter before sending.
+    ///
+    /// **MANDATORY**: The caller must wait this duration before transmitting
+    /// the message over the network. This prevents traffic analysis attacks
+    /// that correlate message creation with network transmission.
+    ///
+    /// Range: 0 to MAX_JITTER_MS (3000ms) when jitter is enforced,
+    /// or Duration::ZERO when using `SendConfig::testing()`.
+    pub required_jitter: Duration,
+
+    /// Whether jitter enforcement is active.
+    ///
+    /// If `false`, this message was prepared with `SendConfig::testing()`
+    /// and `required_jitter` is zero. This should only occur in test code.
+    jitter_enforced: bool,
+}
+
+impl PreparedMessage {
+    /// Check if timing jitter is being enforced for this message.
+    ///
+    /// Returns `false` if the message was prepared with `SendConfig::testing()`,
+    /// which should only be used in test code.
+    pub fn is_jitter_enforced(&self) -> bool {
+        self.jitter_enforced
+    }
+
+    /// Get the envelope hash for deduplication/receipts.
+    pub fn envelope_hash(&self) -> Hash256 {
+        self.message.envelope_hash()
+    }
+
+    /// Consume the prepared message and return just the encrypted message.
+    ///
+    /// **WARNING**: The caller is responsible for having already applied
+    /// the `required_jitter` delay before calling this method.
+    pub fn into_message(self) -> EncryptedMessage {
+        self.message
+    }
+}
+
+/// Prepare a message for sending with mandatory timing jitter.
+///
+/// This is the **recommended** way to encrypt and prepare messages for sending.
+/// It wraps [`encrypt_for_recipient`] and adds the required timing jitter that
+/// must be applied before transmission.
+///
+/// # Arguments
+///
+/// * `sender` - The sender's identity keypair (for signing)
+/// * `recipient` - The recipient's public keys (for encryption)
+/// * `content` - The message content to encrypt
+/// * `reply_to` - Optional hash of message being replied to
+/// * `config` - Send configuration (use `SendConfig::default()` for production)
+///
+/// # Returns
+///
+/// A [`PreparedMessage`] containing the encrypted message and required jitter.
+///
+/// # Errors
+///
+/// Returns `ProtocolError::Crypto` if encryption fails.
+/// Returns `ProtocolError::Serialization` if serialization fails.
+///
+/// # Security
+///
+/// The caller **MUST** wait for `prepared.required_jitter` before sending:
+///
+/// ```ignore
+/// use veritas_protocol::encryption::{prepare_for_send, SendConfig};
+/// use tokio::time::sleep;
+///
+/// let prepared = prepare_for_send(
+///     &sender,
+///     recipient.public_keys(),
+///     content,
+///     None,
+///     SendConfig::default(),
+/// )?;
+///
+/// // MANDATORY: Apply timing jitter
+/// sleep(prepared.required_jitter).await;
+///
+/// // Now safe to send
+/// network.send(prepared.into_message()).await;
+/// ```
+///
+/// # Example (Testing)
+///
+/// ```ignore
+/// // For tests only - disables jitter for deterministic behavior
+/// let prepared = prepare_for_send(
+///     &sender,
+///     recipient.public_keys(),
+///     content,
+///     None,
+///     SendConfig::testing(),
+/// )?;
+/// assert_eq!(prepared.required_jitter, Duration::ZERO);
+/// ```
+pub fn prepare_for_send(
+    sender: &IdentityKeyPair,
+    recipient: &IdentityPublicKeys,
+    content: MessageContent,
+    reply_to: Option<Hash256>,
+    config: SendConfig,
+) -> Result<PreparedMessage> {
+    // Encrypt the message
+    let message = encrypt_for_recipient(sender, recipient, content, reply_to)?;
+
+    // Calculate required jitter using cryptographically secure RNG
+    let (required_jitter, jitter_enforced) = if config.enforce_jitter {
+        (add_timing_jitter(), true)
+    } else {
+        (Duration::ZERO, false)
+    };
+
+    Ok(PreparedMessage {
+        message,
+        required_jitter,
+        jitter_enforced,
+    })
 }
 
 #[cfg(test)]
@@ -709,6 +945,176 @@ mod tests {
         let payload = decrypt_as_recipient(&recipient, &encrypted.envelope).unwrap();
         assert_eq!(payload.content(), &content);
     }
+
+    // === Tests for timing jitter enforcement (VERITAS-2026-0015) ===
+
+    #[test]
+    fn test_send_config_default_enables_jitter() {
+        let config = SendConfig::default();
+        assert!(config.enforce_jitter);
+        assert!(!config.is_testing());
+    }
+
+    #[test]
+    fn test_send_config_testing_disables_jitter() {
+        let config = SendConfig::testing();
+        assert!(!config.enforce_jitter);
+        assert!(config.is_testing());
+    }
+
+    #[test]
+    fn test_prepare_for_send_with_jitter() {
+        let (sender, recipient) = create_test_identities();
+        let content = MessageContent::text("Hello with jitter!").unwrap();
+
+        let prepared = prepare_for_send(
+            &sender,
+            recipient.public_keys(),
+            content.clone(),
+            None,
+            SendConfig::default(),
+        )
+        .unwrap();
+
+        // Jitter should be enforced
+        assert!(prepared.is_jitter_enforced());
+
+        // Jitter should be in valid range (0 to MAX_JITTER_MS)
+        assert!(prepared.required_jitter <= Duration::from_millis(MAX_JITTER_MS));
+
+        // Message should still decrypt correctly
+        let payload = decrypt_as_recipient(&recipient, &prepared.message.envelope).unwrap();
+        assert_eq!(payload.content(), &content);
+    }
+
+    #[test]
+    fn test_prepare_for_send_testing_mode() {
+        let (sender, recipient) = create_test_identities();
+        let content = MessageContent::text("Testing mode message").unwrap();
+
+        let prepared = prepare_for_send(
+            &sender,
+            recipient.public_keys(),
+            content.clone(),
+            None,
+            SendConfig::testing(),
+        )
+        .unwrap();
+
+        // Jitter should NOT be enforced in testing mode
+        assert!(!prepared.is_jitter_enforced());
+
+        // Jitter should be zero in testing mode
+        assert_eq!(prepared.required_jitter, Duration::ZERO);
+
+        // Message should still decrypt correctly
+        let payload = decrypt_as_recipient(&recipient, &prepared.message.envelope).unwrap();
+        assert_eq!(payload.content(), &content);
+    }
+
+    #[test]
+    fn test_prepare_for_send_jitter_varies() {
+        let (sender, recipient) = create_test_identities();
+
+        // Generate multiple prepared messages and check jitter varies
+        let jitters: Vec<_> = (0..10)
+            .map(|i| {
+                let content = MessageContent::text(&format!("Message {}", i)).unwrap();
+                prepare_for_send(
+                    &sender,
+                    recipient.public_keys(),
+                    content,
+                    None,
+                    SendConfig::default(),
+                )
+                .unwrap()
+                .required_jitter
+            })
+            .collect();
+
+        // At least some should be different (with overwhelming probability)
+        let all_same = jitters.windows(2).all(|w| w[0] == w[1]);
+        assert!(!all_same, "Jitter values should vary across messages");
+    }
+
+    #[test]
+    fn test_prepared_message_into_message() {
+        let (sender, recipient) = create_test_identities();
+        let content = MessageContent::text("Extract message").unwrap();
+
+        let prepared = prepare_for_send(
+            &sender,
+            recipient.public_keys(),
+            content.clone(),
+            None,
+            SendConfig::testing(),
+        )
+        .unwrap();
+
+        // Get envelope hash before consuming
+        let hash = prepared.envelope_hash();
+
+        // Consume and get inner message
+        let message = prepared.into_message();
+
+        // Hash should match
+        assert_eq!(hash, message.envelope_hash());
+
+        // Should still decrypt
+        let payload = decrypt_as_recipient(&recipient, &message.envelope).unwrap();
+        assert_eq!(payload.content(), &content);
+    }
+
+    #[test]
+    fn test_prepared_message_debug() {
+        let (sender, recipient) = create_test_identities();
+        let content = MessageContent::text("Debug test").unwrap();
+
+        let prepared = prepare_for_send(
+            &sender,
+            recipient.public_keys(),
+            content,
+            None,
+            SendConfig::default(),
+        )
+        .unwrap();
+
+        let debug = format!("{:?}", prepared);
+        assert!(debug.contains("PreparedMessage"));
+        assert!(debug.contains("required_jitter"));
+    }
+
+    #[test]
+    fn test_send_config_debug() {
+        let config = SendConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("SendConfig"));
+        assert!(debug.contains("enforce_jitter"));
+    }
+
+    #[test]
+    fn test_prepare_for_send_jitter_always_in_range() {
+        let (sender, recipient) = create_test_identities();
+
+        // Test multiple times to ensure jitter stays in range
+        for i in 0..100 {
+            let content = MessageContent::text(&format!("Msg {}", i)).unwrap();
+            let prepared = prepare_for_send(
+                &sender,
+                recipient.public_keys(),
+                content,
+                None,
+                SendConfig::default(),
+            )
+            .unwrap();
+
+            assert!(
+                prepared.required_jitter <= Duration::from_millis(MAX_JITTER_MS),
+                "Jitter {} exceeds MAX_JITTER_MS",
+                prepared.required_jitter.as_millis()
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -779,6 +1185,52 @@ mod proptests {
             let restored = EncryptedMessage::from_bytes(&bytes).unwrap();
 
             let payload = decrypt_as_recipient(&recipient, &restored.envelope).unwrap();
+            prop_assert_eq!(payload.content(), &content);
+        }
+
+        #[test]
+        fn prepare_for_send_jitter_always_valid(text in ".{0,300}") {
+            let sender = IdentityKeyPair::generate();
+            let recipient = IdentityKeyPair::generate();
+            let content = MessageContent::text(&text).unwrap();
+
+            let prepared = prepare_for_send(
+                &sender,
+                recipient.public_keys(),
+                content.clone(),
+                None,
+                SendConfig::default(),
+            ).unwrap();
+
+            // Jitter must be in valid range
+            prop_assert!(prepared.required_jitter <= Duration::from_millis(MAX_JITTER_MS));
+            prop_assert!(prepared.is_jitter_enforced());
+
+            // Message must still decrypt correctly
+            let payload = decrypt_as_recipient(&recipient, &prepared.message.envelope).unwrap();
+            prop_assert_eq!(payload.content(), &content);
+        }
+
+        #[test]
+        fn prepare_for_send_testing_has_zero_jitter(text in ".{0,300}") {
+            let sender = IdentityKeyPair::generate();
+            let recipient = IdentityKeyPair::generate();
+            let content = MessageContent::text(&text).unwrap();
+
+            let prepared = prepare_for_send(
+                &sender,
+                recipient.public_keys(),
+                content.clone(),
+                None,
+                SendConfig::testing(),
+            ).unwrap();
+
+            // Testing mode must have zero jitter
+            prop_assert_eq!(prepared.required_jitter, Duration::ZERO);
+            prop_assert!(!prepared.is_jitter_enforced());
+
+            // Message must still decrypt correctly
+            let payload = decrypt_as_recipient(&recipient, &prepared.message.envelope).unwrap();
             prop_assert_eq!(payload.content(), &content);
         }
     }

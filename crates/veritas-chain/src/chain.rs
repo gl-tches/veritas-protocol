@@ -256,14 +256,28 @@ impl BlockValidation {
 // Fork Choice
 // ============================================================================
 
+/// Maximum number of fork tips to track simultaneously.
+///
+/// SECURITY (VERITAS-2026-0032): Prevents memory exhaustion from unbounded
+/// fork tip tracking. When this limit is exceeded, the shortest/oldest forks
+/// are pruned to make room for new tips.
+pub const MAX_FORK_TIPS: usize = 100;
+
 /// Fork tracking and resolution using longest chain rule.
 ///
 /// Tracks competing chain tips and determines the canonical chain
 /// based on the longest chain rule (most accumulated work).
+///
+/// ## Memory Safety (VERITAS-2026-0032)
+///
+/// The number of tracked tips is bounded by MAX_FORK_TIPS. When this limit
+/// is reached, the shortest forks (by height) are pruned first. If heights
+/// are equal, older tips (by hash comparison for determinism) are pruned.
 #[derive(Debug, Clone, Default)]
 pub struct ForkChoice {
     /// Competing chain tips indexed by hash.
     /// Maps block hash -> (height, parent_hash)
+    /// SECURITY (VERITAS-2026-0032): Bounded by MAX_FORK_TIPS.
     tips: HashMap<Hash256, (u64, Hash256)>,
 }
 
@@ -282,8 +296,45 @@ impl ForkChoice {
     /// * `hash` - Block hash of the tip
     /// * `height` - Height of the tip
     /// * `parent` - Parent block hash
+    ///
+    /// ## Memory Safety (VERITAS-2026-0032)
+    ///
+    /// This method enforces the MAX_FORK_TIPS limit. When exceeded, the
+    /// shortest forks are pruned first. Among forks of equal height, the
+    /// one with the lexicographically smaller hash is pruned (for determinism).
     pub fn add_tip(&mut self, hash: Hash256, height: u64, parent: Hash256) {
+        // SECURITY (VERITAS-2026-0032): Enforce fork tips limit before adding
+        self.enforce_fork_tips_limit();
+
         self.tips.insert(hash, (height, parent));
+    }
+
+    /// Enforce the fork tips size limit by pruning shortest/oldest forks.
+    ///
+    /// SECURITY (VERITAS-2026-0032): Prevents memory exhaustion from unbounded
+    /// fork tip tracking. Prunes the shortest forks first; among equal heights,
+    /// uses hash comparison for deterministic pruning.
+    fn enforce_fork_tips_limit(&mut self) {
+        while self.tips.len() >= MAX_FORK_TIPS {
+            // Find the "worst" tip to remove:
+            // 1. Shortest height (lowest priority)
+            // 2. Among equal heights, lowest hash (deterministic tiebreaker)
+            let worst = self
+                .tips
+                .iter()
+                .min_by(|(hash_a, (height_a, _)), (hash_b, (height_b, _))| {
+                    height_a
+                        .cmp(height_b)
+                        .then_with(|| hash_a.as_bytes().cmp(hash_b.as_bytes()))
+                })
+                .map(|(hash, _)| hash.clone());
+
+            if let Some(worst_hash) = worst {
+                self.tips.remove(&worst_hash);
+            } else {
+                break;
+            }
+        }
     }
 
     /// Remove a tip (when it's no longer a tip because a child was added).
@@ -2059,6 +2110,115 @@ mod tests {
             // Invalid characters
             assert!(chain.register_username("alice@bob", &user).is_err());
             assert!(chain.register_username("alice bob", &user).is_err());
+        }
+    }
+
+    // ==================== Security Tests (VERITAS-2026-0032) ====================
+    //
+    // These tests verify fork tip collection bounds.
+
+    mod fork_tips_bounds_tests {
+        use super::*;
+
+        // ==================== Test: Fork tips are bounded ====================
+        #[test]
+        fn test_fork_tips_bounded() {
+            let mut fc = ForkChoice::new();
+
+            // Add MAX_FORK_TIPS + 10 tips
+            for i in 0..(super::MAX_FORK_TIPS + 10) as u64 {
+                let hash = Hash256::hash(&i.to_le_bytes());
+                let parent = Hash256::hash(&(i.saturating_sub(1)).to_le_bytes());
+                fc.add_tip(hash, i, parent);
+            }
+
+            // Fork tips should be bounded at MAX_FORK_TIPS
+            assert!(fc.tip_count() <= super::MAX_FORK_TIPS);
+        }
+
+        // ==================== Test: Shortest forks are pruned first ====================
+        #[test]
+        fn test_shortest_forks_pruned_first() {
+            let mut fc = ForkChoice::new();
+
+            // Add tips at various heights
+            for i in 0..super::MAX_FORK_TIPS as u64 {
+                let hash = Hash256::hash(&i.to_le_bytes());
+                let parent = Hash256::hash(&(i + 1000).to_le_bytes());
+                // Heights: 0, 1, 2, 3, ...
+                fc.add_tip(hash, i, parent);
+            }
+
+            // Now add a new tip at a high height
+            let high_tip = Hash256::hash(b"high-tip");
+            let high_parent = Hash256::hash(b"high-parent");
+            fc.add_tip(high_tip.clone(), 1000, high_parent);
+
+            // The high tip should be preserved
+            assert!(fc.is_tip(&high_tip));
+
+            // The tip with height 0 should have been pruned
+            let lowest_hash = Hash256::hash(&0u64.to_le_bytes());
+            assert!(!fc.is_tip(&lowest_hash));
+        }
+
+        // ==================== Test: Fork choice still works with bounds ====================
+        #[test]
+        fn test_fork_choice_works_with_bounds() {
+            let mut fc = ForkChoice::new();
+
+            // Fill up to the limit
+            for i in 0..super::MAX_FORK_TIPS as u64 {
+                let hash = Hash256::hash(&i.to_le_bytes());
+                let parent = Hash256::hash(&(i + 1000).to_le_bytes());
+                fc.add_tip(hash, i, parent);
+            }
+
+            // Best tip should be the highest
+            let best = fc.best_tip();
+            assert!(best.is_some());
+
+            // The best tip's height should be MAX_FORK_TIPS - 1 or the highest remaining
+            let best_height = fc.tip_height(&best.unwrap());
+            assert!(best_height.is_some());
+        }
+
+        // ==================== Test: Has fork still works with bounds ====================
+        #[test]
+        fn test_has_fork_with_bounds() {
+            let mut fc = ForkChoice::new();
+
+            // Add two tips at similar heights
+            let hash1 = Hash256::hash(b"tip1");
+            let hash2 = Hash256::hash(b"tip2");
+            let parent = Hash256::hash(b"parent");
+
+            fc.add_tip(hash1, 100, parent.clone());
+            fc.add_tip(hash2, 101, parent);
+
+            assert!(fc.has_fork());
+        }
+
+        // ==================== Test: Deterministic pruning ====================
+        #[test]
+        fn test_deterministic_pruning() {
+            // Create two ForkChoice instances with the same data
+            let mut fc1 = ForkChoice::new();
+            let mut fc2 = ForkChoice::new();
+
+            // Add more than MAX_FORK_TIPS tips to both
+            for i in 0..(super::MAX_FORK_TIPS + 5) as u64 {
+                let hash = Hash256::hash(&i.to_le_bytes());
+                let parent = Hash256::hash(&(i + 1000).to_le_bytes());
+                fc1.add_tip(hash.clone(), i, parent.clone());
+                fc2.add_tip(hash, i, parent);
+            }
+
+            // Both should have the same tips after pruning
+            assert_eq!(fc1.tip_count(), fc2.tip_count());
+
+            // Same best tip
+            assert_eq!(fc1.best_tip(), fc2.best_tip());
         }
     }
 }

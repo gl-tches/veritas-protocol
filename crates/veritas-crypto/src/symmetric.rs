@@ -32,7 +32,7 @@ pub const TAG_SIZE: usize = 16;
 /// A 256-bit symmetric key for ChaCha20-Poly1305 encryption.
 ///
 /// The key is automatically zeroized when dropped.
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SymmetricKey {
     bytes: [u8; KEY_SIZE],
 }

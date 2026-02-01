@@ -26,6 +26,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, trace, warn};
 
 use crate::error::{NetError, Result};
+use crate::subnet_limiter::{PeerAcceptResult, SubnetLimiter, SubnetLimiterConfig};
 
 /// Default Kademlia protocol name for VERITAS.
 pub const VERITAS_KAD_PROTOCOL: &str = "/veritas/kad/1.0.0";
@@ -65,6 +66,9 @@ pub struct NodeConfig {
 
     /// Topics to subscribe to on startup.
     pub initial_topics: Vec<String>,
+
+    /// Configuration for subnet diversity limiting (eclipse attack prevention).
+    pub subnet_limiter_config: SubnetLimiterConfig,
 }
 
 impl Default for NodeConfig {
@@ -79,6 +83,7 @@ impl Default for NodeConfig {
             idle_connection_timeout_secs: 60,
             gossipsub_heartbeat_ms: 1000,
             initial_topics: vec!["veritas/messages/1.0.0".to_string()],
+            subnet_limiter_config: SubnetLimiterConfig::default(),
         }
     }
 }
@@ -140,6 +145,12 @@ impl NodeConfig {
     /// Add an initial topic to subscribe to.
     pub fn with_topic(mut self, topic: String) -> Self {
         self.initial_topics.push(topic);
+        self
+    }
+
+    /// Set the subnet limiter configuration for eclipse attack prevention.
+    pub fn with_subnet_limiter_config(mut self, config: SubnetLimiterConfig) -> Self {
+        self.subnet_limiter_config = config;
         self
     }
 }
@@ -297,6 +308,11 @@ pub struct VeritasNode {
 
     /// Configuration used to create this node.
     config: NodeConfig,
+
+    /// Subnet limiter for DHT eclipse attack prevention.
+    ///
+    /// Ensures routing table diversity by limiting peers per /24 subnet.
+    subnet_limiter: SubnetLimiter,
 }
 
 impl VeritasNode {
@@ -317,6 +333,9 @@ impl VeritasNode {
         // Create event channel
         let (event_tx, event_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
 
+        // Create subnet limiter for eclipse attack prevention
+        let subnet_limiter = SubnetLimiter::with_config(config.subnet_limiter_config.clone());
+
         let mut node = Self {
             swarm,
             event_tx,
@@ -324,6 +343,7 @@ impl VeritasNode {
             listen_addresses: Vec::new(),
             subscribed_topics: HashMap::new(),
             config: config.clone(),
+            subnet_limiter,
         };
 
         // Start listening on configured addresses
@@ -331,14 +351,12 @@ impl VeritasNode {
             node.listen_on(addr.clone())?;
         }
 
-        // Add bootstrap peers to Kademlia
+        // Add bootstrap peers to Kademlia with subnet diversity checks
         if config.enable_kademlia {
             for (peer_id, addr) in &config.bootstrap_peers {
                 debug!("Adding bootstrap peer: {} at {}", peer_id, addr);
-                node.swarm
-                    .behaviour_mut()
-                    .kademlia
-                    .add_address(peer_id, addr.clone());
+                // Bootstrap peers are added with subnet limit checks for eclipse attack prevention
+                node.try_add_peer_to_routing_table(*peer_id, addr.clone());
             }
 
             // Start bootstrap if we have peers
@@ -475,12 +493,9 @@ impl VeritasNode {
     pub async fn dial(&mut self, peer_id: PeerId, addr: Multiaddr) -> Result<()> {
         debug!("Dialing peer {} at {}", peer_id, addr);
 
-        // Add the address to Kademlia if enabled
+        // Add the address to Kademlia if enabled, respecting subnet limits
         if self.config.enable_kademlia {
-            self.swarm
-                .behaviour_mut()
-                .kademlia
-                .add_address(&peer_id, addr.clone());
+            self.try_add_peer_to_routing_table(peer_id, addr.clone());
         }
 
         // Dial the peer
@@ -489,6 +504,93 @@ impl VeritasNode {
             .map_err(|e| NetError::ConnectionFailed(format!("Failed to dial {}: {}", addr, e)))?;
 
         Ok(())
+    }
+
+    /// Attempt to add a peer to the Kademlia routing table with subnet diversity checks.
+    ///
+    /// This method implements eclipse attack prevention by limiting the number of
+    /// peers from the same /24 subnet. Returns true if the peer was added.
+    fn try_add_peer_to_routing_table(&mut self, peer_id: PeerId, addr: Multiaddr) -> bool {
+        // Check subnet limits before adding
+        match self.subnet_limiter.try_add_peer(peer_id, &addr) {
+            PeerAcceptResult::Accepted => {
+                self.swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .add_address(&peer_id, addr.clone());
+                debug!(
+                    "Added peer {} to routing table (subnet diversity check passed)",
+                    peer_id
+                );
+                true
+            }
+            PeerAcceptResult::AlreadyPresent => {
+                // Peer already tracked, still add address to Kademlia
+                self.swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .add_address(&peer_id, addr.clone());
+                true
+            }
+            PeerAcceptResult::ReplacedLowerReputation { replaced_peer } => {
+                // Remove the replaced peer from Kademlia routing table
+                // Note: Kademlia will naturally evict unresponsive peers
+                debug!(
+                    "Replaced peer {} with {} due to lower reputation",
+                    replaced_peer, peer_id
+                );
+                self.swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .add_address(&peer_id, addr.clone());
+                true
+            }
+            PeerAcceptResult::RejectedSubnetLimit {
+                subnet,
+                current_count,
+            } => {
+                warn!(
+                    "Rejected peer {} from subnet {} (limit reached: {}/{})",
+                    peer_id,
+                    subnet,
+                    current_count,
+                    self.config.subnet_limiter_config.max_peers_per_subnet
+                );
+                false
+            }
+            PeerAcceptResult::RejectedLowReputation { reputation } => {
+                warn!(
+                    "Rejected peer {} due to low reputation: {}",
+                    peer_id, reputation
+                );
+                false
+            }
+        }
+    }
+
+    /// Record a successful DHT operation for a peer.
+    ///
+    /// This increases the peer's reputation score, making them more likely
+    /// to be retained in the routing table during eclipse attack mitigation.
+    pub fn record_peer_success(&mut self, peer_id: &PeerId) {
+        self.subnet_limiter.record_success(peer_id);
+    }
+
+    /// Record a failed DHT operation for a peer.
+    ///
+    /// This decreases the peer's reputation score.
+    pub fn record_peer_failure(&mut self, peer_id: &PeerId) {
+        self.subnet_limiter.record_failure(peer_id);
+    }
+
+    /// Get the reputation score for a peer.
+    pub fn get_peer_reputation(&self, peer_id: &PeerId) -> Option<i64> {
+        self.subnet_limiter.get_reputation(peer_id)
+    }
+
+    /// Get subnet limiter statistics.
+    pub fn subnet_limiter_stats(&self) -> crate::subnet_limiter::SubnetLimiterStatsSnapshot {
+        self.subnet_limiter.stats()
     }
 
     /// Subscribe to a Gossipsub topic.
@@ -766,9 +868,13 @@ impl VeritasNode {
         match event {
             kad::Event::OutboundQueryProgressed { id, result, .. } => match result {
                 kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FoundRecord(
-                    kad::PeerRecord { record, .. },
+                    kad::PeerRecord { record, peer, .. },
                 ))) => {
                     debug!("Found record in DHT: key={:?}", record.key);
+                    // Record successful operation for peer reputation
+                    if let Some(peer_id) = peer {
+                        self.subnet_limiter.record_success(&peer_id);
+                    }
                     self.emit_event(NodeEvent::KademliaValueFound {
                         key: record.key.to_vec(),
                         value: record.value,
@@ -797,6 +903,10 @@ impl VeritasNode {
                     providers,
                 })) => {
                     debug!("Found {} providers for key", providers.len());
+                    // Record success for all providers found
+                    for provider in &providers {
+                        self.subnet_limiter.record_success(provider);
+                    }
                     self.emit_event(NodeEvent::KademliaProvidersFound {
                         key: key.to_vec(),
                         providers: providers.into_iter().collect(),
@@ -831,10 +941,14 @@ impl VeritasNode {
 
             kad::Event::RoutingUpdated { peer, .. } => {
                 debug!("Kademlia routing table updated for peer: {}", peer);
+                // Record success when peer is added to routing table
+                self.subnet_limiter.record_success(&peer);
             }
 
             kad::Event::UnroutablePeer { peer } => {
                 debug!("Peer is unroutable: {}", peer);
+                // Record failure when peer becomes unroutable
+                self.subnet_limiter.record_failure(&peer);
             }
 
             kad::Event::RoutablePeer { peer, address } => {
@@ -908,12 +1022,10 @@ impl VeritasNode {
                 for (peer_id, addr) in peers {
                     info!("mDNS discovered peer: {} at {}", peer_id, addr);
 
-                    // Add to Kademlia routing table
+                    // Add to Kademlia routing table with subnet diversity checks
+                    // to prevent eclipse attacks from local network attackers
                     if self.config.enable_kademlia {
-                        self.swarm
-                            .behaviour_mut()
-                            .kademlia
-                            .add_address(&peer_id, addr.clone());
+                        self.try_add_peer_to_routing_table(peer_id, addr.clone());
                     }
 
                     self.emit_event(NodeEvent::PeerDiscovered {
@@ -927,6 +1039,8 @@ impl VeritasNode {
             mdns::Event::Expired(peers) => {
                 for (peer_id, addr) in peers {
                     debug!("mDNS peer expired: {} at {}", peer_id, addr);
+                    // Remove from subnet limiter tracking
+                    self.subnet_limiter.remove_peer(&peer_id);
                 }
             }
         }
@@ -943,13 +1057,22 @@ impl VeritasNode {
                     peer_id, info.protocol_version, info.agent_version
                 );
 
-                // Add all listen addresses to Kademlia
+                // Add listen addresses to Kademlia with subnet diversity checks.
+                // We try each address until one is accepted (to ensure the peer is tracked).
                 if self.config.enable_kademlia {
+                    let mut added = false;
                     for addr in &info.listen_addrs {
-                        self.swarm
-                            .behaviour_mut()
-                            .kademlia
-                            .add_address(&peer_id, addr.clone());
+                        if self.try_add_peer_to_routing_table(peer_id, addr.clone()) {
+                            added = true;
+                            // Once peer is tracked, we can add additional addresses directly
+                            // since they're for the same peer
+                        }
+                    }
+                    if !added && !info.listen_addrs.is_empty() {
+                        debug!(
+                            "Peer {} rejected from routing table (subnet limits)",
+                            peer_id
+                        );
                     }
                 }
 
@@ -970,6 +1093,8 @@ impl VeritasNode {
 
             identify::Event::Error { peer_id, error } => {
                 debug!("Identify error with {}: {}", peer_id, error);
+                // Record identify failure which may indicate network issues or malicious behavior
+                self.subnet_limiter.record_failure(&peer_id);
             }
         }
 
