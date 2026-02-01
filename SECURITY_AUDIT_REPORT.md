@@ -10,9 +10,11 @@
 
 ## Executive Summary
 
-This comprehensive security audit of the VERITAS Protocol identified **23 CRITICAL**, **31 HIGH**, **26 MEDIUM**, and **11 LOW** severity vulnerabilities across 7 core crates.
+This comprehensive security audit of the VERITAS Protocol identified **24 CRITICAL**, **31 HIGH**, **26 MEDIUM**, and **11 LOW** severity vulnerabilities across 7 core crates.
 
-> **⚠️ 2026-01-31 UPDATE**: New CRITICAL vulnerability discovered (VERITAS-2026-0090: Username Uniqueness Not Enforced). Username spoofing attacks are possible due to missing blockchain-level uniqueness validation.
+> **⚠️ 2026-01-31 UPDATE**: Two NEW CRITICAL vulnerabilities discovered:
+> - **VERITAS-2026-0090**: Username Uniqueness Not Enforced (CVSS 9.3)
+> - **VERITAS-2026-0091**: Key Rotation PFS Violation (CVSS 9.1)
 
 While the protocol demonstrates strong foundational security practices (proper use of audited cryptographic libraries, zeroization, constant-time operations, domain separation), several fundamental security assumptions are undermined by implementation gaps.
 
@@ -21,6 +23,7 @@ While the protocol demonstrates strong foundational security practices (proper u
 | Category | Risk Level | Key Issues |
 |----------|------------|------------|
 | **Identity Spoofing** | **CRITICAL** | Username uniqueness not enforced (VERITAS-2026-0090) |
+| **Key Rotation** | **CRITICAL** | Perfect Forward Secrecy violated (VERITAS-2026-0091) |
 | Sybil Resistance | **CRITICAL** | Origin fingerprinting trivially bypassed |
 | Consensus | **CRITICAL** | Missing block signature verification |
 | DoS Protection | **CRITICAL** | Unbounded deserialization, memory exhaustion |
@@ -82,18 +85,18 @@ While the protocol demonstrates strong foundational security practices (proper u
 
 | Severity | Count | Description |
 |----------|-------|-------------|
-| CRITICAL | 23 | Immediate exploitation risk, system compromise |
+| CRITICAL | 24 | Immediate exploitation risk, system compromise |
 | HIGH | 31 | Significant security impact, requires prompt attention |
 | MEDIUM | 26 | Moderate risk, should be addressed before production |
 | LOW | 11 | Minor issues or hardening recommendations |
-| **TOTAL** | **91** | |
+| **TOTAL** | **92** | |
 
 ### By Category
 
 | Category | Critical | High | Medium | Low |
 |----------|----------|------|--------|-----|
 | Cryptography | 0 | 2 | 3 | 3 |
-| Identity | 4 | 4 | 4 | 2 |
+| Identity | 5 | 4 | 4 | 2 |
 | Protocol | 3 | 3 | 3 | 2 |
 | Blockchain | 4 | 5 | 6 | 4 |
 | Networking | 3 | 4 | 5 | 3 |
@@ -651,6 +654,181 @@ fn test_case_insensitive_duplicate_rejected() {
 
 ---
 
+### VERITAS-2026-0091: Key Rotation Perfect Forward Secrecy Violation
+
+**Severity**: CRITICAL
+**CVSS**: 9.1 (AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N)
+**Component**: veritas-identity, veritas-store
+**Location**:
+- `crates/veritas-identity/src/lifecycle.rs` (KeyState::Rotated)
+- `crates/veritas-identity/src/limits.rs:311-334` (register_rotation)
+- `crates/veritas-store/src/keyring.rs` (key storage)
+**Discovered**: 2026-01-31
+**Reporter**: User security review
+
+#### Description
+
+The key rotation mechanism violates Perfect Forward Secrecy (PFS) principles. When a user rotates their identity key, the old private key is **retained indefinitely** in encrypted storage with "Historical decrypt only" capability, as documented in `docs/SECURITY.md:333`.
+
+The documentation explicitly states:
+```
+| State   | Duration | Allowed Operations      |
+|---------|----------|-------------------------|
+| Rotated | -        | Historical decrypt only |
+```
+
+This means an attacker who compromises the password at ANY point in time can decrypt ALL historical messages ever sent to that identity, completely defeating the purpose of key rotation.
+
+#### Vulnerable Code Path
+
+```rust
+// 1. IdentityLimiter.register_rotation() - limits.rs:311-334
+// Only marks KeyState as Rotated, does NOT remove key from storage
+self.identities[old_idx].1.rotate(new_identity.clone())?;
+
+// 2. KeyState::Rotated - lifecycle.rs:52-56
+// Only stores reference to new identity, but old key remains in Keyring
+Rotated {
+    new_identity: [u8; 32],  // Reference only, key NOT destroyed
+}
+
+// 3. Keyring stores ALL identities indefinitely - keyring.rs
+// KeyringEntry contains encrypted_keypair for ALL states including Rotated
+pub struct KeyringEntry {
+    pub encrypted_keypair: EncryptedIdentityKeyPair,  // OLD KEY RETAINED
+    // ...
+}
+```
+
+#### Attack Vector
+
+1. Attacker compromises user's password + steals encrypted database at time T
+2. User rotates identity at time T+30 days (believing this protects old messages)
+3. Attacker decrypts old keypair from database using stolen password
+4. **Result**: ALL historical messages decrypted (PFS completely defeated)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    PFS Violation Timeline                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  T: Attacker compromises password + steals encrypted database   │
+│  T+30 days: User rotates identity                               │
+│  T+31 days: Attacker decrypts OLD keypair from stolen database  │
+│                                                                  │
+│  RESULT: ALL messages from T-∞ to T decryptable                 │
+│  EXPECTATION: Only messages from T-∞ to T-30 should be at risk  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Impact
+
+| Impact | Severity |
+|--------|----------|
+| Perfect Forward Secrecy | **VIOLATED** |
+| Historical message confidentiality | **NONE** |
+| Key rotation effectiveness | **NULLIFIED** |
+| Attack window | **UNLIMITED** (old keys never destroyed) |
+| User expectation violation | **CRITICAL** |
+
+#### Evidence
+
+1. **Documentation confirms behavior**: `docs/SECURITY.md:333` states "Historical decrypt only"
+2. **No key deletion on rotation**: `register_rotation()` only changes state, doesn't remove from keyring
+3. **Keyring retains all keys**: `KeyringEntry.encrypted_keypair` stored for all identities
+4. **No cleanup mechanism**: No function removes rotated keys from storage
+5. **0% test coverage**: No tests verify key destruction on rotation
+
+#### Remediation
+
+**Required Changes**:
+
+```rust
+// 1. Add key deletion to rotation flow
+pub fn rotate_identity(
+    &mut self,
+    old_hash: &IdentityHash,
+    new_keypair: &IdentityKeyPair,
+) -> Result<()> {
+    // Generate new identity and register
+    let new_hash = new_keypair.identity_hash();
+    self.limiter.register_rotation(old_hash, new_hash.clone(), current_time)?;
+
+    // Store new keypair
+    self.keyring.add_identity(new_keypair, None)?;
+
+    // CRITICAL: Delete old key material from storage
+    self.keyring.remove_identity(&old_hash.to_bytes())?;
+
+    Ok(())
+}
+
+// 2. Remove "Historical decrypt only" capability
+// Update docs/SECURITY.md:
+| Rotated | - | NONE (key destroyed) |
+
+// 3. Consider message re-encryption (HIGH effort)
+pub async fn rotate_with_reencryption(&mut self) -> Result<()> {
+    let old_key = self.current_keypair()?;
+    let new_keypair = IdentityKeyPair::generate();
+
+    // Re-encrypt all stored messages with new key
+    self.message_store.reencrypt_all(&old_key, &new_keypair)?;
+
+    // Destroy old key
+    self.keyring.remove_identity(&old_key.identity_hash().to_bytes())?;
+    old_key.zeroize();
+
+    Ok(())
+}
+```
+
+#### Testing Requirements
+
+```rust
+#[test]
+fn test_rotated_key_removed_from_storage() {
+    let mut manager = IdentityManager::new(config);
+    let old_hash = manager.create_identity(None).unwrap();
+
+    // Rotate
+    let new_hash = manager.rotate_identity(&old_hash).unwrap();
+
+    // Old key should NOT be retrievable
+    assert!(manager.keyring.get_identity(&old_hash.to_bytes()).unwrap().is_none());
+
+    // New key should be present
+    assert!(manager.keyring.get_identity(&new_hash.to_bytes()).unwrap().is_some());
+}
+
+#[test]
+fn test_forward_secrecy_after_rotation() {
+    let mut manager = IdentityManager::new(config);
+    let old_hash = manager.create_identity(None).unwrap();
+
+    // Encrypt message with old key
+    let old_keypair = manager.get_keypair(&old_hash).unwrap();
+    let ciphertext = encrypt_message(&old_keypair, b"secret");
+
+    // Rotate
+    manager.rotate_identity(&old_hash).unwrap();
+
+    // Old key should be destroyed - cannot decrypt
+    assert!(decrypt_with_identity(&manager, &old_hash, &ciphertext).is_err());
+}
+```
+
+#### Related Issues
+
+- VERITAS-2026-0055: Key rotation self-check missing (Fixed v0.2.0)
+- VERITAS-2026-0056: IdentityKeyPair Clone drops signing keys (Fixed v0.2.0)
+- VERITAS-2026-0057: Rotation frees slot prematurely (Fixed v0.2.0)
+
+**Note**: Issues 0055-0057 addressed implementation bugs but NOT the fundamental PFS violation.
+
+---
+
 ### VERITAS-2026-0011 through VERITAS-2026-0022: Additional Critical Findings
 
 | ID | Component | Issue | Location |
@@ -860,6 +1038,7 @@ The audit identified numerous positive security practices:
 | Priority | Issue | Effort |
 |----------|-------|--------|
 | P1 | **Username uniqueness enforcement (0090)** | **Medium** |
+| P1 | **Key rotation PFS fix - delete old keys (0091)** | **Medium** |
 | P1 | Block signature verification (0002) | High |
 | P1 | Unbounded deserialization (0003) | Medium |
 | P1 | Origin fingerprint hardening (0001, 0014) | High |
@@ -970,10 +1149,11 @@ The audit identified numerous positive security practices:
 The VERITAS Protocol demonstrates strong foundational security architecture with proper use of post-quantum cryptography, metadata protection, and defense-in-depth design. However, the implementation has significant gaps that undermine these design goals:
 
 1. **Username spoofing is trivially possible** due to missing blockchain-level uniqueness enforcement (VERITAS-2026-0090)
-2. **Sybil resistance is completely broken** due to trivially spoofable origin fingerprints
-3. **Blockchain consensus is insecure** without cryptographic block signatures
-4. **DoS protection is absent** at multiple layers (deserialization, gossip, storage)
-5. **Privacy guarantees are violated** by plaintext message queue metadata
+2. **Perfect Forward Secrecy is violated** by retaining old keys indefinitely after rotation (VERITAS-2026-0091)
+3. **Sybil resistance is completely broken** due to trivially spoofable origin fingerprints
+4. **Blockchain consensus is insecure** without cryptographic block signatures
+5. **DoS protection is absent** at multiple layers (deserialization, gossip, storage)
+6. **Privacy guarantees are violated** by plaintext message queue metadata
 
 **Immediate Action Required**: Address all CRITICAL findings before any deployment beyond development testing.
 
@@ -987,10 +1167,20 @@ The VERITAS Protocol demonstrates strong foundational security architecture with
 
 ---
 
-### 2026-01-31 Addendum: Username Spoofing Audit
+### 2026-01-31 Addendum: Security Audit Updates
 
 **Session**: https://claude.ai/code/session_014QKiSThRWboAM5SuMgQPYA
 **Auditor**: Claude Code Security Team
 
-New vulnerability discovered: VERITAS-2026-0090 (Username Uniqueness Not Enforced).
-See Critical Findings section for full details and remediation.
+Two new CRITICAL vulnerabilities discovered:
+
+1. **VERITAS-2026-0090**: Username Uniqueness Not Enforced (CVSS 9.3)
+   - Multiple users can register the same @username with different DIDs
+   - Enables social engineering and impersonation attacks
+   - See Critical Findings section for details
+
+2. **VERITAS-2026-0091**: Key Rotation PFS Violation (CVSS 9.1)
+   - Old keys retained indefinitely with "Historical decrypt only" capability
+   - Perfect Forward Secrecy completely defeated
+   - Password compromise at ANY time = ALL messages decrypted
+   - See Critical Findings section for details
