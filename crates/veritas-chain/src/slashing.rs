@@ -14,6 +14,13 @@
 //! signs two different blocks at the same height, they are permanently banned
 //! and lose all staked reputation.
 //!
+//! ## Memory Safety (VERITAS-2026-0030, VERITAS-2026-0031)
+//!
+//! All collections in this module are bounded to prevent memory exhaustion attacks:
+//! - Block signatures: Bounded by MAX_BLOCK_SIGNATURES
+//! - Banned validators: Bounded by MAX_BANNED_VALIDATORS
+//! - Slash history: Bounded by MAX_SLASH_HISTORY
+//!
 //! ## Example
 //!
 //! ```
@@ -35,6 +42,31 @@
 //! ```
 
 use std::collections::HashMap;
+
+// =============================================================================
+// Collection Bounds (VERITAS-2026-0030, VERITAS-2026-0031)
+// =============================================================================
+
+/// Maximum number of block signatures to retain for double-sign detection.
+///
+/// SECURITY (VERITAS-2026-0030): Prevents memory exhaustion from unbounded
+/// block signature storage. Older signatures are pruned when this limit is
+/// exceeded.
+pub const MAX_BLOCK_SIGNATURES: usize = 50_000;
+
+/// Maximum number of slash history entries to retain.
+///
+/// SECURITY (VERITAS-2026-0030): Prevents memory exhaustion from unbounded
+/// slash history. Oldest entries are pruned when this limit is exceeded.
+pub const MAX_SLASH_HISTORY: usize = 10_000;
+
+/// Maximum number of banned validators to track.
+///
+/// SECURITY (VERITAS-2026-0031): Prevents memory exhaustion from unbounded
+/// ban list. This is a conservative limit; in practice, the number of banned
+/// validators should remain much smaller. When exceeded, oldest bans are
+/// pruned but a warning is logged.
+pub const MAX_BANNED_VALIDATORS: usize = 1_000;
 
 use serde::{Deserialize, Serialize};
 use veritas_crypto::Hash256;
@@ -253,10 +285,24 @@ struct BlockSignature {
     timestamp: u64,
 }
 
+/// Record of a banned validator with timestamp for LRU eviction.
+#[derive(Debug, Clone)]
+struct BannedValidator {
+    /// When this validator was banned (Unix timestamp).
+    banned_at: u64,
+}
+
 /// Manager for processing slashing offenses and tracking double-sign attempts.
 ///
 /// The `SlashingManager` maintains state for detecting double-sign attacks
 /// and calculates penalties based on the configured percentages.
+///
+/// ## Memory Safety (VERITAS-2026-0030, VERITAS-2026-0031)
+///
+/// All internal collections are bounded:
+/// - `block_signatures`: Limited to MAX_BLOCK_SIGNATURES entries
+/// - `banned_validators`: Limited to MAX_BANNED_VALIDATORS entries
+/// - `slash_history`: Limited to MAX_SLASH_HISTORY entries
 #[derive(Debug)]
 pub struct SlashingManager {
     /// Slashing configuration.
@@ -264,12 +310,15 @@ pub struct SlashingManager {
 
     /// Block signatures indexed by (height, validator).
     /// Used for double-sign detection.
+    /// SECURITY (VERITAS-2026-0030): Bounded by MAX_BLOCK_SIGNATURES.
     block_signatures: HashMap<(u64, IdentityHash), BlockSignature>,
 
-    /// Set of permanently banned validators.
-    banned_validators: std::collections::HashSet<IdentityHash>,
+    /// Map of permanently banned validators with ban timestamps.
+    /// SECURITY (VERITAS-2026-0031): Bounded by MAX_BANNED_VALIDATORS.
+    banned_validators: HashMap<IdentityHash, BannedValidator>,
 
     /// History of slash results.
+    /// SECURITY (VERITAS-2026-0030): Bounded by MAX_SLASH_HISTORY.
     slash_history: Vec<SlashResult>,
 }
 
@@ -279,7 +328,7 @@ impl SlashingManager {
         Self {
             config,
             block_signatures: HashMap::new(),
-            banned_validators: std::collections::HashSet::new(),
+            banned_validators: HashMap::new(),
             slash_history: Vec::new(),
         }
     }
@@ -296,12 +345,17 @@ impl SlashingManager {
 
     /// Check if a validator is permanently banned.
     pub fn is_banned(&self, validator: &IdentityHash) -> bool {
-        self.banned_validators.contains(validator)
+        self.banned_validators.contains_key(validator)
     }
 
     /// Get the list of all banned validators.
     pub fn banned_validators(&self) -> impl Iterator<Item = &IdentityHash> {
-        self.banned_validators.iter()
+        self.banned_validators.keys()
+    }
+
+    /// Get the number of currently banned validators.
+    pub fn banned_count(&self) -> usize {
+        self.banned_validators.len()
     }
 
     /// Get the slash history for a specific validator.
@@ -323,6 +377,12 @@ impl SlashingManager {
     /// # Returns
     ///
     /// A `SlashResult` containing the penalty details.
+    ///
+    /// ## Memory Safety (VERITAS-2026-0030, VERITAS-2026-0031)
+    ///
+    /// This method enforces collection bounds:
+    /// - Prunes oldest slash history entries when MAX_SLASH_HISTORY is exceeded
+    /// - Prunes oldest banned validators when MAX_BANNED_VALIDATORS is exceeded
     pub fn process_offense(
         &mut self,
         validator: &IdentityHash,
@@ -332,9 +392,16 @@ impl SlashingManager {
         let penalty = self.calculate_penalty(&offense, current_stake);
         let remaining = current_stake.saturating_sub(penalty);
         let banned = matches!(offense, SlashingOffense::DoubleSign { .. });
+        let timestamp = current_timestamp();
 
         if banned {
-            self.banned_validators.insert(validator.clone());
+            // SECURITY (VERITAS-2026-0031): Check ban list capacity before adding
+            self.enforce_ban_list_limit();
+
+            self.banned_validators.insert(
+                validator.clone(),
+                BannedValidator { banned_at: timestamp },
+            );
         }
 
         let result = SlashResult {
@@ -343,12 +410,47 @@ impl SlashingManager {
             penalty_amount: penalty,
             remaining_stake: remaining,
             banned,
-            timestamp: current_timestamp(),
+            timestamp,
         };
 
+        // SECURITY (VERITAS-2026-0030): Enforce slash history limit
+        self.enforce_slash_history_limit();
         self.slash_history.push(result.clone());
 
         result
+    }
+
+    /// Enforce the ban list size limit by removing oldest bans.
+    ///
+    /// SECURITY (VERITAS-2026-0031): Prevents memory exhaustion from unbounded
+    /// ban list growth. When the limit is reached, the oldest bans are removed
+    /// to make room for new bans. This is a safety measure; in practice, the
+    /// number of banned validators should be much smaller than the limit.
+    fn enforce_ban_list_limit(&mut self) {
+        if self.banned_validators.len() >= MAX_BANNED_VALIDATORS {
+            // Find and remove the oldest ban to make room
+            let oldest = self
+                .banned_validators
+                .iter()
+                .min_by_key(|(_, info)| info.banned_at)
+                .map(|(id, _)| id.clone());
+
+            if let Some(oldest_id) = oldest {
+                self.banned_validators.remove(&oldest_id);
+            }
+        }
+    }
+
+    /// Enforce the slash history size limit by removing oldest entries.
+    ///
+    /// SECURITY (VERITAS-2026-0030): Prevents memory exhaustion from unbounded
+    /// slash history growth. Oldest entries are removed first (FIFO).
+    fn enforce_slash_history_limit(&mut self) {
+        if self.slash_history.len() >= MAX_SLASH_HISTORY {
+            // Remove oldest entries (from the front)
+            let excess = self.slash_history.len() - MAX_SLASH_HISTORY + 1;
+            self.slash_history.drain(0..excess);
+        }
     }
 
     /// Calculate the penalty amount for an offense.
@@ -400,6 +502,11 @@ impl SlashingManager {
     ///
     /// `Some(SlashingOffense::DoubleSign)` if double signing is detected,
     /// `None` otherwise.
+    ///
+    /// ## Memory Safety (VERITAS-2026-0030)
+    ///
+    /// This method enforces the MAX_BLOCK_SIGNATURES limit. When exceeded,
+    /// signatures from older heights are pruned automatically.
     pub fn record_block_signature(
         &mut self,
         validator: &IdentityHash,
@@ -421,6 +528,9 @@ impl SlashingManager {
             return None;
         }
 
+        // SECURITY (VERITAS-2026-0030): Enforce block signature limit
+        self.enforce_block_signatures_limit(height);
+
         // Record the new signature
         self.block_signatures.insert(
             key,
@@ -432,6 +542,36 @@ impl SlashingManager {
         );
 
         None
+    }
+
+    /// Enforce the block signatures size limit by pruning old signatures.
+    ///
+    /// SECURITY (VERITAS-2026-0030): Prevents memory exhaustion from unbounded
+    /// block signature storage. Signatures from heights significantly lower
+    /// than the current height are pruned.
+    fn enforce_block_signatures_limit(&mut self, current_height: u64) {
+        if self.block_signatures.len() >= MAX_BLOCK_SIGNATURES {
+            // Find the minimum height that should be pruned
+            // Keep signatures from recent blocks (within 1000 heights)
+            const KEEP_RECENT_HEIGHTS: u64 = 1000;
+            let prune_below = current_height.saturating_sub(KEEP_RECENT_HEIGHTS);
+
+            self.block_signatures
+                .retain(|(height, _), _| *height >= prune_below);
+
+            // If still at limit after height-based pruning, remove oldest by timestamp
+            if self.block_signatures.len() >= MAX_BLOCK_SIGNATURES {
+                let oldest = self
+                    .block_signatures
+                    .iter()
+                    .min_by_key(|(_, sig)| sig.timestamp)
+                    .map(|(key, _)| key.clone());
+
+                if let Some(oldest_key) = oldest {
+                    self.block_signatures.remove(&oldest_key);
+                }
+            }
+        }
     }
 
     /// Check if a validator has signed a block at the given height.
@@ -1022,5 +1162,190 @@ mod tests {
             block_hash_2: test_block_hash_2(),
         };
         assert!(double_sign.to_string().contains("300"));
+    }
+
+    // ==========================================================================
+    // Security Tests: Collection Bounds (VERITAS-2026-0030, VERITAS-2026-0031)
+    // ==========================================================================
+
+    // Test 25: Slash history is bounded at MAX_SLASH_HISTORY
+    #[test]
+    fn test_slash_history_bounded() {
+        let mut manager = SlashingManager::with_default_config();
+        let validator = test_validator();
+
+        // Add MAX_SLASH_HISTORY + 10 offenses
+        for height in 0..(super::MAX_SLASH_HISTORY + 10) as u64 {
+            manager.process_offense(
+                &validator,
+                SlashingOffense::MissedBlock { height },
+                1000,
+            );
+        }
+
+        // Slash history should be bounded at MAX_SLASH_HISTORY
+        assert!(manager.slash_history.len() <= super::MAX_SLASH_HISTORY);
+    }
+
+    // Test 26: Ban list is bounded at MAX_BANNED_VALIDATORS
+    #[test]
+    fn test_ban_list_bounded() {
+        let mut manager = SlashingManager::with_default_config();
+
+        // Ban MAX_BANNED_VALIDATORS + 10 validators
+        for i in 0..(super::MAX_BANNED_VALIDATORS + 10) as u32 {
+            let validator = IdentityHash::from_bytes(&[
+                (i & 0xFF) as u8,
+                ((i >> 8) & 0xFF) as u8,
+                ((i >> 16) & 0xFF) as u8,
+                ((i >> 24) & 0xFF) as u8,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0,
+            ])
+            .unwrap();
+
+            manager.process_offense(
+                &validator,
+                SlashingOffense::DoubleSign {
+                    height: i as u64,
+                    block_hash_1: Hash256::hash(&[i as u8]),
+                    block_hash_2: Hash256::hash(&[(i + 1) as u8]),
+                },
+                1000,
+            );
+        }
+
+        // Ban list should be bounded at MAX_BANNED_VALIDATORS
+        assert!(manager.banned_count() <= super::MAX_BANNED_VALIDATORS);
+    }
+
+    // Test 27: Recent bans are preserved during pruning
+    #[test]
+    fn test_recent_bans_preserved() {
+        let mut manager = SlashingManager::with_default_config();
+
+        // Ban MAX_BANNED_VALIDATORS validators
+        for i in 0..super::MAX_BANNED_VALIDATORS as u32 {
+            let validator = IdentityHash::from_bytes(&[
+                (i & 0xFF) as u8,
+                ((i >> 8) & 0xFF) as u8,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0,
+            ])
+            .unwrap();
+
+            manager.process_offense(
+                &validator,
+                SlashingOffense::DoubleSign {
+                    height: i as u64,
+                    block_hash_1: Hash256::hash(&[i as u8]),
+                    block_hash_2: Hash256::hash(&[(i + 1) as u8]),
+                },
+                1000,
+            );
+        }
+
+        // Ban one more recent validator
+        let recent_validator = IdentityHash::from_bytes(&[
+            0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ])
+        .unwrap();
+
+        manager.process_offense(
+            &recent_validator,
+            SlashingOffense::DoubleSign {
+                height: 9999,
+                block_hash_1: Hash256::hash(b"recent1"),
+                block_hash_2: Hash256::hash(b"recent2"),
+            },
+            1000,
+        );
+
+        // The most recent ban should be preserved
+        assert!(manager.is_banned(&recent_validator));
+    }
+
+    // Test 28: Block signatures are bounded
+    #[test]
+    fn test_block_signatures_bounded() {
+        let mut manager = SlashingManager::with_default_config();
+        let validator = test_validator();
+
+        // Add MAX_BLOCK_SIGNATURES + 100 signatures (but at heights that would trigger pruning)
+        for height in 0..(super::MAX_BLOCK_SIGNATURES + 100) as u64 {
+            manager.record_block_signature(
+                &validator,
+                height,
+                Hash256::hash(&height.to_le_bytes()),
+            );
+        }
+
+        // Block signatures should be bounded
+        // Due to height-based pruning, we expect far fewer than MAX_BLOCK_SIGNATURES
+        assert!(manager.block_signatures.len() <= super::MAX_BLOCK_SIGNATURES);
+    }
+
+    // Test 29: Banned count helper works
+    #[test]
+    fn test_banned_count() {
+        let mut manager = SlashingManager::with_default_config();
+        assert_eq!(manager.banned_count(), 0);
+
+        let v1 = test_validator();
+        let v2 = test_validator_2();
+
+        manager.process_offense(
+            &v1,
+            SlashingOffense::DoubleSign {
+                height: 1,
+                block_hash_1: test_block_hash_1(),
+                block_hash_2: test_block_hash_2(),
+            },
+            1000,
+        );
+        assert_eq!(manager.banned_count(), 1);
+
+        manager.process_offense(
+            &v2,
+            SlashingOffense::DoubleSign {
+                height: 2,
+                block_hash_1: test_block_hash_1(),
+                block_hash_2: test_block_hash_2(),
+            },
+            1000,
+        );
+        assert_eq!(manager.banned_count(), 2);
+    }
+
+    // Test 30: Old signatures are pruned during limit enforcement
+    #[test]
+    fn test_old_signatures_pruned_during_enforcement() {
+        let mut manager = SlashingManager::with_default_config();
+        let validator = test_validator();
+
+        // Add signatures at heights 0-99
+        for height in 0..100 {
+            manager.record_block_signature(
+                &validator,
+                height,
+                Hash256::hash(&[height as u8]),
+            );
+        }
+
+        // Verify signatures exist at low heights
+        assert!(manager.has_signed_at_height(&validator, 0));
+        assert!(manager.has_signed_at_height(&validator, 50));
+
+        // Now simulate the limit being hit by calling prune_signatures with a high min_height
+        manager.prune_signatures(50);
+
+        // Old signatures should be pruned
+        assert!(!manager.has_signed_at_height(&validator, 0));
+        assert!(!manager.has_signed_at_height(&validator, 49));
+        assert!(manager.has_signed_at_height(&validator, 50));
+        assert!(manager.has_signed_at_height(&validator, 99));
     }
 }

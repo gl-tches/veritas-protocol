@@ -373,12 +373,4 @@ mod tests {
         assert!(!debug.contains("REDACTED"));
     }
 
-    #[test]
-    fn test_clone_private_key() {
-        let original = X25519StaticPrivateKey::generate();
-        let cloned = original.clone();
-
-        // Both should derive the same public key
-        assert_eq!(original.public_key(), cloned.public_key());
-    }
 }

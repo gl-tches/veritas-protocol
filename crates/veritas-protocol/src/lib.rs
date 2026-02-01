@@ -47,7 +47,8 @@ pub mod signing;
 pub use chunking::{split_into_chunks, ChunkInfo, ChunkReassembler, MessageChunk};
 pub use encryption::{
     add_timing_jitter, decrypt_and_verify, decrypt_as_recipient, encrypt_for_recipient,
-    DecryptionContext, EncryptedMessage, MESSAGE_ENCRYPTION_CONTEXT,
+    prepare_for_send, DecryptionContext, EncryptedMessage, PreparedMessage, SendConfig,
+    MESSAGE_ENCRYPTION_CONTEXT,
 };
 pub use envelope::{
     bucket_for_size, current_epoch, derive_mailbox_key, epoch_from_timestamp,
