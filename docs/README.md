@@ -2,7 +2,7 @@
 
 Complete documentation for the VERITAS Protocol.
 
-**Version**: 0.3.0-beta | **Rust Edition**: 2024 | **MSRV**: 1.85 | **License**: MIT OR Apache-2.0
+**Version**: 0.3.1-beta | **Rust Edition**: 2024 | **MSRV**: 1.85 | **License**: MIT OR Apache-2.0
 
 ---
 
