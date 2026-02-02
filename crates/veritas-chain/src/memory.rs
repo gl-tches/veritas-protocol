@@ -361,10 +361,18 @@ impl MemoryBudget {
 
     /// Remove a block from the cache.
     ///
+    /// SECURITY: Pinned blocks cannot be removed. This prevents accidental
+    /// removal of genesis or tip blocks that must always be available.
+    ///
     /// # Returns
     ///
-    /// The removed block if it was present.
+    /// The removed block if it was present and not pinned, None otherwise.
     pub fn remove(&mut self, hash: &Hash256) -> Option<Arc<Block>> {
+        // SECURITY: Prevent removal of pinned blocks
+        if self.pinned.contains(hash) {
+            return None;
+        }
+
         if let Some((block, size)) = self.cache.pop(hash) {
             self.current_bytes = self.current_bytes.saturating_sub(size);
             self.metrics.cached_blocks = self.cache.len();
@@ -441,6 +449,9 @@ impl MemoryBudget {
     /// Evicts blocks if necessary to make room for a block of the given size.
     /// Returns true if space was successfully reserved.
     ///
+    /// SECURITY: Respects pinned blocks - they will not be evicted during reservation.
+    /// If all blocks are pinned and space cannot be made, returns false.
+    ///
     /// # Arguments
     ///
     /// * `size` - Size of the block to reserve space for
@@ -449,12 +460,23 @@ impl MemoryBudget {
             return false;
         }
 
-        while self.current_bytes + size > self.max_bytes {
-            if self.cache.pop_lru().is_none() {
-                return false;
+        // SECURITY: Use find_evictable_lru to respect pinned blocks
+        while self.current_bytes.saturating_add(size) > self.max_bytes {
+            match self.find_evictable_lru() {
+                Some(hash) => {
+                    if let Some((_, evicted_size)) = self.cache.pop(&hash) {
+                        self.current_bytes = self.current_bytes.saturating_sub(evicted_size);
+                        self.metrics.evictions += 1;
+                    }
+                }
+                None => {
+                    // All blocks are pinned - cannot reserve space
+                    return false;
+                }
             }
         }
 
+        self.metrics.cached_blocks = self.cache.len();
         true
     }
 

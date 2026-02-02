@@ -41,6 +41,11 @@ pub const MAX_MEMORY_BUDGET_MB: usize = 8192;
 /// Default number of blocks to keep in hot cache.
 pub const DEFAULT_HOT_CACHE_BLOCKS: usize = 1000;
 
+/// Maximum number of blocks in hot cache.
+///
+/// SECURITY: Prevent memory exhaustion from excessive cache allocation.
+pub const MAX_HOT_CACHE_BLOCKS: usize = 100_000;
+
 /// Default number of blocks to keep in standard pruning mode.
 pub const DEFAULT_KEEP_BLOCKS: u64 = 10_000;
 
@@ -58,6 +63,11 @@ pub const DEFAULT_SLED_CACHE_MB: usize = 64;
 
 /// Minimum sled cache size in megabytes.
 pub const MIN_SLED_CACHE_MB: usize = 16;
+
+/// Maximum sled cache size in megabytes.
+///
+/// SECURITY: Prevent memory exhaustion from excessive cache allocation.
+pub const MAX_SLED_CACHE_MB: usize = 8192;
 
 /// Maximum size of a compressed block in bytes.
 ///
@@ -406,8 +416,13 @@ impl BlockchainConfig {
     }
 
     /// Get memory budget in bytes.
+    ///
+    /// Uses saturating arithmetic to prevent integer overflow.
     pub fn memory_budget_bytes(&self) -> usize {
-        self.memory_budget_mb * 1024 * 1024
+        // SECURITY: Use saturating multiplication to prevent integer overflow
+        self.memory_budget_mb
+            .saturating_mul(1024)
+            .saturating_mul(1024)
     }
 
     /// Validate the configuration.
@@ -432,6 +447,14 @@ impl BlockchainConfig {
             return Err("hot_cache_blocks must be greater than 0".to_string());
         }
 
+        // SECURITY: Upper bounds validation to prevent memory exhaustion
+        if self.hot_cache_blocks > MAX_HOT_CACHE_BLOCKS {
+            return Err(format!(
+                "hot_cache_blocks must be at most {}",
+                MAX_HOT_CACHE_BLOCKS
+            ));
+        }
+
         if self.compression_level < 1 || self.compression_level > 22 {
             return Err("compression_level must be between 1 and 22".to_string());
         }
@@ -440,6 +463,14 @@ impl BlockchainConfig {
             return Err(format!(
                 "sled_cache_mb must be at least {} MB",
                 MIN_SLED_CACHE_MB
+            ));
+        }
+
+        // SECURITY: Upper bounds validation to prevent memory exhaustion
+        if self.sled_cache_mb > MAX_SLED_CACHE_MB {
+            return Err(format!(
+                "sled_cache_mb must be at most {} MB",
+                MAX_SLED_CACHE_MB
             ));
         }
 
@@ -483,8 +514,13 @@ impl BlockchainConfig {
     }
 
     /// Get sled cache size in bytes.
+    ///
+    /// Uses saturating arithmetic to prevent integer overflow.
     pub fn sled_cache_bytes(&self) -> usize {
-        self.sled_cache_mb * 1024 * 1024
+        // SECURITY: Use saturating multiplication to prevent integer overflow
+        self.sled_cache_mb
+            .saturating_mul(1024)
+            .saturating_mul(1024)
     }
 }
 
@@ -658,6 +694,38 @@ mod tests {
     fn test_sled_cache_bytes() {
         let config = BlockchainConfig::default().with_sled_cache(64);
         assert_eq!(config.sled_cache_bytes(), 64 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_validation_rejects_excessive_hot_cache() {
+        let config = BlockchainConfig::default().with_hot_cache(MAX_HOT_CACHE_BLOCKS + 1);
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("hot_cache_blocks"));
+    }
+
+    #[test]
+    fn test_validation_rejects_excessive_sled_cache() {
+        let config = BlockchainConfig::default().with_sled_cache(MAX_SLED_CACHE_MB + 1);
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("sled_cache_mb"));
+    }
+
+    #[test]
+    fn test_saturating_bytes_conversion() {
+        // Test that we don't overflow on large values
+        let config = BlockchainConfig {
+            memory_budget_mb: usize::MAX / 1024, // Would overflow with naive multiplication
+            hot_cache_blocks: 1000,
+            pruning_mode: PruningMode::default(),
+            compression_enabled: true,
+            compression_level: 3,
+            sled_cache_mb: usize::MAX / 1024, // Would overflow with naive multiplication
+        };
+        // Should saturate at usize::MAX rather than panic or wrap
+        assert!(config.memory_budget_bytes() <= usize::MAX);
+        assert!(config.sled_cache_bytes() <= usize::MAX);
     }
 
     // ==================== NodeRole Tests ====================

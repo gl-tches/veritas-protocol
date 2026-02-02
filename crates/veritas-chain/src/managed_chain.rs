@@ -531,12 +531,36 @@ impl ManagedBlockchain {
 
         // Load each block and rebuild indexes
         // We need to process in height order, so first collect all blocks
+        // SECURITY: Verify each block before accepting it into the index
         let mut blocks_by_height: BTreeMap<u64, (Hash256, Block)> = BTreeMap::new();
 
         for hash in hashes {
             if let Some(block) = self.backend.load_block(&hash).await? {
+                // SECURITY: Verify block integrity before accepting
+                block.verify()?;
+
+                // SECURITY: Check for duplicate heights (could indicate corruption)
+                if blocks_by_height.contains_key(&block.height()) {
+                    return Err(ChainError::InvalidBlock(format!(
+                        "Duplicate block at height {}",
+                        block.height()
+                    )));
+                }
+
                 blocks_by_height.insert(block.height(), (hash, block));
             }
+        }
+
+        // SECURITY: Validate height sequentiality (no gaps)
+        let mut expected_height = 0u64;
+        for height in blocks_by_height.keys() {
+            if *height != expected_height {
+                return Err(ChainError::InvalidBlock(format!(
+                    "Height gap detected: expected {}, found {}",
+                    expected_height, height
+                )));
+            }
+            expected_height = height + 1;
         }
 
         // Process in height order
@@ -564,6 +588,7 @@ impl ManagedBlockchain {
         }
 
         // Find genesis and tip
+        // SECURITY: Genesis was already verified in the earlier loop
         if let Some((&genesis_height, genesis_hash)) = self.height_index.first_key_value() {
             if genesis_height != 0 {
                 return Err(ChainError::InvalidBlock(
@@ -574,6 +599,12 @@ impl ManagedBlockchain {
 
             // Load and pin genesis
             if let Some(genesis) = self.backend.load_block(genesis_hash).await? {
+                // SECURITY: Verify genesis has correct structure
+                if !genesis.is_genesis() {
+                    return Err(ChainError::InvalidBlock(
+                        "Block at height 0 is not a valid genesis block".to_string(),
+                    ));
+                }
                 self.hot_cache.pin(genesis_hash);
                 let _ = self.hot_cache.try_insert(genesis_hash.clone(), Arc::new(genesis));
             }

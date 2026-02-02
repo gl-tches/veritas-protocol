@@ -404,7 +404,10 @@ impl SledBackend {
     /// Compress bytes if compressor is available.
     fn maybe_compress(&self, bytes: &[u8]) -> Result<Vec<u8>> {
         if let Some(ref compressor) = self.compressor {
-            let mut comp = compressor.lock().unwrap();
+            // SECURITY: Handle poisoned mutex gracefully instead of panicking
+            let mut comp = compressor
+                .lock()
+                .map_err(|_| ChainError::Storage("compressor mutex poisoned".into()))?;
             comp.compress_bytes(bytes)
         } else {
             Ok(bytes.to_vec())
@@ -414,7 +417,10 @@ impl SledBackend {
     /// Decompress bytes if compressor is available.
     fn maybe_decompress(&self, bytes: &[u8]) -> Result<Vec<u8>> {
         if let Some(ref compressor) = self.compressor {
-            let mut comp = compressor.lock().unwrap();
+            // SECURITY: Handle poisoned mutex gracefully instead of panicking
+            let mut comp = compressor
+                .lock()
+                .map_err(|_| ChainError::Storage("compressor mutex poisoned".into()))?;
             comp.decompress_bytes(bytes)
         } else {
             Ok(bytes.to_vec())

@@ -110,7 +110,10 @@ pub use block::{
 };
 pub use chain::{BlockValidation, Blockchain, ChainState, ForkChoice};
 pub use compression::{BlockCompressor, CompressionMetrics};
-pub use config::{BlockchainConfig, NodeRole, PruningMode, DEFAULT_SLED_CACHE_MB};
+pub use config::{
+    BlockchainConfig, NodeRole, PruningMode, DEFAULT_SLED_CACHE_MB, MAX_HOT_CACHE_BLOCKS,
+    MAX_SLED_CACHE_MB,
+};
 pub use error::{ChainError, Result};
 pub use managed_chain::{IndexRebuildStats, ManagedBlockchain, ManagedMemoryMetrics};
 
