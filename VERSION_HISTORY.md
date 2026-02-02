@@ -7,6 +7,121 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1-beta] - 2026-02-02
+
+### Summary
+Version 0.3.1-beta introduces lightweight node profiles, enabling VERITAS deployment on resource-constrained devices such as Raspberry Pi, mobile devices, and embedded systems. This release also includes critical security fixes for the new storage architecture.
+
+### Highlights
+- **Lightweight Node Profiles**: Dramatically reduced memory requirements for all node types
+- **Tiered Storage Architecture**: Hot cache (LRU) + cold storage (sled) for efficient memory usage
+- **Security Hardening**: Critical fixes for the new storage components identified by security audit agents
+
+### New Features
+
+#### Lightweight Node Profiles (TASK-200)
+Reduces memory requirements for resource-constrained devices:
+
+| Node Type | Previous RAM | New RAM | Reduction |
+|-----------|--------------|---------|-----------|
+| Relay     | 2 GB         | 256 MB  | 87.5%     |
+| Full Node | 4 GB         | 512 MB  | 87.5%     |
+| Validator | 4 GB         | 1 GB    | 75%       |
+
+##### NodeRole Enum
+Five node roles with pre-configured settings:
+- `Relay` — Minimal footprint for message relay
+- `FullNode` — Standard node with full chain history access
+- `Validator` — Block production with higher memory allocation
+- `Bootstrap` — Network bootstrap node
+- `Archive` — Full history retention (no pruning)
+
+##### Profile Constructors
+```rust
+// Create configuration for specific node type
+let config = BlockchainConfig::relay();      // 256 MB RAM
+let config = BlockchainConfig::full_node();  // 512 MB RAM
+let config = BlockchainConfig::validator();  // 1 GB RAM
+let config = BlockchainConfig::archive();    // Full history
+```
+
+#### SledBackend — Persistent Block Storage
+- Height-indexed block retrieval with BE u64 keys
+- Username index persistence with Blake3 integrity verification
+- Optional zstd compression support via `BlockCompressor`
+- Configurable sled cache size (`sled_cache_mb`)
+- Feature flag: `sled-storage` (enabled by default)
+
+#### ManagedBlockchain — Tiered Storage
+- Hot cache: In-memory LRU (MemoryBudget) for recent/active blocks
+- Cold storage: Persistent sled backend for older blocks
+- Genesis and tip blocks pinned (never evicted)
+- Automatic cache miss recovery from cold storage
+- Index rebuild from persistent storage on startup
+
+#### MemoryBudget Enhancements
+- Pin/unpin support for critical blocks (genesis, tip)
+- LRU eviction respects pinning
+- Configurable memory limits per node role
+
+### Security Fixes
+
+#### Critical
+- **memory.rs**: Prevent pin bypass via `remove()` — now checks pinning before removal
+- **memory.rs**: Fix `reserve()` to use `find_evictable_lru()` and update `current_bytes`
+- **managed_chain.rs**: Add block verification during index rebuild with height sequentiality validation
+- **sled_backend.rs**: Handle mutex poisoning gracefully instead of panicking
+
+#### High
+- **config.rs**: Add upper bounds validation for `hot_cache_blocks` (max 100,000) and `sled_cache_mb` (max 8,192)
+- **config.rs**: Use saturating arithmetic in `memory_budget_bytes()` and `sled_cache_bytes()` to prevent integer overflow
+
+### Changed
+- Version: 0.3.0-beta → 0.3.1-beta
+- `veritas-chain` crate now depends on `sled = "0.34.7"`
+- `veritas-wasm` uses `default-features = false` for `veritas-chain` (WASM compatibility)
+
+### New Files
+- `crates/veritas-chain/src/sled_backend.rs` — SledBackend implementation
+- `crates/veritas-chain/src/managed_chain.rs` — ManagedBlockchain with tiered storage
+
+### Test Results
+- All 414 unit tests pass
+- All 15 doc tests pass
+- Clippy clean with `-D warnings`
+
+### Migration Guide
+
+#### For Library Users
+No breaking API changes. Existing code continues to work with default settings.
+
+To use lightweight profiles:
+```rust
+use veritas_chain::{BlockchainConfig, NodeRole};
+
+// Use pre-configured profile
+let config = BlockchainConfig::relay();
+
+// Or customize
+let config = BlockchainConfig::builder()
+    .node_role(NodeRole::FullNode)
+    .hot_cache_blocks(500)
+    .sled_cache_mb(64)
+    .build()?;
+```
+
+#### For Embedded/Mobile Deployments
+1. Update to veritas-chain 0.3.1-beta
+2. Use `BlockchainConfig::relay()` for minimal footprint
+3. For WASM: ensure `default-features = false` for veritas-chain dependency
+
+### Maturity Status
+- **Previous**: v0.3.0-beta (security audit compliance complete)
+- **Current**: v0.3.1-beta (lightweight node profiles, embedded device support)
+- **Next milestone**: v1.0.0 (stable release after production testing)
+
+---
+
 ## [0.3.0-beta] - 2026-02-01
 
 ### Summary

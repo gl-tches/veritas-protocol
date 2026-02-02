@@ -11,7 +11,7 @@ VERITAS (Verified Encrypted Real-time Integrity Transmission And Signing) is a p
 **Security Level**: HARDENED + POST-QUANTUM
 **Edition**: Rust 2024
 **MSRV**: 1.85
-**Version**: 0.3.0-beta
+**Version**: 0.3.1-beta
 
 ## ✅ Completed Work Streams
 
@@ -33,6 +33,35 @@ All 90 actionable vulnerabilities from SECURITY_AUDIT_REPORT.md have been addres
 - 12 `#[no_mangle]` → `#[unsafe(no_mangle)]` in FFI crate
 - 13 clippy warnings fixed for Rust 2024 stricter lints
 - cbindgen 0.26 → 0.29, PyO3 0.20 → 0.23 for compatibility
+
+### 3. Lightweight Node Profiles (COMPLETED — v0.3.1-beta)
+
+**Status**: Full implementation with security hardening complete
+**Task-ID**: TASK-200
+**Tracking**: See TASKS.md and VERSION_HISTORY.md for details
+
+**Memory Reduction Achieved**:
+
+| Node Type | Previous | New     | Reduction |
+|-----------|----------|---------|-----------|
+| Relay     | 2 GB     | 256 MB  | 87.5%     |
+| Full Node | 4 GB     | 512 MB  | 87.5%     |
+| Validator | 4 GB     | 1 GB    | 75%       |
+
+**Key Components**:
+- `SledBackend` — Persistent block storage with optional zstd compression
+- `ManagedBlockchain` — Tiered hot cache (LRU) + cold storage (sled)
+- `NodeRole` enum — Five roles: Relay, FullNode, Validator, Bootstrap, Archive
+- Profile constructors: `BlockchainConfig::relay()`, `full_node()`, `validator()`, `archive()`
+- Pin/unpin support for critical blocks (genesis, tip never evicted)
+
+**Security Fixes Applied** (by audit agents):
+- Prevented pin bypass via `remove()` in MemoryBudget
+- Fixed `reserve()` to properly use LRU eviction
+- Added block verification during index rebuild
+- Graceful mutex poisoning handling in SledBackend
+- Upper bounds validation for config parameters
+- Saturating arithmetic to prevent integer overflow
 
 ## 📋 Remaining Work
 
