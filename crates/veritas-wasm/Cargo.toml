@@ -16,6 +16,8 @@ crate-type = ["cdylib", "rlib"]
 veritas-crypto = { workspace = true }
 veritas-identity = { workspace = true }
 veritas-protocol = { workspace = true }
+# Note: sled-storage feature is disabled for WASM (sled doesn't work in WASM)
+veritas-chain = { path = "../veritas-chain", default-features = false }
 
 # WASM
 wasm-bindgen.workspace = true

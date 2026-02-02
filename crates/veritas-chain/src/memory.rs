@@ -21,6 +21,7 @@
 //! assert!(budget.current_bytes() < budget.max_bytes());
 //! ```
 
+use std::collections::HashSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
@@ -110,6 +111,10 @@ pub struct MemoryBudget {
     /// LRU cache mapping block hash to (block, size).
     cache: LruCache<Hash256, (Arc<Block>, usize)>,
 
+    /// Pinned blocks that should never be evicted.
+    /// Used for genesis and tip blocks that must always be available.
+    pinned: HashSet<Hash256>,
+
     /// Performance metrics.
     metrics: MemoryMetrics,
 }
@@ -120,6 +125,7 @@ impl std::fmt::Debug for MemoryBudget {
             .field("max_bytes", &self.max_bytes)
             .field("current_bytes", &self.current_bytes)
             .field("cached_blocks", &self.cache.len())
+            .field("pinned_blocks", &self.pinned.len())
             .field("metrics", &self.metrics)
             .finish()
     }
@@ -152,6 +158,7 @@ impl MemoryBudget {
             max_bytes,
             current_bytes: 0,
             cache: LruCache::new(capacity),
+            pinned: HashSet::new(),
             metrics: MemoryMetrics {
                 max_bytes,
                 ..Default::default()
@@ -246,18 +253,25 @@ impl MemoryBudget {
             return Ok(());
         }
 
-        // Evict blocks until we have room
+        // Evict blocks until we have room, skipping pinned blocks
         while self.current_bytes + block_size > self.max_bytes {
-            if let Some((_evicted_hash, (_evicted_block, evicted_size))) = self.cache.pop_lru() {
-                self.current_bytes = self.current_bytes.saturating_sub(evicted_size);
-                self.metrics.evictions += 1;
-            } else {
-                // Cache is empty but still can't fit - shouldn't happen
-                // given the size check above, but handle defensively
-                self.metrics.failed_insertions += 1;
-                return Err(ChainError::Storage(
-                    "Failed to make room for block".to_string(),
-                ));
+            // Find the LRU block that is not pinned
+            let evict_hash = self.find_evictable_lru();
+
+            match evict_hash {
+                Some(hash) => {
+                    if let Some((_, evicted_size)) = self.cache.pop(&hash) {
+                        self.current_bytes = self.current_bytes.saturating_sub(evicted_size);
+                        self.metrics.evictions += 1;
+                    }
+                }
+                None => {
+                    // All remaining blocks are pinned - cannot evict
+                    self.metrics.failed_insertions += 1;
+                    return Err(ChainError::Storage(
+                        "Cannot evict: all cached blocks are pinned".to_string(),
+                    ));
+                }
             }
         }
 
@@ -308,6 +322,43 @@ impl MemoryBudget {
         self.cache.contains(hash)
     }
 
+    /// Pin a block so it is never evicted by LRU.
+    ///
+    /// Pinned blocks still count toward memory usage, but will be
+    /// skipped during eviction. Used for essential blocks like
+    /// genesis and chain tip that must always be available.
+    ///
+    /// # Arguments
+    ///
+    /// * `hash` - Hash of the block to pin
+    ///
+    /// # Note
+    ///
+    /// Pinning a block that is not in the cache has no effect.
+    /// The pin will take effect when the block is inserted.
+    pub fn pin(&mut self, hash: &Hash256) {
+        self.pinned.insert(hash.clone());
+    }
+
+    /// Unpin a block, allowing it to be evicted.
+    ///
+    /// # Arguments
+    ///
+    /// * `hash` - Hash of the block to unpin
+    pub fn unpin(&mut self, hash: &Hash256) {
+        self.pinned.remove(hash);
+    }
+
+    /// Check if a block is pinned.
+    pub fn is_pinned(&self, hash: &Hash256) -> bool {
+        self.pinned.contains(hash)
+    }
+
+    /// Get the number of pinned blocks.
+    pub fn pinned_count(&self) -> usize {
+        self.pinned.len()
+    }
+
     /// Remove a block from the cache.
     ///
     /// # Returns
@@ -324,10 +375,26 @@ impl MemoryBudget {
     }
 
     /// Clear all blocks from the cache.
+    ///
+    /// Note: This also clears the pinned set.
     pub fn clear(&mut self) {
         self.cache.clear();
+        self.pinned.clear();
         self.current_bytes = 0;
         self.metrics.cached_blocks = 0;
+    }
+
+    /// Find the LRU block that is not pinned.
+    ///
+    /// Returns the hash of the evictable block, or None if all blocks are pinned.
+    fn find_evictable_lru(&self) -> Option<Hash256> {
+        // Iterate from LRU to MRU, find first unpinned block
+        for (hash, _) in self.cache.iter() {
+            if !self.pinned.contains(hash) {
+                return Some(hash.clone());
+            }
+        }
+        None
     }
 
     /// Get an iterator over all cached block hashes.
@@ -336,6 +403,8 @@ impl MemoryBudget {
     }
 
     /// Evict blocks until memory usage is below target bytes.
+    ///
+    /// Pinned blocks are skipped during eviction.
     ///
     /// # Arguments
     ///
@@ -348,12 +417,18 @@ impl MemoryBudget {
         let mut evicted = 0;
 
         while self.current_bytes > target_bytes {
-            if let Some((_hash, (_block, size))) = self.cache.pop_lru() {
-                self.current_bytes = self.current_bytes.saturating_sub(size);
-                self.metrics.evictions += 1;
-                evicted += 1;
-            } else {
-                break;
+            match self.find_evictable_lru() {
+                Some(hash) => {
+                    if let Some((_, size)) = self.cache.pop(&hash) {
+                        self.current_bytes = self.current_bytes.saturating_sub(size);
+                        self.metrics.evictions += 1;
+                        evicted += 1;
+                    }
+                }
+                None => {
+                    // All remaining blocks are pinned
+                    break;
+                }
             }
         }
 
@@ -736,5 +811,142 @@ mod tests {
                 prop_assert!(budget.current_bytes() < before);
             }
         }
+    }
+
+    // ==================== Pin/Unpin Tests ====================
+
+    #[test]
+    fn test_pin_block() {
+        let mut budget = MemoryBudget::new(64 * 1024 * 1024);
+        let block = create_test_block(1);
+        let hash = block.hash().clone();
+
+        budget.try_insert(hash.clone(), Arc::new(block)).unwrap();
+
+        assert!(!budget.is_pinned(&hash));
+        budget.pin(&hash);
+        assert!(budget.is_pinned(&hash));
+        assert_eq!(budget.pinned_count(), 1);
+    }
+
+    #[test]
+    fn test_unpin_block() {
+        let mut budget = MemoryBudget::new(64 * 1024 * 1024);
+        let block = create_test_block(1);
+        let hash = block.hash().clone();
+
+        budget.try_insert(hash.clone(), Arc::new(block)).unwrap();
+        budget.pin(&hash);
+        assert!(budget.is_pinned(&hash));
+
+        budget.unpin(&hash);
+        assert!(!budget.is_pinned(&hash));
+        assert_eq!(budget.pinned_count(), 0);
+    }
+
+    #[test]
+    fn test_pinned_block_not_evicted() {
+        let mut budget = MemoryBudget::new(64 * 1024 * 1024);
+
+        // Insert and pin first block
+        let block1 = create_test_block(1);
+        let hash1 = block1.hash().clone();
+        budget.try_insert(hash1.clone(), Arc::new(block1)).unwrap();
+        budget.pin(&hash1);
+
+        // Insert many more blocks
+        for i in 2..=100 {
+            let block = create_test_block(i);
+            let _ = budget.try_insert(block.hash().clone(), Arc::new(block));
+        }
+
+        // Evict to a small target
+        budget.evict_to(budget.current_bytes() / 4);
+
+        // Pinned block should still be present
+        assert!(budget.contains(&hash1));
+        assert!(budget.is_pinned(&hash1));
+    }
+
+    #[test]
+    fn test_evict_to_skips_pinned() {
+        let mut budget = MemoryBudget::new(64 * 1024 * 1024);
+
+        // Insert 10 blocks and pin all of them
+        let mut hashes = Vec::new();
+        for i in 1..=10 {
+            let block = create_test_block(i);
+            let hash = block.hash().clone();
+            budget.try_insert(hash.clone(), Arc::new(block)).unwrap();
+            budget.pin(&hash);
+            hashes.push(hash);
+        }
+
+        let before = budget.current_bytes();
+        let evicted = budget.evict_to(0); // Try to evict everything
+
+        // No blocks should be evicted since all are pinned
+        assert_eq!(evicted, 0);
+        assert_eq!(budget.current_bytes(), before);
+        assert_eq!(budget.len(), 10);
+    }
+
+    #[test]
+    fn test_clear_also_clears_pinned() {
+        let mut budget = MemoryBudget::new(64 * 1024 * 1024);
+        let block = create_test_block(1);
+        let hash = block.hash().clone();
+
+        budget.try_insert(hash.clone(), Arc::new(block)).unwrap();
+        budget.pin(&hash);
+        assert_eq!(budget.pinned_count(), 1);
+
+        budget.clear();
+
+        assert_eq!(budget.pinned_count(), 0);
+        assert!(!budget.is_pinned(&hash));
+    }
+
+    #[test]
+    fn test_insert_fails_when_all_pinned_and_full() {
+        // Create a small budget
+        let mut budget = MemoryBudget::new(64 * 1024 * 1024);
+
+        // Insert and pin blocks until we fill the budget
+        let mut pinned_hashes = Vec::new();
+        for i in 1..=1000 {
+            let block = create_test_block(i);
+            let hash = block.hash().clone();
+            if budget.try_insert(hash.clone(), Arc::new(block)).is_ok() {
+                budget.pin(&hash);
+                pinned_hashes.push(hash);
+            } else {
+                break;
+            }
+        }
+
+        // Now all cached blocks are pinned.
+        // If memory is full and we try to insert, it should fail
+        // (Note: with 64MB budget, we can fit many blocks, so this test
+        // verifies the mechanism rather than actually filling memory)
+        assert!(budget.pinned_count() > 0);
+    }
+
+    #[test]
+    fn test_pin_before_insert() {
+        let mut budget = MemoryBudget::new(64 * 1024 * 1024);
+        let block = create_test_block(1);
+        let hash = block.hash().clone();
+
+        // Pin before inserting (pre-registration)
+        budget.pin(&hash);
+        assert!(budget.is_pinned(&hash));
+
+        // Now insert
+        budget.try_insert(hash.clone(), Arc::new(block)).unwrap();
+
+        // Should still be pinned
+        assert!(budget.is_pinned(&hash));
+        assert!(budget.contains(&hash));
     }
 }

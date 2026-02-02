@@ -18,7 +18,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.0-beta"
+version = "0.3.1-beta"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
@@ -59,7 +59,7 @@ futures = "0.3"
 libp2p = { version = "0.53", features = ["tokio", "noise", "tcp", "dns", "websocket", "kad", "gossipsub", "mdns", "identify", "yamux", "macros"] }
 
 # Storage
-sled = "0.34"
+sled = "0.34.7"
 
 # Error handling
 thiserror = "1"

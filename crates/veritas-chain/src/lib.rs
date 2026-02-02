@@ -93,6 +93,7 @@ pub mod compression;
 pub mod config;
 pub mod error;
 pub mod lazy_loader;
+pub mod managed_chain;
 pub mod memory;
 pub mod merkle;
 pub mod pruner;
@@ -101,13 +102,20 @@ pub mod storage;
 pub mod sync;
 pub mod validator;
 
+#[cfg(feature = "sled-storage")]
+pub mod sled_backend;
+
 pub use block::{
     Block, BlockBody, BlockHeader, ChainEntry, ReputationChangeReason, SlashReason, ValidatorRegion,
 };
 pub use chain::{BlockValidation, Blockchain, ChainState, ForkChoice};
 pub use compression::{BlockCompressor, CompressionMetrics};
-pub use config::{BlockchainConfig, PruningMode};
+pub use config::{BlockchainConfig, NodeRole, PruningMode, DEFAULT_SLED_CACHE_MB};
 pub use error::{ChainError, Result};
+pub use managed_chain::{IndexRebuildStats, ManagedBlockchain, ManagedMemoryMetrics};
+
+#[cfg(feature = "sled-storage")]
+pub use sled_backend::{SledBackend, UsernameIndexMeta};
 pub use lazy_loader::{LazyBlockLoader, LoaderMetrics};
 pub use memory::{MemoryBudget, MemoryMetrics};
 pub use merkle::{Direction, MerkleProof, MerkleTree};

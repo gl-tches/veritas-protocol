@@ -197,7 +197,7 @@ impl ChainPruner {
         get_height: F,
     ) -> Result<PruningStats>
     where
-        B: StorageBackend,
+        B: StorageBackend + ?Sized,
         F: Fn(&Hash256) -> Option<u64>,
     {
         let start = std::time::Instant::now();
@@ -283,7 +283,7 @@ impl ChainPruner {
         protected: &HashSet<Hash256>,
     ) -> Result<PruningStats>
     where
-        B: StorageBackend,
+        B: StorageBackend + ?Sized,
         F: Fn(&Hash256) -> Option<u64>,
     {
         let start = std::time::Instant::now();
