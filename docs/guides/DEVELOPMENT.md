@@ -98,8 +98,10 @@ veritas/
 │   ├── veritas-wasm/       # WASM bindings
 │   └── veritas-py/         # Python bindings (PyO3 0.23)
 │
-├── docs/                   # Technical documentation
-├── documentation/          # User documentation
+├── docs/                   # Documentation
+│   ├── getting-started/    # Installation, configuration
+│   ├── guides/             # Deployment, CLI, development
+│   └── reference/          # API, architecture, security
 ├── examples/               # Example applications
 │   ├── cli-chat/           # CLI chat example
 │   └── web-demo/           # Web demo
@@ -887,5 +889,5 @@ Key dependencies updated for v0.3.0-beta:
 ## Next Steps
 
 - [API Examples](API_EXAMPLES.md) - Code examples
-- [Architecture](../docs/ARCHITECTURE.md) - System design
-- [Security](../docs/SECURITY.md) - Security guidelines
+- [Architecture](../reference/ARCHITECTURE.md) - System design
+- [Security](../reference/SECURITY.md) - Security guidelines

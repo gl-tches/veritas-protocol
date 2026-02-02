@@ -533,6 +533,6 @@ client.lock()
 
 ## See Also
 
-- [API Reference](../docs/API.md) - Complete API documentation
-- [Architecture](../docs/ARCHITECTURE.md) - System design
-- [Security](../docs/SECURITY.md) - Security considerations
+- [API Reference](../reference/API.md) - Complete API documentation
+- [Architecture](../reference/ARCHITECTURE.md) - System design
+- [Security](../reference/SECURITY.md) - Security considerations

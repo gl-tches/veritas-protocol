@@ -350,6 +350,6 @@ fi
 
 ## See Also
 
-- [Configuration Guide](CONFIGURATION.md)
+- [Configuration Guide](../getting-started/CONFIGURATION.md)
 - [Deployment Guide](DEPLOYMENT.md)
 - [Troubleshooting](TROUBLESHOOTING.md)

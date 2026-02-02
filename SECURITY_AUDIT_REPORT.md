@@ -672,7 +672,7 @@ fn test_case_insensitive_duplicate_rejected() {
 
 #### Description
 
-The key rotation mechanism violates Perfect Forward Secrecy (PFS) principles. When a user rotates their identity key, the old private key is **retained indefinitely** in encrypted storage with "Historical decrypt only" capability, as documented in `docs/SECURITY.md:333`.
+The key rotation mechanism violates Perfect Forward Secrecy (PFS) principles. When a user rotates their identity key, the old private key is **retained indefinitely** in encrypted storage with "Historical decrypt only" capability, as documented in `docs/reference/SECURITY.md:333`.
 
 The documentation explicitly states:
 ```
@@ -738,7 +738,7 @@ pub struct KeyringEntry {
 
 #### Evidence
 
-1. **Documentation confirms behavior**: `docs/SECURITY.md:333` states "Historical decrypt only"
+1. **Documentation confirms behavior**: `docs/reference/SECURITY.md:333` states "Historical decrypt only"
 2. **No key deletion on rotation**: `register_rotation()` only changes state, doesn't remove from keyring
 3. **Keyring retains all keys**: `KeyringEntry.encrypted_keypair` stored for all identities
 4. **No cleanup mechanism**: No function removes rotated keys from storage
@@ -769,7 +769,7 @@ pub fn rotate_identity(
 }
 
 // 2. Remove "Historical decrypt only" capability
-// Update docs/SECURITY.md:
+// Update docs/reference/SECURITY.md:
 | Rotated | - | NONE (key destroyed) |
 
 // 3. Consider message re-encryption (HIGH effort)
