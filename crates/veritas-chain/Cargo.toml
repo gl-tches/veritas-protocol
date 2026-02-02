@@ -28,5 +28,18 @@ thiserror.workspace = true
 # Time
 chrono.workspace = true
 
+# Optimization - Memory management
+lru = "0.12"
+
+# Optimization - Compression
+zstd = "0.13"
+
+# Async traits
+async-trait = "0.1"
+
+# Async runtime (for storage operations)
+tokio.workspace = true
+
 [dev-dependencies]
 proptest.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
