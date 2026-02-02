@@ -13,6 +13,7 @@ Common issues and solutions for VERITAS.
 - [Storage Issues](#storage-issues)
 - [Identity Issues](#identity-issues)
 - [Docker Issues](#docker-issues)
+- [GitHub Actions / CI Issues](#github-actions--ci-issues)
 - [Common Errors](#common-errors)
 - [Security Errors (v0.3.0-beta)](#security-errors-v030-beta)
   - [Rate Limiting Errors](#rate-limiting-errors)
@@ -441,6 +442,69 @@ docker inspect --format='{{.State.Health.Status}}' veritas-node
 ```bash
 docker logs veritas-node | tail -50
 ```
+
+## GitHub Actions / CI Issues
+
+### `fallocate: fallocate failed: Text file busy`
+
+**Symptom:**
+```
+fallocate: fallocate failed: Text file busy
+Error: Process completed with exit code 1.
+```
+
+**Cause:** GitHub Actions Ubuntu runners ship with a pre-existing `/swapfile` that is
+actively mounted as swap. `fallocate` cannot overwrite a file the kernel holds open.
+
+**Solution:** The `ghcr-publish` workflow handles this automatically by disabling
+existing swap before creating a new file. If you see this error on a self-hosted
+runner, ensure no swap file is active at the target path:
+
+```bash
+sudo swapoff -a
+sudo rm -f /swapfile /mnt/swapfile
+```
+
+Then create your swap file:
+
+```bash
+sudo fallocate -l 8G /mnt/swapfile
+sudo chmod 600 /mnt/swapfile
+sudo mkswap /mnt/swapfile
+sudo swapon /mnt/swapfile
+```
+
+### CI Build OOM (Out of Memory)
+
+**Symptom:** Build fails with signal 9 (SIGKILL) or the runner becomes unresponsive.
+
+**Cause:** GitHub Actions free-tier runners have ~7GB RAM, which can be insufficient
+for large Rust builds with high parallelism.
+
+**Solutions:**
+
+1. **Limit build parallelism** (already configured in `rust.yml`):
+   ```yaml
+   env:
+     CARGO_BUILD_JOBS: 2
+   ```
+
+2. **Add swap space** (already configured in `ghcr-publish.yml`):
+   ```bash
+   sudo swapoff -a
+   sudo fallocate -l 8G /mnt/swapfile
+   sudo chmod 600 /mnt/swapfile
+   sudo mkswap /mnt/swapfile
+   sudo swapon /mnt/swapfile
+   ```
+
+3. **Free disk space** for Docker builds:
+   ```bash
+   sudo rm -rf /usr/share/dotnet
+   sudo rm -rf /usr/local/lib/android
+   sudo rm -rf /opt/ghc
+   sudo rm -rf /opt/hostedtoolcache/CodeQL
+   ```
 
 ## Common Errors
 
