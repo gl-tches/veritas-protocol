@@ -6,23 +6,43 @@
 
 VERITAS (Verified Encrypted Real-time Integrity Transmission And Signing) is a post-quantum secure, decentralized messaging protocol with blockchain verification and offline P2P capability.
 
-**Type**: Rust Library + Multi-platform Bindings  
-**Stack**: Rust, ML-KEM, ML-DSA, ChaCha20-Poly1305, libp2p, sled  
-**Security Level**: HARDENED + POST-QUANTUM  
-**Edition**: Rust 2024 (migrating from 2021)  
+**Type**: Rust Library + Multi-platform Bindings
+**Stack**: Rust, ML-KEM, ML-DSA, ChaCha20-Poly1305, libp2p, sled
+**Security Level**: HARDENED + POST-QUANTUM
+**Edition**: Rust 2024
 **MSRV**: 1.85
+**Version**: 0.3.0-beta
 
-## ⚠️ Active Work Streams
+## ✅ Completed Work Streams
 
-### 1. Security Remediation (COMPLETED)
+### 1. Security Remediation (COMPLETED — v0.3.0-beta)
 
-All 90 vulnerabilities from SECURITY_AUDIT_REPORT.md have been addressed.
+All 90 actionable vulnerabilities from SECURITY_AUDIT_REPORT.md have been addressed.
+- **90 vulnerabilities**: Fixed and verified
+- **1 design-level issue**: VERITAS-2026-0004 (validator consensus) requires architecture redesign
+- **Hardware attestation**: Framework complete, platform-specific stubs remain
 
-### 2. Rust 2024 Edition Migration (IN PROGRESS)
+### 2. Rust 2024 Edition Migration (COMPLETED — v0.3.0-beta)
 
-**Branch**: `chore/rust-2024-edition-upgrade`  
-**Tracking**: See TASKS.md for detailed task list  
-**Approach**: Crate-by-crate migration, merge after security review
+**Status**: All 12 crates migrated to Rust 2024 edition
+**MSRV**: 1.85
+**Tracking**: See TASKS.md for detailed completion log
+
+**Key Changes Applied**:
+- All Cargo.toml files updated to `edition = "2024"`, `rust-version = "1.85"`
+- 12 `#[no_mangle]` → `#[unsafe(no_mangle)]` in FFI crate
+- 13 clippy warnings fixed for Rust 2024 stricter lints
+- cbindgen 0.26 → 0.29, PyO3 0.20 → 0.23 for compatibility
+
+## 📋 Remaining Work
+
+| Item | Priority | Status |
+|------|----------|--------|
+| VERITAS-2026-0004 (validator consensus) | P2 | Design needed |
+| Hardware attestation (TPM/SecureEnclave/AndroidKeystore) | P2 | Platform stubs |
+| Post-quantum crypto stabilization (ML-KEM/ML-DSA) | P3 | Waiting upstream |
+| Bluetooth implementation (btleplug) | P3 | Stubbed |
+| Async closures refactoring (TASK-170) | P4 | Optional |
 
 -----
 
