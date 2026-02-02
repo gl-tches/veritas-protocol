@@ -1296,6 +1296,6 @@ This table provides a quick reference for new errors introduced in v0.3.0-beta.
 
 ## See Also
 
-- [Installation Guide](INSTALLATION.md)
-- [Configuration Guide](CONFIGURATION.md)
+- [Installation Guide](../getting-started/INSTALLATION.md)
+- [Configuration Guide](../getting-started/CONFIGURATION.md)
 - [Deployment Guide](DEPLOYMENT.md)

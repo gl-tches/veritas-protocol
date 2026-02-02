@@ -1183,6 +1183,6 @@ max_queued_messages = 1000
 
 ## Next Steps
 
-- [Deployment Guide](DEPLOYMENT.md) - Production deployment
-- [Troubleshooting](TROUBLESHOOTING.md) - Configuration issues
-- [CLI Reference](CLI_REFERENCE.md) - Command line help
+- [Deployment Guide](../guides/DEPLOYMENT.md) - Production deployment
+- [Troubleshooting](../guides/TROUBLESHOOTING.md) - Configuration issues
+- [CLI Reference](../guides/CLI_REFERENCE.md) - Command line help

@@ -644,6 +644,6 @@ server {
 
 ## Next Steps
 
-- [Configuration Reference](CONFIGURATION.md) - All options
+- [Configuration Reference](../getting-started/CONFIGURATION.md) - All options
 - [Troubleshooting](TROUBLESHOOTING.md) - Common issues
-- [Security Guide](../docs/SECURITY.md) - Security best practices
+- [Security Guide](../reference/SECURITY.md) - Security best practices

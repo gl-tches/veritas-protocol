@@ -449,8 +449,144 @@ docker-compose down -v  # -v removes volumes
 docker rmi veritas-node:local
 ```
 
+## Environment Variables
+
+### Configuration Overrides
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `VERITAS_DATA_DIR` | Override data directory | `/custom/path` |
+| `VERITAS_CONFIG_FILE` | Config file path | `/etc/veritas/config.toml` |
+| `VERITAS_LOG_LEVEL` | Logging level | `debug`, `info`, `warn`, `error` |
+
+### Testing Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `VERITAS_TEST_STORAGE_PATH` | Test storage directory | `/tmp/veritas-test` |
+| `VERITAS_TEST_BOOTSTRAP_NODES` | Test bootstrap peers | `peer1,peer2` |
+
+### Example Usage
+
+```bash
+# Set data directory
+export VERITAS_DATA_DIR=/opt/veritas/data
+
+# Enable debug logging
+export VERITAS_LOG_LEVEL=debug
+
+# Run with overrides
+cargo run
+```
+
+## Building Bindings
+
+### C/FFI Bindings
+
+```bash
+cd crates/veritas-ffi
+cargo build --release
+
+# Header file generated at target/veritas.h
+# Library at target/release/libveritas_ffi.so (Linux)
+#           target/release/libveritas_ffi.dylib (macOS)
+#           target/release/veritas_ffi.dll (Windows)
+```
+
+### WebAssembly
+
+```bash
+# Install wasm-pack first
+cargo install wasm-pack
+
+cd crates/veritas-wasm
+
+# For web browsers
+wasm-pack build --target web --release
+
+# For Node.js
+wasm-pack build --target nodejs --release
+
+# Output in pkg/ directory
+```
+
+### Python
+
+```bash
+# Install maturin first
+pip install maturin
+
+cd crates/veritas-py
+
+# Development build (installs in current environment)
+maturin develop
+
+# Release wheel
+maturin build --release
+
+# Install wheel
+pip install target/wheels/veritas_py-*.whl
+```
+
+## Troubleshooting
+
+### Build Fails: OpenSSL Not Found
+
+**Linux:**
+```bash
+sudo apt install libssl-dev pkg-config
+```
+
+**macOS:**
+```bash
+brew install openssl
+export OPENSSL_ROOT_DIR=$(brew --prefix openssl)
+```
+
+**Windows:**
+```powershell
+# Set OPENSSL_DIR to your OpenSSL installation
+$env:OPENSSL_DIR = "C:\path\to\openssl"
+```
+
+### Build Fails: Clang Not Found
+
+**Linux:**
+```bash
+sudo apt install libclang-dev
+```
+
+**macOS:**
+```bash
+xcode-select --install
+```
+
+### Runtime Error: Database Locked
+
+The database can only be opened by one process at a time.
+
+```bash
+# Check for existing processes
+ps aux | grep veritas
+
+# Remove stale lock file (if process crashed)
+rm ~/.local/share/veritas/db/lock
+```
+
+### Debug Logging
+
+Enable verbose logging for troubleshooting:
+
+```bash
+# Set log level
+export VERITAS_LOG_LEVEL=debug
+export RUST_LOG=veritas=debug
+```
+
+For more troubleshooting help, see the [Troubleshooting Guide](../guides/TROUBLESHOOTING.md).
+
 ## Next Steps
 
 - [Configuration Guide](CONFIGURATION.md) - Configure your node
-- [Deployment Guide](DEPLOYMENT.md) - Production deployment
-- [Troubleshooting](TROUBLESHOOTING.md) - Common issues
+- [Deployment Guide](../guides/DEPLOYMENT.md) - Production deployment
+- [Troubleshooting](../guides/TROUBLESHOOTING.md) - Common issues

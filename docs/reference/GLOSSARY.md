@@ -247,6 +247,6 @@ Securely overwriting sensitive data in memory when no longer needed.
 
 ## See Also
 
-- [Architecture](../docs/ARCHITECTURE.md) - System design
-- [Security](../docs/SECURITY.md) - Security design
-- [API Reference](../docs/API.md) - API documentation
+- [Architecture](ARCHITECTURE.md) - System design
+- [Security](SECURITY.md) - Security design
+- [API Reference](API.md) - API documentation
