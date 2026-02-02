@@ -424,6 +424,59 @@
 
 -----
 
+## Feature: Lightweight Node Profiles
+
+### TASK-200: Implement Lightweight Node Profiles for Resource-Constrained Devices
+
+**Priority**: P1
+**Status**: ✅ COMPLETED
+**Assignee**: Claude Code
+**Branch**: `feat/lightweight-node-profiles`
+**Version**: 0.3.0-beta → 0.3.1-beta
+
+**Description**: Reduce memory requirements for VERITAS nodes to enable deployment on resource-constrained hardware (Raspberry Pi, mobile, embedded):
+- Relay nodes: 2 GB → 256 MB RAM
+- Full nodes: 4 GB → 512 MB RAM
+- Validators: 4 GB → 1 GB RAM
+
+**Implementation**:
+
+- [x] **Workstream A**: SledBackend — persistent block storage with sled 0.34.7
+  - Height-indexed block retrieval (BE u64 keys)
+  - Username index persistence with Blake3 integrity verification
+  - Optional zstd compression support
+  - Configurable cache size via `sled_cache_mb`
+
+- [x] **Workstream B**: ManagedBlockchain — tiered storage architecture
+  - Hot cache (MemoryBudget LRU) for recent/active blocks
+  - Cold storage (StorageBackend) for older blocks
+  - Genesis and tip blocks pinned (never evicted)
+  - Automatic cache miss recovery from cold storage
+
+- [x] **Workstream C**: NodeRole enum and profile constructors
+  - Five node roles: Relay, FullNode, Validator, Bootstrap, Archive
+  - Pre-configured memory budgets per role
+  - Profile constructors: `BlockchainConfig::relay()`, `full_node()`, etc.
+
+**Files Changed**:
+
+- `Cargo.toml` (workspace): version 0.3.1-beta, sled = "0.34.7"
+- `crates/veritas-chain/Cargo.toml`: sled-storage feature flag
+- `crates/veritas-wasm/Cargo.toml`: `default-features = false` for WASM compatibility
+- `crates/veritas-chain/src/config.rs`: NodeRole enum, profile constructors
+- `crates/veritas-chain/src/memory.rs`: pin/unpin support in MemoryBudget
+- `crates/veritas-chain/src/sled_backend.rs`: NEW — SledBackend implementation
+- `crates/veritas-chain/src/managed_chain.rs`: NEW — ManagedBlockchain
+- `crates/veritas-chain/src/lib.rs`: exports for new modules
+
+**Test Results**:
+
+- All 411 unit tests pass
+- All 15 doc tests pass (6 ignored)
+- Clippy clean with `-D warnings`
+
+-----
+
 ## Completed Tasks
 
 ### Security Remediation (Completed)

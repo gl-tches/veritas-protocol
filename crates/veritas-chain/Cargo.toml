@@ -9,6 +9,10 @@ repository.workspace = true
 keywords = ["blockchain", "merkle-tree", "consensus", "verification"]
 categories = ["cryptography", "data-structures"]
 
+[features]
+default = ["sled-storage"]
+sled-storage = ["dep:sled"]
+
 [dependencies]
 veritas-crypto.workspace = true
 veritas-identity.workspace = true
@@ -40,6 +44,16 @@ async-trait = "0.1"
 # Async runtime (for storage operations)
 tokio.workspace = true
 
+# Persistent storage (optional, enabled by default)
+sled = { workspace = true, optional = true }
+
+# Hashing for integrity checks
+blake3.workspace = true
+
+# Hex encoding
+hex.workspace = true
+
 [dev-dependencies]
 proptest.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile = "3"
