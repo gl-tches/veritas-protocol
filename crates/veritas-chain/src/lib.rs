@@ -9,6 +9,8 @@
 //! - PoS validator selection with SLA
 //! - Validator slashing and penalties
 //! - Chain synchronization
+//! - Memory-optimized block storage with LRU caching
+//! - Block compression and chain pruning
 //!
 //! ## Block Structure
 //!
@@ -33,6 +35,15 @@
 //! - Chain validation
 //! - Fork detection and resolution
 //! - Chain traversal (iteration)
+//!
+//! ## Storage Optimization
+//!
+//! The blockchain includes several optimization features:
+//! - [`memory::MemoryBudget`]: LRU cache with configurable memory limits
+//! - [`compression::BlockCompressor`]: zstd compression for storage efficiency
+//! - [`pruner::ChainPruner`]: Configurable chain pruning for storage reduction
+//! - [`lazy_loader::LazyBlockLoader`]: On-demand block loading with hot cache
+//! - [`storage::StorageBackend`]: Pluggable storage backends
 //!
 //! ## Example
 //!
@@ -78,9 +89,15 @@
 
 pub mod block;
 pub mod chain;
+pub mod compression;
+pub mod config;
 pub mod error;
+pub mod lazy_loader;
+pub mod memory;
 pub mod merkle;
+pub mod pruner;
 pub mod slashing;
+pub mod storage;
 pub mod sync;
 pub mod validator;
 
@@ -88,11 +105,17 @@ pub use block::{
     Block, BlockBody, BlockHeader, ChainEntry, ReputationChangeReason, SlashReason, ValidatorRegion,
 };
 pub use chain::{BlockValidation, Blockchain, ChainState, ForkChoice};
+pub use compression::{BlockCompressor, CompressionMetrics};
+pub use config::{BlockchainConfig, PruningMode};
 pub use error::{ChainError, Result};
+pub use lazy_loader::{LazyBlockLoader, LoaderMetrics};
+pub use memory::{MemoryBudget, MemoryMetrics};
 pub use merkle::{Direction, MerkleProof, MerkleTree};
+pub use pruner::{ChainPruner, PruningStats};
 pub use slashing::{
     SlaViolationType, SlashResult, SlashingConfig, SlashingManager, SlashingOffense,
 };
+pub use storage::{InMemoryBackend, MetricsBackend, SharedBackend, StorageBackend, StorageMetrics};
 pub use sync::{
     PendingRequest, SyncAction, SyncManager, SyncMessage, SyncState,
     DEFAULT_MAX_BLOCKS_PER_REQUEST, DEFAULT_MAX_HEADERS_PER_REQUEST, DEFAULT_REQUEST_TIMEOUT_MS,
