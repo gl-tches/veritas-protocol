@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### CI/CD
+
+- **Fix**: GitHub Actions `ghcr-publish` workflow swap creation failure (`fallocate: Text file busy`)
+  - Swap step now handles pre-existing runner swap files idempotently
+  - Added disk cleanup step (recovers ~20GB for Docker build)
+- **Enhancement**: `rust.yml` workflow hardened
+  - Added cargo caching (2-5 min savings per run)
+  - Added `cargo fmt --check` and `cargo clippy -- -D warnings` gates
+  - Added `CARGO_BUILD_JOBS=2` to prevent runner OOM
+
 ## [0.3.0-beta] - 2026-02-01
 
 ### Summary
