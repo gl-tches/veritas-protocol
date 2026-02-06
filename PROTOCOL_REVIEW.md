@@ -582,4 +582,3 @@ The CLAUDE.md mandates size validation before `bincode::deserialize`. Several lo
 
 **Report Prepared By**: Claude Code Security Team
 **Date**: 2026-02-06
-**Session**: https://claude.ai/code/session_01Auh8PF9MhAnC4SPEijK3Bq
