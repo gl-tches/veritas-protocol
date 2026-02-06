@@ -500,9 +500,20 @@ impl GroupMetadata {
     /// Increment the key generation and update the key hash.
     ///
     /// Called when group key is rotated.
-    pub fn increment_key_generation(&mut self, new_key_hash: Hash256) {
-        self.key_generation = self.key_generation.saturating_add(1);
+    ///
+    /// # Errors
+    ///
+    /// PROTO-FIX-11: Returns an error if the key generation counter would overflow,
+    /// rather than silently saturating. A saturated counter would mean two different
+    /// keys share the same generation number, which is a security issue.
+    pub fn increment_key_generation(&mut self, new_key_hash: Hash256) -> Result<()> {
+        self.key_generation = self.key_generation.checked_add(1).ok_or_else(|| {
+            ProtocolError::InvalidEnvelope(
+                "key generation overflow: cannot rotate keys further".to_string(),
+            )
+        })?;
         self.key_hash = new_key_hash;
+        Ok(())
     }
 }
 
@@ -764,7 +775,7 @@ mod tests {
         assert_eq!(group.key_generation(), 0);
 
         let new_hash = Hash256::hash(b"new key");
-        group.increment_key_generation(new_hash.clone());
+        group.increment_key_generation(new_hash.clone()).unwrap();
 
         assert_eq!(group.key_generation(), 1);
         assert_eq!(group.key_hash(), &new_hash);

@@ -63,8 +63,10 @@ impl PruningStats {
     }
 
     /// Calculate storage reduction percentage.
+    ///
+    /// CHAIN-FIX-10: Uses 2048 bytes as estimated block size (was 1000).
     pub fn reduction_percent(&self) -> f64 {
-        let total = self.bytes_freed + (self.blocks_retained * 1000); // Rough estimate
+        let total = self.bytes_freed + (self.blocks_retained * 2048); // Rough estimate
         if total == 0 {
             0.0
         } else {
@@ -236,12 +238,16 @@ impl ChainPruner {
         let mut bytes_freed = 0u64;
         let mut blocks_deleted = 0u64;
 
+        // CHAIN-FIX-10: Named constant for estimated bytes per block. The storage
+        // backend does not expose per-block size information during deletion, so we
+        // use a rough estimate. A more accurate approach would require querying block
+        // size before deletion, which is a future improvement.
+        const ESTIMATED_BYTES_PER_BLOCK: u64 = 2048;
+
         for (hash, _height) in &to_delete {
-            // Get size before deletion (approximate)
             if storage.delete_block(hash).await? {
                 blocks_deleted += 1;
-                // Estimate freed bytes (actual size not always available)
-                bytes_freed += 1000; // Rough estimate per block
+                bytes_freed += ESTIMATED_BYTES_PER_BLOCK;
             }
         }
 
@@ -325,10 +331,13 @@ impl ChainPruner {
         let mut bytes_freed = 0u64;
         let mut blocks_deleted = 0u64;
 
+        // CHAIN-FIX-10: Use named constant for estimated bytes per block
+        const ESTIMATED_BYTES_PER_BLOCK: u64 = 2048;
+
         for (hash, _height) in &to_delete {
             if storage.delete_block(hash).await? {
                 blocks_deleted += 1;
-                bytes_freed += 1000;
+                bytes_freed += ESTIMATED_BYTES_PER_BLOCK;
             }
         }
 

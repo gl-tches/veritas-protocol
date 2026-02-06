@@ -76,6 +76,13 @@ impl NegativeReport {
         reason: ReportReason,
         evidence_hash: Option<[u8; 32]>,
     ) -> Result<Self> {
+        // REP-FIX-9: Prevent self-reporting
+        if reporter_id == target_id {
+            return Err(ReputationError::InvalidReport(
+                "Cannot report yourself".to_string(),
+            ));
+        }
+
         // Validate reporter has enough reputation
         if reporter_reputation < MIN_REPORTER_REPUTATION {
             return Err(ReputationError::InsufficientReputation {
@@ -404,7 +411,8 @@ mod tests {
     #[test]
     fn test_penalty_capped_at_200() {
         let mut aggregator = ReportAggregator::new();
-        let target = make_identity(10);
+        // REP-FIX-9: Use ID 0 for target so it never collides with reporter IDs (1..=10)
+        let target = make_identity(0);
 
         // Add many high-rep malware reports
         for i in 1..=10 {

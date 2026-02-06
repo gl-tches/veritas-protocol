@@ -75,7 +75,9 @@ unsafe fn create_client_impl(config_path: *const libc::c_char) -> *mut VeritasHa
         Err(_) => return std::ptr::null_mut(),
     };
 
-    ClientHandle::new(client)
+    // Store the runtime alongside the client so all subsequent FFI calls
+    // reuse the same thread pool instead of creating a new one each time.
+    ClientHandle::new(client, runtime)
 }}
 
 // ============================================================================
@@ -152,14 +154,8 @@ unsafe fn unlock_impl(
         std::slice::from_raw_parts(password, password_len)
     };
 
-    // Create runtime for async operations
-    let runtime = match tokio::runtime::Runtime::new() {
-        Ok(rt) => rt,
-        Err(_) => return ErrorCode::Unknown,
-    };
-
-    // Unlock
-    match runtime.block_on(client_handle.client.unlock(password_slice)) {
+    // Unlock using the stored runtime
+    match client_handle.runtime.block_on(client_handle.client.unlock(password_slice)) {
         Ok(_) => ErrorCode::Success,
         Err(e) => FfiError::from(e).into(),
     }
@@ -208,12 +204,8 @@ unsafe fn lock_impl(handle: *mut VeritasHandle) -> ErrorCode { unsafe {
         None => return ErrorCode::NullPointer,
     };
 
-    let runtime = match tokio::runtime::Runtime::new() {
-        Ok(rt) => rt,
-        Err(_) => return ErrorCode::Unknown,
-    };
-
-    match runtime.block_on(client_handle.client.lock()) {
+    // Use the stored runtime instead of creating a new one
+    match client_handle.runtime.block_on(client_handle.client.lock()) {
         Ok(_) => ErrorCode::Success,
         Err(e) => FfiError::from(e).into(),
     }
@@ -268,12 +260,8 @@ unsafe fn shutdown_impl(handle: *mut VeritasHandle) -> ErrorCode { unsafe {
         None => return ErrorCode::NullPointer,
     };
 
-    let runtime = match tokio::runtime::Runtime::new() {
-        Ok(rt) => rt,
-        Err(_) => return ErrorCode::Unknown,
-    };
-
-    match runtime.block_on(client_handle.client.shutdown()) {
+    // Use the stored runtime instead of creating a new one
+    match client_handle.runtime.block_on(client_handle.client.shutdown()) {
         Ok(_) => ErrorCode::Success,
         Err(e) => FfiError::from(e).into(),
     }

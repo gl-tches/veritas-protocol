@@ -69,6 +69,10 @@ pub enum IdentityError {
     /// Origin fingerprint requires hardware attestation.
     #[error("Origin fingerprint requires hardware attestation in production")]
     HardwareAttestationRequired,
+
+    /// Input validation failed (e.g., size check before deserialization).
+    #[error("Validation error: {0}")]
+    Validation(String),
 }
 
 /// Result type for identity operations.

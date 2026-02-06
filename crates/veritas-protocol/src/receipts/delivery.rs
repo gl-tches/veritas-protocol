@@ -6,9 +6,10 @@
 
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
+use subtle::ConstantTimeEq;
 
 use veritas_crypto::Hash256;
-use veritas_identity::{IdentityHash, IdentityKeyPair};
+use veritas_identity::{IdentityHash, IdentityKeyPair, IdentityPublicKeys};
 
 use crate::error::{ProtocolError, Result};
 
@@ -17,6 +18,18 @@ use crate::error::{ProtocolError, Result};
 /// This prefix ensures receipt hashes cannot be confused with other
 /// types of hashes in the VERITAS protocol.
 pub const RECEIPT_DOMAIN_SEPARATOR: &[u8] = b"VERITAS-RECEIPT-v1";
+
+/// Maximum size of a serialized `DeliveryReceipt` in bytes.
+///
+/// SECURITY: Pre-deserialization size validation prevents crafted input from
+/// causing excessive memory allocation during bincode deserialization (VERITAS-2026-0003).
+pub const MAX_DELIVERY_RECEIPT_SIZE: usize = 4096;
+
+/// Context string for deriving receipt signing keys from identity keys.
+///
+/// **PLACEHOLDER**: This derivation is not cryptographically secure --
+/// it derives from public information. Will be replaced with ML-DSA in M2.
+const RECEIPT_SIGNING_KEY_CONTEXT: &str = "VERITAS placeholder receipt signing key v1";
 
 /// Type of delivery receipt.
 ///
@@ -339,9 +352,18 @@ impl DeliveryReceipt {
             signature: Vec::new(),
         };
 
-        // Generate placeholder signature (hash-based until signing module is ready)
+        // Generate keyed HMAC-BLAKE3 signature using issuer's identity.
+        //
+        // PLACEHOLDER: The signing key is derived from the issuer's identity hash,
+        // which is public information. This means anyone with the public key could
+        // forge a receipt. This will be replaced with proper ML-DSA signing in M2.
+        //
+        // The key derivation at least uses a receipt-specific context string for
+        // domain separation, preventing cross-protocol signature reuse.
+        let signing_key = derive_receipt_signing_key_from_keypair(issuer_keypair);
         let receipt_hash = receipt.receipt_hash();
-        receipt.signature = receipt_hash.as_bytes().to_vec();
+        let hmac = Hash256::keyed_hash(&signing_key, receipt_hash.as_bytes());
+        receipt.signature = hmac.as_bytes().to_vec();
 
         Ok(receipt)
     }
@@ -409,16 +431,33 @@ impl DeliveryReceipt {
         }
     }
 
-    /// Verify the receipt signature.
+    /// Verify the receipt signature using the issuer's public keys.
+    ///
+    /// # Arguments
+    ///
+    /// * `issuer_public` - The issuer's public keys for verification
     ///
     /// # Note
     ///
-    /// Currently uses hash comparison as a placeholder until the
-    /// signing module is integrated. Will be updated to verify
-    /// ML-DSA signatures.
-    pub fn verify_signature(&self) -> bool {
-        let expected_hash = self.receipt_hash();
-        self.signature == expected_hash.as_bytes()
+    /// Currently uses HMAC-BLAKE3 as a placeholder until ML-DSA signing
+    /// is integrated in M2. The comparison uses constant-time equality
+    /// to prevent timing side-channel attacks.
+    ///
+    /// # Security
+    ///
+    /// PLACEHOLDER: The signing key is derived from public information
+    /// (identity hash), so this does not provide real authentication.
+    /// ML-DSA will replace this in M2 for proper public-key verification.
+    pub fn verify_signature(&self, issuer_public: &IdentityPublicKeys) -> bool {
+        let signing_key = derive_receipt_signing_key_from_public(issuer_public);
+        let receipt_hash = self.receipt_hash();
+        let expected_hmac = Hash256::keyed_hash(&signing_key, receipt_hash.as_bytes());
+
+        // SECURITY: Use constant-time comparison to prevent timing attacks
+        if self.signature.len() != expected_hmac.as_bytes().len() {
+            return false;
+        }
+        bool::from(self.signature.as_slice().ct_eq(expected_hmac.as_bytes()))
     }
 
     /// Serialize the receipt to bytes.
@@ -432,8 +471,22 @@ impl DeliveryReceipt {
     ///
     /// # Errors
     ///
-    /// Returns an error if deserialization fails.
+    /// Returns an error if the input exceeds [`MAX_DELIVERY_RECEIPT_SIZE`]
+    /// or if deserialization fails.
+    ///
+    /// # Security
+    ///
+    /// Validates input size BEFORE deserialization to prevent crafted input
+    /// from causing excessive memory allocation (VERITAS-2026-0003).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        // SECURITY: Pre-deserialization size check (VERITAS-2026-0003)
+        if bytes.len() > MAX_DELIVERY_RECEIPT_SIZE {
+            return Err(ProtocolError::InvalidEnvelope(format!(
+                "DeliveryReceipt data too large: {} bytes (max: {})",
+                bytes.len(),
+                MAX_DELIVERY_RECEIPT_SIZE
+            )));
+        }
         bincode::deserialize(bytes).map_err(|e| {
             ProtocolError::Serialization(format!("Failed to deserialize receipt: {}", e))
         })
@@ -451,6 +504,28 @@ impl PartialEq for DeliveryReceipt {
 }
 
 impl Eq for DeliveryReceipt {}
+
+/// Derive the placeholder receipt signing key from an issuer's keypair.
+///
+/// PLACEHOLDER: Derives from the identity hash (public information).
+/// Will be replaced with ML-DSA private key signing in M2.
+fn derive_receipt_signing_key_from_keypair(issuer: &IdentityKeyPair) -> [u8; 32] {
+    issuer
+        .identity_hash()
+        .as_hash256()
+        .derive_key(RECEIPT_SIGNING_KEY_CONTEXT)
+}
+
+/// Derive the placeholder receipt signing key from public keys.
+///
+/// PLACEHOLDER: Derives from the identity hash (public information).
+/// Will be replaced with ML-DSA public key verification in M2.
+fn derive_receipt_signing_key_from_public(issuer_public: &IdentityPublicKeys) -> [u8; 32] {
+    issuer_public
+        .identity_hash()
+        .as_hash256()
+        .derive_key(RECEIPT_SIGNING_KEY_CONTEXT)
+}
 
 /// Get the current Unix timestamp in seconds.
 fn current_timestamp() -> u64 {
@@ -674,7 +749,7 @@ mod tests {
         let message_id = create_test_message_id();
 
         let receipt = DeliveryReceipt::delivered(&message_id, &keypair).unwrap();
-        assert!(receipt.verify_signature());
+        assert!(receipt.verify_signature(keypair.public_keys()));
     }
 
     #[test]
@@ -686,7 +761,18 @@ mod tests {
         // Tamper with the receipt
         receipt.timestamp += 1;
 
-        assert!(!receipt.verify_signature());
+        assert!(!receipt.verify_signature(keypair.public_keys()));
+    }
+
+    #[test]
+    fn test_receipt_verify_signature_fails_with_wrong_issuer() {
+        let keypair = create_test_keypair();
+        let wrong_keypair = create_test_keypair();
+        let message_id = create_test_message_id();
+
+        let receipt = DeliveryReceipt::delivered(&message_id, &keypair).unwrap();
+        // Verify with wrong issuer's public keys should fail
+        assert!(!receipt.verify_signature(wrong_keypair.public_keys()));
     }
 
     #[test]
@@ -791,6 +877,59 @@ mod tests {
 
         assert_eq!(data, restored);
     }
+
+    // ========================================================================
+    // Pre-deserialization size check tests (VERITAS-2026-0003)
+    // ========================================================================
+
+    #[test]
+    fn test_delivery_receipt_from_bytes_rejects_oversized() {
+        let oversized = vec![0u8; MAX_DELIVERY_RECEIPT_SIZE + 1];
+        let result = DeliveryReceipt::from_bytes(&oversized);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("too large"),
+            "Expected 'too large' in error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_delivery_receipt_from_bytes_accepts_at_limit() {
+        // Data at exactly the limit should pass the size check.
+        // Bincode may or may not succeed deserializing depending on
+        // the data, but the size check must NOT reject it.
+        let at_limit = vec![0u8; MAX_DELIVERY_RECEIPT_SIZE];
+        let result = DeliveryReceipt::from_bytes(&at_limit);
+        // If it fails, it should NOT be because of the size check
+        if let Err(ref e) = result {
+            let err_msg = format!("{}", e);
+            assert!(
+                !err_msg.contains("too large"),
+                "Should not be a size error at the limit, got: {}",
+                err_msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_delivery_receipt_roundtrip_within_limit() {
+        let keypair = create_test_keypair();
+        let message_id = create_test_message_id();
+        let receipt = DeliveryReceipt::delivered(&message_id, &keypair).unwrap();
+
+        let bytes = receipt.to_bytes().unwrap();
+        assert!(
+            bytes.len() <= MAX_DELIVERY_RECEIPT_SIZE,
+            "Serialized DeliveryReceipt ({} bytes) exceeds MAX_DELIVERY_RECEIPT_SIZE ({})",
+            bytes.len(),
+            MAX_DELIVERY_RECEIPT_SIZE
+        );
+
+        let restored = DeliveryReceipt::from_bytes(&bytes).unwrap();
+        assert_eq!(receipt, restored);
+    }
 }
 
 #[cfg(test)]
@@ -829,8 +968,8 @@ mod proptests {
 
             let receipt = DeliveryReceipt::delivered(&message_id, &keypair).unwrap();
 
-            // Signature should always verify for untampered receipt
-            prop_assert!(receipt.verify_signature());
+            // Signature should always verify for untampered receipt with correct issuer
+            prop_assert!(receipt.verify_signature(keypair.public_keys()));
         }
 
         #[test]

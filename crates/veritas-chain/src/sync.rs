@@ -62,6 +62,18 @@ pub const DEFAULT_MAX_BLOCKS_PER_REQUEST: u32 = 100;
 /// Default timeout for sync requests in milliseconds.
 pub const DEFAULT_REQUEST_TIMEOUT_MS: u64 = 30000;
 
+/// Maximum number of pending headers during sync.
+///
+/// SECURITY: Bounds the `pending_headers` vector to prevent memory exhaustion
+/// from a malicious peer sending an unbounded stream of headers.
+pub const MAX_PENDING_HEADERS: usize = 1000;
+
+/// Maximum number of received blocks during sync.
+///
+/// SECURITY: Bounds the `received_blocks` vector to prevent memory exhaustion
+/// from a malicious peer sending an unbounded stream of blocks.
+pub const MAX_RECEIVED_BLOCKS: usize = 1000;
+
 // ============================================================================
 // Sync Message Types
 // ============================================================================
@@ -596,13 +608,45 @@ impl SyncManager {
             return SyncAction::Complete;
         }
 
+        // SECURITY: Check if adding headers would exceed the maximum bound.
+        // Prevents memory exhaustion from a malicious peer.
+        if self.pending_headers.len() + headers.len() > MAX_PENDING_HEADERS {
+            return SyncAction::None;
+        }
+
         // Validate headers are in order and link correctly
         let mut last_height = current_height;
-        for header in &headers {
+        for (i, header) in headers.iter().enumerate() {
             if header.height != last_height + 1 {
                 // Gap in headers - invalid response
                 return SyncAction::None;
             }
+
+            // SECURITY: Verify parent hash linkage to prevent fabricated chain segments.
+            // For the first header in the batch, verify against the last pending header
+            // or use the expected parent from the chain state.
+            // For subsequent headers, verify against the previous header in this batch.
+            if i == 0 {
+                // Check parent hash against the last header we already have
+                let expected_parent = if let Some(last_pending) = self.pending_headers.last() {
+                    &last_pending.hash
+                } else {
+                    // No pending headers yet; we cannot verify the first header's
+                    // parent hash without the chain state, so skip this check.
+                    // The caller is responsible for verifying the first block
+                    // connects to the local chain tip.
+                    &header.parent_hash // no-op comparison
+                };
+                if header.parent_hash != *expected_parent {
+                    return SyncAction::None;
+                }
+            } else {
+                // Subsequent headers must link to the previous header's hash
+                if header.parent_hash != headers[i - 1].hash {
+                    return SyncAction::None;
+                }
+            }
+
             last_height = header.height;
         }
 
@@ -687,6 +731,12 @@ impl SyncManager {
         };
 
         if blocks.is_empty() {
+            return SyncAction::None;
+        }
+
+        // SECURITY: Check if adding blocks would exceed the maximum bound.
+        // Prevents memory exhaustion from a malicious peer.
+        if self.received_blocks.len() + blocks.len() > MAX_RECEIVED_BLOCKS {
             return SyncAction::None;
         }
 
@@ -907,7 +957,7 @@ mod tests {
         IdentityHash::from_bytes(&[seed; 32]).unwrap()
     }
 
-    // Helper to create a test block header
+    // Helper to create a test block header (standalone, no parent chain linkage)
     fn test_header(height: u64, parent_seed: u8) -> BlockHeader {
         BlockHeader::new(
             test_hash(parent_seed),
@@ -916,6 +966,29 @@ mod tests {
             test_hash((height % 256) as u8),
             test_identity(1),
         )
+    }
+
+    // Helper to create a properly chained sequence of headers.
+    // Each header's parent_hash equals the previous header's computed hash,
+    // which is required for parent hash validation during sync.
+    fn chained_headers(start_height: u64, count: u64) -> Vec<BlockHeader> {
+        let mut headers = Vec::new();
+        let mut parent_hash = test_hash(0); // Genesis parent hash for height 1
+
+        for i in 0..count {
+            let height = start_height + i;
+            let merkle_root = test_hash((height % 256) as u8);
+            let header = BlockHeader::new(
+                parent_hash.clone(),
+                height,
+                1700000000 + height,
+                merkle_root,
+                test_identity(1),
+            );
+            parent_hash = header.hash.clone();
+            headers.push(header);
+        }
+        headers
     }
 
     // Helper to create a test block
@@ -927,6 +1000,26 @@ mod tests {
             vec![],
             test_identity(1),
         )
+    }
+
+    // Helper to create properly chained blocks matching chained headers.
+    fn chained_blocks(start_height: u64, count: u64) -> Vec<Block> {
+        let mut blocks = Vec::new();
+        let mut parent_hash = test_hash(0);
+
+        for i in 0..count {
+            let height = start_height + i;
+            let block = Block::new(
+                parent_hash.clone(),
+                height,
+                1700000000 + height,
+                vec![],
+                test_identity(1),
+            );
+            parent_hash = block.hash().clone();
+            blocks.push(block);
+        }
+        blocks
     }
 
     // ==================== SyncMessage Tests ====================
@@ -1180,8 +1273,8 @@ mod tests {
         let mut manager = SyncManager::new();
         manager.start_sync(0, 10);
 
-        // Create headers for blocks 1-5
-        let headers: Vec<BlockHeader> = (1..=5).map(|h| test_header(h, (h - 1) as u8)).collect();
+        // Create properly chained headers for blocks 1-5
+        let headers = chained_headers(1, 5);
 
         let action = manager.handle_headers(headers);
 
@@ -1205,8 +1298,8 @@ mod tests {
         let mut manager = SyncManager::new();
         manager.start_sync(0, 3);
 
-        // Create headers for blocks 1-3 (complete set)
-        let headers: Vec<BlockHeader> = (1..=3).map(|h| test_header(h, (h - 1) as u8)).collect();
+        // Create properly chained headers for blocks 1-3 (complete set)
+        let headers = chained_headers(1, 3);
 
         let action = manager.handle_headers(headers);
 
@@ -1238,12 +1331,12 @@ mod tests {
         let mut manager = SyncManager::new();
         manager.start_sync(0, 3);
 
-        // Receive headers
-        let headers: Vec<BlockHeader> = (1..=3).map(|h| test_header(h, (h - 1) as u8)).collect();
+        // Receive properly chained headers
+        let headers = chained_headers(1, 3);
         manager.handle_headers(headers);
 
         // Receive blocks
-        let blocks: Vec<Block> = (1..=3).map(|h| test_block(h, (h - 1) as u8)).collect();
+        let blocks = chained_blocks(1, 3);
         let action = manager.handle_blocks(blocks);
 
         match action {
@@ -1302,13 +1395,13 @@ mod tests {
         manager.start_sync(0, 5);
         assert!(matches!(manager.state(), SyncState::SyncingHeaders { .. }));
 
-        // Receive all headers -> SyncingBlocks
-        let headers: Vec<BlockHeader> = (1..=5).map(|h| test_header(h, (h - 1) as u8)).collect();
+        // Receive all properly chained headers -> SyncingBlocks
+        let headers = chained_headers(1, 5);
         manager.handle_headers(headers);
         assert!(matches!(manager.state(), SyncState::SyncingBlocks { .. }));
 
         // Receive all blocks -> Synced
-        let blocks: Vec<Block> = (1..=5).map(|h| test_block(h, (h - 1) as u8)).collect();
+        let blocks = chained_blocks(1, 5);
         manager.handle_blocks(blocks);
         assert!(matches!(manager.state(), SyncState::Synced));
     }
@@ -1444,8 +1537,8 @@ mod tests {
         let mut manager = SyncManager::with_limits(5, 2);
         manager.start_sync(0, 10);
 
-        // Receive 10 headers
-        let headers: Vec<BlockHeader> = (1..=10).map(|h| test_header(h, (h - 1) as u8)).collect();
+        // Receive 10 properly chained headers
+        let headers = chained_headers(1, 10);
         let action = manager.handle_headers(headers);
 
         // Should generate multiple GetBlocks requests (10 hashes, max 2 per request = 5 requests)
@@ -1470,12 +1563,12 @@ mod tests {
         let mut manager = SyncManager::new();
         manager.start_sync(0, 2);
 
-        // Receive all headers
-        let headers: Vec<BlockHeader> = (1..=2).map(|h| test_header(h, (h - 1) as u8)).collect();
+        // Receive all properly chained headers
+        let headers = chained_headers(1, 2);
         manager.handle_headers(headers);
 
         // Receive all blocks
-        let blocks: Vec<Block> = (1..=2).map(|h| test_block(h, (h - 1) as u8)).collect();
+        let blocks = chained_blocks(1, 2);
         let action = manager.handle_blocks(blocks);
 
         // Should be AddBlocks and synced
@@ -1488,12 +1581,13 @@ mod tests {
         let mut manager = SyncManager::new();
         manager.start_sync(0, 3);
 
-        // Receive headers
-        let headers: Vec<BlockHeader> = (1..=3).map(|h| test_header(h, (h - 1) as u8)).collect();
+        // Receive properly chained headers
+        let headers = chained_headers(1, 3);
         manager.handle_headers(headers);
 
         // Receive blocks out of order
-        let blocks = vec![test_block(3, 2), test_block(1, 0), test_block(2, 1)];
+        let mut blocks = chained_blocks(1, 3);
+        blocks.swap(0, 2); // Swap first and last to make them out of order
         let action = manager.handle_blocks(blocks);
 
         match action {
@@ -1603,5 +1697,147 @@ mod tests {
             // Should be timed out after deadline
             prop_assert!(request.is_timed_out(deadline + 1));
         }
+    }
+
+    // ==================== Security Tests ====================
+
+    #[test]
+    fn test_parent_hash_linkage_rejected_when_broken() {
+        let mut manager = SyncManager::new();
+        manager.start_sync(0, 5);
+
+        // Create headers with correct heights but broken parent hash linkage
+        let headers = vec![
+            test_header(1, 0),  // parent_hash = test_hash(0)
+            test_header(2, 99), // parent_hash = test_hash(99) -- wrong! should be hash of header at height 1
+        ];
+
+        // Should reject due to broken parent hash linkage
+        let action = manager.handle_headers(headers);
+        assert!(action.is_none(), "Headers with broken parent hash linkage should be rejected");
+    }
+
+    #[test]
+    fn test_parent_hash_linkage_accepted_when_correct() {
+        let mut manager = SyncManager::new();
+        manager.start_sync(0, 5);
+
+        // Create properly chained headers
+        let headers = chained_headers(1, 3);
+
+        // Should accept and request more headers
+        let action = manager.handle_headers(headers);
+        assert!(!action.is_none(), "Headers with correct parent hash linkage should be accepted");
+    }
+
+    #[test]
+    fn test_parent_hash_linkage_across_batches() {
+        let mut manager = SyncManager::new();
+        manager.start_sync(0, 10);
+
+        // First batch: properly chained headers 1-3
+        let headers_batch1 = chained_headers(1, 3);
+        let last_hash_batch1 = headers_batch1.last().unwrap().hash.clone();
+        let action = manager.handle_headers(headers_batch1);
+        assert!(matches!(action, SyncAction::Send(_)));
+
+        // Second batch: properly chained starting from header 4,
+        // but with the correct parent hash linking to batch 1's last header.
+        let mut headers_batch2 = Vec::new();
+        let mut parent_hash = last_hash_batch1;
+        for i in 0..3 {
+            let height = 4 + i;
+            let header = BlockHeader::new(
+                parent_hash.clone(),
+                height,
+                1700000000 + height,
+                test_hash((height % 256) as u8),
+                test_identity(1),
+            );
+            parent_hash = header.hash.clone();
+            headers_batch2.push(header);
+        }
+
+        let action = manager.handle_headers(headers_batch2);
+        assert!(!action.is_none(), "Second batch with correct parent linkage should be accepted");
+    }
+
+    #[test]
+    fn test_parent_hash_linkage_broken_across_batches() {
+        let mut manager = SyncManager::new();
+        manager.start_sync(0, 10);
+
+        // First batch: properly chained headers 1-3
+        let headers_batch1 = chained_headers(1, 3);
+        let action = manager.handle_headers(headers_batch1);
+        assert!(matches!(action, SyncAction::Send(_)));
+
+        // Second batch: starts at height 4 but with wrong parent hash
+        // (doesn't link to the last header of batch 1)
+        let headers_batch2 = chained_headers(4, 3); // starts from test_hash(0), not batch1's last hash
+        let action = manager.handle_headers(headers_batch2);
+        assert!(action.is_none(), "Second batch with broken parent linkage should be rejected");
+    }
+
+    #[test]
+    fn test_pending_headers_bounded() {
+        let mut manager = SyncManager::new();
+        // Set a target much larger than MAX_PENDING_HEADERS
+        manager.start_sync(0, (MAX_PENDING_HEADERS as u64) + 500);
+
+        // Create a batch of MAX_PENDING_HEADERS headers (at the limit)
+        let headers = chained_headers(1, MAX_PENDING_HEADERS as u64);
+        let action = manager.handle_headers(headers);
+        // Should be accepted (exactly at limit)
+        assert!(!action.is_none(), "Headers exactly at MAX_PENDING_HEADERS should be accepted");
+    }
+
+    #[test]
+    fn test_pending_headers_overflow_rejected() {
+        let mut manager = SyncManager::new();
+        manager.start_sync(0, (MAX_PENDING_HEADERS as u64) + 500);
+
+        // Fill to near capacity
+        let headers = chained_headers(1, MAX_PENDING_HEADERS as u64 - 1);
+        let last_hash = headers.last().unwrap().hash.clone();
+        let last_height = headers.last().unwrap().height;
+        let action = manager.handle_headers(headers);
+        assert!(!action.is_none());
+
+        // Try to add a batch that would exceed the limit
+        let mut overflow_headers = Vec::new();
+        let mut parent_hash = last_hash;
+        for i in 0..2 {
+            let height = last_height + 1 + i;
+            let header = BlockHeader::new(
+                parent_hash.clone(),
+                height,
+                1700000000 + height,
+                test_hash((height % 256) as u8),
+                test_identity(1),
+            );
+            parent_hash = header.hash.clone();
+            overflow_headers.push(header);
+        }
+        let action = manager.handle_headers(overflow_headers);
+        assert!(action.is_none(), "Headers exceeding MAX_PENDING_HEADERS should be rejected");
+    }
+
+    #[test]
+    fn test_received_blocks_bounded() {
+        let mut manager = SyncManager::new();
+        manager.start_sync(0, 5);
+
+        // Set up headers and transition to block sync
+        let headers = chained_headers(1, 5);
+        manager.handle_headers(headers);
+
+        // Try to add more blocks than MAX_RECEIVED_BLOCKS
+        let mut huge_blocks = Vec::new();
+        for i in 0..=MAX_RECEIVED_BLOCKS {
+            huge_blocks.push(test_block((i + 1) as u64, i as u8));
+        }
+        let action = manager.handle_blocks(huge_blocks);
+        assert!(action.is_none(), "Blocks exceeding MAX_RECEIVED_BLOCKS should be rejected");
     }
 }

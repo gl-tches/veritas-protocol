@@ -70,6 +70,13 @@ pub enum ReputationError {
         /// Actual identity in proof (hex).
         actual: String,
     },
+
+    /// Signature verification unavailable.
+    ///
+    /// No public key registry is configured, so signature verification
+    /// cannot be performed. In production, a pubkey registry MUST be set.
+    #[error("Signature verification unavailable: no public key registry configured")]
+    SignatureVerificationUnavailable,
 }
 
 /// Result type for reputation operations.

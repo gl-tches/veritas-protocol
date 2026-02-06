@@ -181,9 +181,19 @@ pub fn encrypt_for_recipient(
     let encrypted_data = encrypt(&encryption_key, &padded_payload)?;
 
     // Step 8: Derive mailbox key for routing
+    // SECURITY: The salt used for mailbox key derivation MUST be the same salt
+    // stored in the EncryptedMessage. We generate the salt first, then pass it
+    // to MailboxKeyParams to ensure consistency. Previously, generate_mailbox_salt()
+    // created one salt and MailboxKeyParams::new_current() created a different one,
+    // causing a mismatch that prevented the recipient from re-deriving the mailbox key.
     let recipient_hash = recipient.identity_hash();
     let mailbox_salt = generate_mailbox_salt();
-    let mailbox_params = MailboxKeyParams::new_current(&recipient_hash);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system time before UNIX epoch")
+        .as_secs();
+    let epoch = crate::envelope::epoch_from_timestamp(now, crate::limits::EPOCH_DURATION_SECS);
+    let mailbox_params = MailboxKeyParams::new(&recipient_hash, epoch, mailbox_salt);
     let mailbox_key = mailbox_params.derive();
 
     // Step 9: Assemble the minimal envelope
@@ -245,6 +255,11 @@ pub fn decrypt_as_recipient(
     recipient: &IdentityKeyPair,
     envelope: &MinimalEnvelope,
 ) -> Result<InnerPayload> {
+    // SECURITY: Validate envelope BEFORE any cryptographic operations.
+    // This rejects low-order ephemeral keys that would produce predictable
+    // shared secrets, preventing ECDH bypass attacks (VERITAS-2026-0026).
+    envelope.validate()?;
+
     // Step 1: Perform ECDH with ephemeral public key
     let shared_secret = recipient.key_exchange(envelope.ephemeral_public());
 

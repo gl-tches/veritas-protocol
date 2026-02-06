@@ -75,6 +75,10 @@ pub struct WasmClient {
     store: Arc<Mutex<IdentityStore>>,
     /// Unlocked state (None when locked).
     unlocked: Arc<Mutex<Option<UnlockedState>>>,
+    /// Random Argon2 salt for key derivation (B64-encoded string).
+    /// Generated per client instance using cryptographic randomness to prevent
+    /// pre-computed rainbow table attacks against the hardcoded salt.
+    argon2_salt: String,
 }
 
 #[wasm_bindgen]
@@ -142,7 +146,9 @@ impl WasmClient {
     #[wasm_bindgen(js_name = listIdentities)]
     pub fn list_identities(&self) -> Result<JsValue, JsValue> {
         self.list_identities_internal()
-            .map(|v| serde_wasm_bindgen::to_value(&v).unwrap())
+            // WASM-FIX-6: Replace .unwrap() with proper error handling
+            .and_then(|v| serde_wasm_bindgen::to_value(&v)
+                .map_err(|e| WasmError::new(&format!("Serialization failed: {}", e))))
             .map_err(|e| e.into())
     }
 
@@ -152,7 +158,9 @@ impl WasmClient {
     #[wasm_bindgen(js_name = identitySlots)]
     pub fn identity_slots(&self) -> Result<JsValue, JsValue> {
         self.identity_slots_internal()
-            .map(|v| serde_wasm_bindgen::to_value(&v).unwrap())
+            // WASM-FIX-6: Replace .unwrap() with proper error handling
+            .and_then(|v| serde_wasm_bindgen::to_value(&v)
+                .map_err(|e| WasmError::new(&format!("Serialization failed: {}", e))))
             .map_err(|e| e.into())
     }
 
@@ -175,9 +183,18 @@ impl WasmClient {
 impl WasmClient {
     /// Create a client with a specific origin.
     fn new_with_origin(origin: OriginFingerprint) -> Self {
+        // Generate a random 16-byte salt for Argon2 key derivation.
+        // Each client instance gets a unique salt, preventing pre-computed
+        // rainbow table attacks that the previous hardcoded salt allowed.
+        let mut salt_bytes = [0u8; 16];
+        getrandom::getrandom(&mut salt_bytes).expect("getrandom failed");
+        let salt = SaltString::encode_b64(&salt_bytes)
+            .expect("Failed to encode Argon2 salt");
+
         Self {
             store: Arc::new(Mutex::new(IdentityStore::new(origin))),
             unlocked: Arc::new(Mutex::new(None)),
+            argon2_salt: salt.to_string(),
         }
     }
 
@@ -186,6 +203,9 @@ impl WasmClient {
     /// This collects browser-available data to create a semi-stable fingerprint.
     /// While not as strong as hardware attestation, it provides Sybil resistance
     /// within browser contexts.
+    ///
+    /// The installation ID is persisted to localStorage so that it survives page
+    /// refreshes and browser restarts, providing consistent Sybil resistance.
     fn derive_browser_fingerprint() -> OriginFingerprint {
         use veritas_crypto::Hash256;
 
@@ -214,18 +234,94 @@ impl WasmClient {
         // Hash the collected data to create hardware_id equivalent
         let hardware_id = Hash256::hash(&fingerprint_data);
 
-        // Generate persistent installation ID using getrandom
-        // In production this should be persisted to localStorage
-        let mut installation_id = [0u8; 32];
-        getrandom::getrandom(&mut installation_id).expect("getrandom failed");
+        // Load or create a persistent installation ID.
+        // On WASM, this is stored in localStorage so it survives page refreshes.
+        // On native (tests), a fresh random ID is generated each time.
+        let installation_id = Self::load_or_create_installation_id();
 
         OriginFingerprint::new(hardware_id.as_bytes(), None, &installation_id)
     }
 
+    /// Load an existing installation ID from persistent storage, or create and
+    /// persist a new one if none exists.
+    ///
+    /// On WASM targets, localStorage is used for persistence. On native targets
+    /// (used in tests), a fresh random ID is generated each time.
+    fn load_or_create_installation_id() -> [u8; 32] {
+        #[cfg(target_arch = "wasm32")]
+        {
+            const STORAGE_KEY: &str = "veritas-installation-id";
+
+            // Try to load existing installation ID from localStorage
+            if let Some(hex_str) = Self::get_local_storage_item(STORAGE_KEY) {
+                if let Some(bytes) = Self::hex_decode_32(&hex_str) {
+                    return bytes;
+                }
+                // If decoding fails, fall through to generate a new one
+            }
+
+            // Generate a new installation ID using cryptographic randomness
+            let mut installation_id = [0u8; 32];
+            getrandom::getrandom(&mut installation_id).expect("getrandom failed");
+
+            // Persist to localStorage for future sessions
+            let hex_str = Self::hex_encode(&installation_id);
+            Self::set_local_storage_item(STORAGE_KEY, &hex_str);
+
+            installation_id
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut installation_id = [0u8; 32];
+            getrandom::getrandom(&mut installation_id).expect("getrandom failed");
+            installation_id
+        }
+    }
+
+    /// Retrieve a value from browser localStorage.
+    #[cfg(target_arch = "wasm32")]
+    fn get_local_storage_item(key: &str) -> Option<String> {
+        let window = web_sys::window()?;
+        let storage = window.local_storage().ok()??;
+        storage.get_item(key).ok()?
+    }
+
+    /// Store a value in browser localStorage.
+    #[cfg(target_arch = "wasm32")]
+    fn set_local_storage_item(key: &str, value: &str) {
+        if let Some(window) = web_sys::window() {
+            if let Ok(Some(storage)) = window.local_storage() {
+                let _ = storage.set_item(key, value);
+            }
+        }
+    }
+
+    /// Encode a byte slice as a lowercase hex string.
+    #[cfg(target_arch = "wasm32")]
+    fn hex_encode(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    /// Decode a 64-character hex string into a 32-byte array.
+    /// Returns None if the string is not valid hex or wrong length.
+    #[cfg(target_arch = "wasm32")]
+    fn hex_decode_32(hex: &str) -> Option<[u8; 32]> {
+        if hex.len() != 64 {
+            return None;
+        }
+        let mut bytes = [0u8; 32];
+        for (i, byte) in bytes.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(hex.get(i * 2..i * 2 + 2)?, 16).ok()?;
+        }
+        Some(bytes)
+    }
+
     fn unlock_internal(&self, password: &str) -> WasmResult<()> {
-        // Derive storage key from password using Argon2
-        // In production, this salt should be stored per-origin and generated once
-        let salt = SaltString::from_b64("dmVyaXRhcy13YXNtLXN0b3JhZ2UtdjE")
+        // Derive storage key from password using Argon2 with a per-instance random salt.
+        // The salt is generated at client creation time using cryptographic randomness,
+        // preventing pre-computed rainbow table attacks.
+        let salt = SaltString::from_b64(&self.argon2_salt)
             .map_err(|_| WasmError::new("Failed to create salt"))?;
 
         let argon2 = Argon2::default();

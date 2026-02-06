@@ -89,7 +89,8 @@ impl MlKemPrivateKey {
 /// ML-KEM key pair.
 pub struct MlKemKeyPair {
     /// The private key (for decapsulation).
-    pub private: MlKemPrivateKey,
+    /// SECURITY: pub(crate) to prevent external access to private key (CRYPTO-FIX-6).
+    pub(crate) private: MlKemPrivateKey,
     /// The public key (for encapsulation).
     pub public: MlKemPublicKey,
 }

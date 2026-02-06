@@ -135,7 +135,9 @@ proptest! {
     /// Username normalization produces lowercase.
     #[test]
     fn normalized_is_lowercase(s in "[a-zA-Z][a-zA-Z0-9]{2,10}") {
-        let username = Username::new(&s).unwrap();
+        let result = Username::new(&s);
+        prop_assume!(result.is_ok()); // Skip reserved usernames
+        let username = result.unwrap();
         let normalized = username.normalized();
         let lowercase = normalized.to_ascii_lowercase();
         prop_assert_eq!(normalized, lowercase);
@@ -144,15 +146,21 @@ proptest! {
     /// Case-insensitive comparison works.
     #[test]
     fn case_insensitive_comparison(s in "[a-zA-Z][a-zA-Z0-9]{2,10}") {
-        let lower = Username::new(&s.to_lowercase()).unwrap();
-        let upper = Username::new(&s.to_uppercase()).unwrap();
+        // Skip reserved usernames that would be rejected by validation
+        let lower_result = Username::new(&s.to_lowercase());
+        let upper_result = Username::new(&s.to_uppercase());
+        prop_assume!(lower_result.is_ok() && upper_result.is_ok());
+        let lower = lower_result.unwrap();
+        let upper = upper_result.unwrap();
         prop_assert!(lower.eq_ignore_case(&upper));
     }
 
     /// Username serialization roundtrip.
     #[test]
     fn username_serialization_roundtrip(s in "[a-zA-Z][a-zA-Z0-9]{2,10}") {
-        let username = Username::new(&s).unwrap();
+        let result = Username::new(&s);
+        prop_assume!(result.is_ok()); // Skip reserved usernames
+        let username = result.unwrap();
         let bytes = bincode::serialize(&username).unwrap();
         let restored: Username = bincode::deserialize(&bytes).unwrap();
         prop_assert_eq!(username, restored);
@@ -409,7 +417,9 @@ proptest! {
         identity_bytes in prop::array::uniform32(any::<u8>()),
         timestamp in any::<u64>()
     ) {
-        let username = Username::new(&username_str).unwrap();
+        let username_result = Username::new(&username_str);
+        prop_assume!(username_result.is_ok()); // Skip reserved usernames
+        let username = username_result.unwrap();
         let identity = IdentityHash::from_bytes(&identity_bytes).unwrap();
 
         let payload1 = crate::UsernameRegistration::compute_signing_payload(
@@ -432,7 +442,9 @@ proptest! {
     ) {
         prop_assume!(timestamp1 != timestamp2);
 
-        let username = Username::new(&username_str).unwrap();
+        let username_result = Username::new(&username_str);
+        prop_assume!(username_result.is_ok()); // Skip reserved usernames
+        let username = username_result.unwrap();
         let identity = IdentityHash::from_bytes(&identity_bytes).unwrap();
 
         let payload1 = crate::UsernameRegistration::compute_signing_payload(
@@ -459,8 +471,8 @@ proptest! {
             username,
             identity,
             registered_at,
-            vec![]
-        );
+            vec![0u8; 1]
+        ).unwrap();
 
         let current_time = registered_at.saturating_add(offset);
         let expected_expired = offset > max_age;

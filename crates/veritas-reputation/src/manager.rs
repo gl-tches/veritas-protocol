@@ -2,7 +2,7 @@
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::collusion::CollusionDetector;
@@ -22,6 +22,18 @@ pub type IdentityHash = [u8; 32];
 /// After this limit, older nonces are pruned. This prevents unbounded memory growth
 /// while still providing protection against recent replay attacks.
 pub const MAX_TRACKED_NONCES: usize = 100_000;
+
+/// Duration of each nonce time bucket in seconds (1 hour).
+///
+/// Nonces are grouped into time buckets for efficient pruning.
+/// When pruning is needed, entire old buckets are removed rather than
+/// arbitrary entries, preventing replay attacks on pruned nonces.
+pub const NONCE_BUCKET_DURATION_SECS: u64 = 3600;
+
+/// Default nonce expiry in seconds (24 hours).
+///
+/// Nonces older than this are eligible for pruning.
+pub const DEFAULT_NONCE_EXPIRY_SECS: u64 = 86400;
 
 /// Central manager for all reputation operations.
 ///
@@ -53,13 +65,26 @@ pub struct ReputationManager {
     ///
     /// Each interaction proof contains a unique nonce that can only be used once.
     /// This set tracks all used nonces to prevent replay attacks.
+    /// Kept in sync with `nonce_buckets` for fast O(1) lookups.
     used_nonces: HashSet<[u8; NONCE_SIZE]>,
+
+    /// Time-partitioned nonce buckets for deterministic pruning.
+    ///
+    /// Nonces are grouped by time bucket (keyed by `timestamp / NONCE_BUCKET_DURATION_SECS`).
+    /// When pruning is needed, entire old buckets are removed rather than arbitrary
+    /// entries, preventing the replay window that random pruning would create.
+    nonce_buckets: BTreeMap<u64, HashSet<[u8; NONCE_SIZE]>>,
+
+    /// How long nonces are kept before they can be pruned, in seconds.
+    ///
+    /// Defaults to 24 hours (86400 seconds). Nonces in buckets older than
+    /// `now - nonce_expiry_secs` are pruned when `MAX_TRACKED_NONCES` is exceeded.
+    nonce_expiry_secs: u64,
 
     /// Public key registry for signature verification.
     ///
-    /// This is optional to maintain backwards compatibility with tests.
-    /// In production, this MUST be set.
-    #[allow(dead_code)]
+    /// This MUST be set for production use. When `None`, all calls to
+    /// `record_positive_interaction` will return `SignatureVerificationUnavailable`.
     pubkey_registry: Option<Arc<dyn PubkeyRegistry>>,
 }
 
@@ -80,6 +105,8 @@ impl ReputationManager {
             decay_config: DecayConfig::default(),
             decay_states: HashMap::new(),
             used_nonces: HashSet::new(),
+            nonce_buckets: BTreeMap::new(),
+            nonce_expiry_secs: DEFAULT_NONCE_EXPIRY_SECS,
             pubkey_registry: None,
         }
     }
@@ -100,6 +127,8 @@ impl ReputationManager {
             decay_config,
             decay_states: HashMap::new(),
             used_nonces: HashSet::new(),
+            nonce_buckets: BTreeMap::new(),
+            nonce_expiry_secs: DEFAULT_NONCE_EXPIRY_SECS,
             pubkey_registry: None,
         }
     }
@@ -118,6 +147,8 @@ impl ReputationManager {
             decay_config: DecayConfig::default(),
             decay_states: HashMap::new(),
             used_nonces: HashSet::new(),
+            nonce_buckets: BTreeMap::new(),
+            nonce_expiry_secs: DEFAULT_NONCE_EXPIRY_SECS,
             pubkey_registry: Some(pubkey_registry),
         }
     }
@@ -127,6 +158,40 @@ impl ReputationManager {
     /// Call this to enable cryptographic signature verification.
     pub fn set_pubkey_registry(&mut self, registry: Arc<dyn PubkeyRegistry>) {
         self.pubkey_registry = Some(registry);
+    }
+
+    /// Set the nonce expiry duration in seconds.
+    ///
+    /// Nonces older than this will be pruned when the nonce limit is exceeded.
+    /// Default is 24 hours (86400 seconds).
+    pub fn set_nonce_expiry_secs(&mut self, expiry_secs: u64) {
+        self.nonce_expiry_secs = expiry_secs;
+    }
+
+    /// Prune old nonce buckets based on time.
+    ///
+    /// Removes all nonce buckets older than `now - nonce_expiry_secs`.
+    /// This ensures pruning is deterministic and time-based, not random,
+    /// so recently-used nonces are never accidentally pruned.
+    fn prune_old_nonce_buckets(&mut self, current_time: u64) {
+        let expiry_bucket = current_time.saturating_sub(self.nonce_expiry_secs)
+            / NONCE_BUCKET_DURATION_SECS;
+
+        // Collect bucket keys that are expired
+        let expired_keys: Vec<u64> = self
+            .nonce_buckets
+            .range(..=expiry_bucket)
+            .map(|(&k, _)| k)
+            .collect();
+
+        // Remove expired buckets and their nonces from the main set
+        for key in expired_keys {
+            if let Some(bucket_nonces) = self.nonce_buckets.remove(&key) {
+                for nonce in &bucket_nonces {
+                    self.used_nonces.remove(nonce);
+                }
+            }
+        }
     }
 
     /// Get an identity's score, creating a new one if it doesn't exist.
@@ -197,6 +262,12 @@ impl ReputationManager {
         to: IdentityHash,
         proof: &InteractionProof,
     ) -> Result<u32> {
+        // SECURITY: Prevent self-interaction even from deserialized proofs
+        // that bypass the InteractionProof::new() constructor check
+        if from == to {
+            return Err(ReputationError::SelfInteractionNotAllowed);
+        }
+
         // SECURITY: Verify proof identities match claimed parties
         if *proof.from_identity() != from {
             return Err(ReputationError::ProofIdentityMismatch {
@@ -217,11 +288,16 @@ impl ReputationManager {
             return Err(ReputationError::NonceAlreadyUsed);
         }
 
-        // SECURITY: Verify signatures if pubkey registry is available
-        if let Some(ref registry) = self.pubkey_registry {
-            proof.verify(|identity, message, signature| {
-                registry.verify_signature(identity, message, signature)
-            })?;
+        // SECURITY: Verify signatures — registry MUST be available
+        match &self.pubkey_registry {
+            Some(registry) => {
+                proof.verify(|identity, message, signature| {
+                    registry.verify_signature(identity, message, signature)
+                })?;
+            }
+            None => {
+                return Err(ReputationError::SignatureVerificationUnavailable);
+            }
         }
 
         // SECURITY: Validate timestamp
@@ -273,19 +349,17 @@ impl ReputationManager {
         // This prevents partial success attacks
         self.used_nonces.insert(nonce);
 
-        // Prune old nonces if we've exceeded the limit
+        // Also record in time-partitioned bucket for deterministic pruning
+        let current_time = Utc::now().timestamp() as u64;
+        let bucket_key = current_time / NONCE_BUCKET_DURATION_SECS;
+        self.nonce_buckets
+            .entry(bucket_key)
+            .or_default()
+            .insert(nonce);
+
+        // Prune old nonce buckets if we've exceeded the limit
         if self.used_nonces.len() > MAX_TRACKED_NONCES {
-            // In a real implementation, we'd use a time-based LRU cache
-            // For now, just clear half when we hit the limit
-            let to_remove: Vec<_> = self
-                .used_nonces
-                .iter()
-                .take(MAX_TRACKED_NONCES / 2)
-                .copied()
-                .collect();
-            for nonce in to_remove {
-                self.used_nonces.remove(&nonce);
-            }
+            self.prune_old_nonce_buckets(current_time);
         }
 
         // Record the interaction for collusion detection
@@ -322,6 +396,11 @@ impl ReputationManager {
         to: IdentityHash,
         base_gain: u32,
     ) -> Result<u32> {
+        // SECURITY: Prevent self-interaction
+        if from == to {
+            return Err(ReputationError::SelfInteractionNotAllowed);
+        }
+
         self.ensure_identity_exists(&from);
         self.ensure_identity_exists(&to);
 
@@ -600,6 +679,8 @@ impl Clone for ReputationManager {
             decay_config: self.decay_config.clone(),
             decay_states: self.decay_states.clone(),
             used_nonces: self.used_nonces.clone(),
+            nonce_buckets: self.nonce_buckets.clone(),
+            nonce_expiry_secs: self.nonce_expiry_secs,
             pubkey_registry: self.pubkey_registry.clone(),
         }
     }
@@ -615,6 +696,8 @@ impl std::fmt::Debug for ReputationManager {
             .field("decay_config", &self.decay_config)
             .field("decay_states", &self.decay_states)
             .field("used_nonces_count", &self.used_nonces.len())
+            .field("nonce_buckets_count", &self.nonce_buckets.len())
+            .field("nonce_expiry_secs", &self.nonce_expiry_secs)
             .field(
                 "pubkey_registry",
                 &self.pubkey_registry.as_ref().map(|_| "[PubkeyRegistry]"),
@@ -650,6 +733,31 @@ mod tests {
         let mut id = [0u8; 32];
         id[0] = n;
         id
+    }
+
+    /// A mock pubkey registry that always validates signatures.
+    /// Used for tests that need to exercise `record_positive_interaction`
+    /// without real cryptographic verification.
+    struct AlwaysValidRegistry;
+
+    impl PubkeyRegistry for AlwaysValidRegistry {
+        fn get_pubkey(&self, identity: &IdentityHash) -> Result<Vec<u8>> {
+            Ok(identity.to_vec())
+        }
+
+        fn verify_signature(
+            &self,
+            _identity: &IdentityHash,
+            _message: &[u8],
+            _signature: &[u8],
+        ) -> bool {
+            true
+        }
+    }
+
+    /// Create a ReputationManager with a mock registry that always validates.
+    fn make_manager_with_registry() -> ReputationManager {
+        ReputationManager::with_pubkey_registry(Arc::new(AlwaysValidRegistry))
     }
 
     #[test]
@@ -844,7 +952,7 @@ mod tests {
 
     #[test]
     fn test_proof_based_interaction_success() {
-        let mut manager = ReputationManager::new();
+        let mut manager = make_manager_with_registry();
         let from = make_identity(1);
         let to = make_identity(2);
 
@@ -860,7 +968,7 @@ mod tests {
 
     #[test]
     fn test_proof_identity_mismatch_from() {
-        let mut manager = ReputationManager::new();
+        let mut manager = make_manager_with_registry();
         let real_from = make_identity(1);
         let fake_from = make_identity(3);
         let to = make_identity(2);
@@ -877,7 +985,7 @@ mod tests {
 
     #[test]
     fn test_proof_identity_mismatch_to() {
-        let mut manager = ReputationManager::new();
+        let mut manager = make_manager_with_registry();
         let from = make_identity(1);
         let real_to = make_identity(2);
         let fake_to = make_identity(3);
@@ -894,7 +1002,7 @@ mod tests {
 
     #[test]
     fn test_replay_attack_prevented() {
-        let mut manager = ReputationManager::new();
+        let mut manager = make_manager_with_registry();
         let from = make_identity(1);
         let to = make_identity(2);
 
@@ -912,7 +1020,7 @@ mod tests {
 
     #[test]
     fn test_nonce_tracking() {
-        let mut manager = ReputationManager::new();
+        let mut manager = make_manager_with_registry();
         let from = make_identity(1);
         let to = make_identity(2);
 
@@ -934,7 +1042,7 @@ mod tests {
 
     #[test]
     fn test_different_interaction_types_have_different_gains() {
-        let mut manager = ReputationManager::new();
+        let mut manager = make_manager_with_registry();
 
         // Test MessageRelay (base_gain = 3)
         let from1 = make_identity(1);
@@ -966,7 +1074,7 @@ mod tests {
 
     #[test]
     fn test_blacklisted_identity_cannot_gain_reputation() {
-        let mut manager = ReputationManager::new();
+        let mut manager = make_manager_with_registry();
         let from = make_identity(1);
         let to = make_identity(2);
 
@@ -982,7 +1090,7 @@ mod tests {
 
     #[test]
     fn test_multiple_proofs_with_different_nonces() {
-        let mut manager = ReputationManager::new();
+        let mut manager = make_manager_with_registry();
         let from = make_identity(1);
         let to = make_identity(2);
 
@@ -1004,5 +1112,151 @@ mod tests {
         // proof2's nonce should NOT be tracked because the interaction was rejected
         // before the nonce was recorded (rate limit check happens after nonce check
         // but before nonce recording)
+    }
+
+    // === Fix 1.12: Signature verification must fail when no registry is set ===
+
+    #[test]
+    fn test_no_registry_returns_error() {
+        let mut manager = ReputationManager::new(); // No registry!
+        let from = make_identity(1);
+        let to = make_identity(2);
+
+        let proof = make_test_proof(from, to, InteractionType::MessageDelivery);
+        let result = manager.record_positive_interaction(from, to, &proof);
+
+        assert!(
+            matches!(result, Err(ReputationError::SignatureVerificationUnavailable)),
+            "record_positive_interaction without a registry must return SignatureVerificationUnavailable"
+        );
+    }
+
+    // === Fix 1.13: Self-interaction must be rejected ===
+
+    #[test]
+    fn test_self_interaction_rejected_in_record_positive() {
+        let mut manager = make_manager_with_registry();
+        let identity = make_identity(1);
+
+        // We can't create an InteractionProof with from==to via the constructor
+        // (it rejects it), but the manager should also check at its level
+        // in case of deserialized proofs. We test that the manager's own check
+        // rejects it even before reaching proof validation.
+        // Since we can't create a proof with from==to, we test via unchecked.
+        let result = manager.record_positive_interaction_unchecked(identity, identity, 10);
+        assert!(
+            matches!(result, Err(ReputationError::SelfInteractionNotAllowed)),
+            "Self-interaction must be rejected in record_positive_interaction_unchecked"
+        );
+    }
+
+    #[test]
+    fn test_self_interaction_rejected_unchecked() {
+        let mut manager = ReputationManager::new();
+        let identity = make_identity(1);
+
+        let result = manager.record_positive_interaction_unchecked(identity, identity, 10);
+        assert!(
+            matches!(result, Err(ReputationError::SelfInteractionNotAllowed)),
+            "Self-interaction must be rejected in unchecked path"
+        );
+    }
+
+    // === Fix 1.11: Time-based nonce pruning ===
+
+    #[test]
+    fn test_nonce_buckets_populated_on_insert() {
+        let mut manager = make_manager_with_registry();
+        let from = make_identity(1);
+        let to = make_identity(2);
+
+        let proof = make_test_proof(from, to, InteractionType::BlockValidation);
+        manager
+            .record_positive_interaction(from, to, &proof)
+            .unwrap();
+
+        // Nonce should be in both used_nonces and nonce_buckets
+        assert!(manager.is_nonce_used(proof.nonce()));
+        assert!(!manager.nonce_buckets.is_empty(), "Nonce bucket should be populated");
+
+        // The bucket should contain the nonce
+        let total_bucketed: usize = manager.nonce_buckets.values().map(|b| b.len()).sum();
+        assert_eq!(total_bucketed, 1, "Should have exactly 1 nonce in buckets");
+    }
+
+    #[test]
+    fn test_time_based_pruning_removes_old_buckets() {
+        let mut manager = make_manager_with_registry();
+
+        // Manually insert nonces into old buckets to simulate passage of time
+        let old_nonce_1 = generate_nonce();
+        let old_nonce_2 = generate_nonce();
+        let recent_nonce = generate_nonce();
+
+        // Old bucket: 48 hours ago (should be pruned with 24h expiry)
+        let current_time = Utc::now().timestamp() as u64;
+        let old_bucket_key = (current_time - 48 * 3600) / NONCE_BUCKET_DURATION_SECS;
+        let recent_bucket_key = current_time / NONCE_BUCKET_DURATION_SECS;
+
+        // Insert old nonces
+        manager.used_nonces.insert(old_nonce_1);
+        manager.used_nonces.insert(old_nonce_2);
+        manager.nonce_buckets
+            .entry(old_bucket_key)
+            .or_default()
+            .insert(old_nonce_1);
+        manager.nonce_buckets
+            .entry(old_bucket_key)
+            .or_default()
+            .insert(old_nonce_2);
+
+        // Insert recent nonce
+        manager.used_nonces.insert(recent_nonce);
+        manager.nonce_buckets
+            .entry(recent_bucket_key)
+            .or_default()
+            .insert(recent_nonce);
+
+        assert_eq!(manager.nonce_count(), 3);
+
+        // Prune old buckets
+        manager.prune_old_nonce_buckets(current_time);
+
+        // Old nonces should be removed, recent should remain
+        assert!(!manager.is_nonce_used(&old_nonce_1), "Old nonce 1 should be pruned");
+        assert!(!manager.is_nonce_used(&old_nonce_2), "Old nonce 2 should be pruned");
+        assert!(manager.is_nonce_used(&recent_nonce), "Recent nonce should survive pruning");
+        assert_eq!(manager.nonce_count(), 1);
+    }
+
+    #[test]
+    fn test_pruning_preserves_recent_nonces() {
+        let mut manager = make_manager_with_registry();
+
+        // Set a very short expiry for testing (1 hour)
+        manager.set_nonce_expiry_secs(3600);
+
+        let current_time = Utc::now().timestamp() as u64;
+        let current_bucket = current_time / NONCE_BUCKET_DURATION_SECS;
+
+        // Insert nonces in the current bucket
+        let nonce1 = generate_nonce();
+        let nonce2 = generate_nonce();
+        manager.used_nonces.insert(nonce1);
+        manager.used_nonces.insert(nonce2);
+        manager.nonce_buckets
+            .entry(current_bucket)
+            .or_default()
+            .insert(nonce1);
+        manager.nonce_buckets
+            .entry(current_bucket)
+            .or_default()
+            .insert(nonce2);
+
+        // Prune should not remove current bucket nonces
+        manager.prune_old_nonce_buckets(current_time);
+
+        assert!(manager.is_nonce_used(&nonce1), "Current bucket nonce should survive");
+        assert!(manager.is_nonce_used(&nonce2), "Current bucket nonce should survive");
     }
 }

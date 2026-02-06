@@ -17,7 +17,7 @@
 //! - `veritas/blocks/v1` - New block announcements
 //! - `veritas/receipts/v1` - Delivery receipt announcements
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -52,6 +52,24 @@ pub const TOPIC_RECEIPTS: &str = "veritas/receipts/v1";
 
 /// Duration of timestamp buckets (1 hour in seconds).
 const TIMESTAMP_BUCKET_SECS: u64 = 60 * 60;
+
+/// Maximum size of a serialized `MessageAnnouncement` in bytes.
+///
+/// SECURITY: Pre-deserialization size validation prevents crafted input from
+/// causing excessive memory allocation during bincode deserialization (VERITAS-2026-0003).
+pub const MAX_MESSAGE_ANNOUNCEMENT_SIZE: usize = 8192;
+
+/// Maximum size of a serialized `BlockAnnouncement` in bytes.
+///
+/// SECURITY: Pre-deserialization size validation prevents crafted input from
+/// causing excessive memory allocation during bincode deserialization (VERITAS-2026-0003).
+pub const MAX_BLOCK_ANNOUNCEMENT_SIZE: usize = 8192;
+
+/// Maximum size of a serialized `ReceiptAnnouncement` in bytes.
+///
+/// SECURITY: Pre-deserialization size validation prevents crafted input from
+/// causing excessive memory allocation during bincode deserialization (VERITAS-2026-0003).
+pub const MAX_RECEIPT_ANNOUNCEMENT_SIZE: usize = 4096;
 
 // ============================================================================
 // Configuration
@@ -284,7 +302,20 @@ impl MessageAnnouncement {
     }
 
     /// Deserialize an announcement from bytes.
+    ///
+    /// # Security
+    ///
+    /// Validates input size BEFORE deserialization to prevent crafted input
+    /// from causing excessive memory allocation (VERITAS-2026-0003).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        // SECURITY: Pre-deserialization size check (VERITAS-2026-0003)
+        if bytes.len() > MAX_MESSAGE_ANNOUNCEMENT_SIZE {
+            return Err(NetError::Gossip(format!(
+                "MessageAnnouncement too large: {} bytes (max: {})",
+                bytes.len(),
+                MAX_MESSAGE_ANNOUNCEMENT_SIZE
+            )));
+        }
         bincode::deserialize(bytes)
             .map_err(|e| NetError::Gossip(format!("deserialization failed: {}", e)))
     }
@@ -338,7 +369,20 @@ impl BlockAnnouncement {
     }
 
     /// Deserialize an announcement from bytes.
+    ///
+    /// # Security
+    ///
+    /// Validates input size BEFORE deserialization to prevent crafted input
+    /// from causing excessive memory allocation (VERITAS-2026-0003).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        // SECURITY: Pre-deserialization size check (VERITAS-2026-0003)
+        if bytes.len() > MAX_BLOCK_ANNOUNCEMENT_SIZE {
+            return Err(NetError::Gossip(format!(
+                "BlockAnnouncement too large: {} bytes (max: {})",
+                bytes.len(),
+                MAX_BLOCK_ANNOUNCEMENT_SIZE
+            )));
+        }
         bincode::deserialize(bytes)
             .map_err(|e| NetError::Gossip(format!("deserialization failed: {}", e)))
     }
@@ -386,7 +430,20 @@ impl ReceiptAnnouncement {
     }
 
     /// Deserialize an announcement from bytes.
+    ///
+    /// # Security
+    ///
+    /// Validates input size BEFORE deserialization to prevent crafted input
+    /// from causing excessive memory allocation (VERITAS-2026-0003).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        // SECURITY: Pre-deserialization size check (VERITAS-2026-0003)
+        if bytes.len() > MAX_RECEIPT_ANNOUNCEMENT_SIZE {
+            return Err(NetError::Gossip(format!(
+                "ReceiptAnnouncement too large: {} bytes (max: {})",
+                bytes.len(),
+                MAX_RECEIPT_ANNOUNCEMENT_SIZE
+            )));
+        }
         bincode::deserialize(bytes)
             .map_err(|e| NetError::Gossip(format!("deserialization failed: {}", e)))
     }
@@ -396,6 +453,75 @@ impl ReceiptAnnouncement {
 // Gossip Manager
 // ============================================================================
 
+/// Maximum number of seen message IDs to track for deduplication.
+///
+/// SECURITY: When this limit is reached, the oldest entries are evicted
+/// one-by-one (FIFO) instead of clearing the entire set. This prevents
+/// a replay window where all previously seen messages could be replayed
+/// after a bulk clear. See VERITAS-2026-0014.
+const MAX_SEEN_MESSAGES: usize = 10000;
+
+/// LRU-style deduplication tracker for seen gossip messages.
+///
+/// Uses a `VecDeque` for FIFO ordering and a `HashSet` for O(1) lookups.
+/// When the maximum size is reached, the oldest entry is evicted rather
+/// than clearing the entire set, which would create a replay window.
+///
+/// # Security
+///
+/// This addresses the gossip replay vulnerability where clearing the
+/// entire `seen_messages` set allowed all previously seen messages to
+/// be replayed.
+struct SeenMessages {
+    /// FIFO order of message IDs (oldest at front).
+    order: VecDeque<MessageId>,
+    /// Set of message IDs for O(1) lookup.
+    set: HashSet<MessageId>,
+    /// Maximum number of entries before eviction.
+    max_size: usize,
+}
+
+impl SeenMessages {
+    /// Create a new SeenMessages tracker with the given capacity.
+    fn new(max_size: usize) -> Self {
+        Self {
+            order: VecDeque::with_capacity(max_size),
+            set: HashSet::with_capacity(max_size),
+            max_size,
+        }
+    }
+
+    /// Check if a message ID has been seen.
+    fn contains(&self, id: &MessageId) -> bool {
+        self.set.contains(id)
+    }
+
+    /// Insert a message ID. If at capacity, evict the oldest entry.
+    fn insert(&mut self, id: MessageId) {
+        if self.set.contains(&id) {
+            return;
+        }
+
+        // Evict oldest entries if at capacity
+        while self.set.len() >= self.max_size {
+            if let Some(oldest) = self.order.pop_front() {
+                self.set.remove(&oldest);
+            } else {
+                break;
+            }
+        }
+
+        self.set.insert(id.clone());
+        self.order.push_back(id);
+    }
+
+    /// Get the number of tracked message IDs.
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.set.len()
+    }
+}
+
 /// Internal state for the gossip manager.
 struct GossipState {
     /// Set of subscribed topics.
@@ -404,8 +530,8 @@ struct GossipState {
     /// Mesh peers per topic.
     mesh_peers: HashMap<String, HashSet<PeerId>>,
 
-    /// Recently seen message IDs for deduplication.
-    seen_messages: HashSet<MessageId>,
+    /// Recently seen message IDs for deduplication (LRU-style eviction).
+    seen_messages: SeenMessages,
 }
 
 impl GossipState {
@@ -413,7 +539,7 @@ impl GossipState {
         Self {
             subscribed_topics: HashSet::new(),
             mesh_peers: HashMap::new(),
-            seen_messages: HashSet::new(),
+            seen_messages: SeenMessages::new(MAX_SEEN_MESSAGES),
         }
     }
 }
@@ -796,20 +922,17 @@ impl GossipManager {
     pub async fn handle_message(&self, message: &GossipsubMessage) -> Result<GossipAnnouncement> {
         let topic = message.topic.as_str();
 
-        // Check for duplicate
+        // Check for duplicate using LRU-style deduplication
         {
             let mut state = self.state.write().await;
             let message_id = compute_message_id(message);
             if state.seen_messages.contains(&message_id) {
                 return Err(NetError::Gossip("duplicate message".to_string()));
             }
+            // SECURITY: Insert with FIFO eviction instead of clearing the entire set.
+            // This prevents a replay window where all previously seen messages
+            // could be replayed after a bulk clear.
             state.seen_messages.insert(message_id);
-
-            // Prune old message IDs to prevent unbounded growth
-            // Keep last 10000 messages
-            if state.seen_messages.len() > 10000 {
-                state.seen_messages.clear();
-            }
         }
 
         // Parse based on topic
@@ -1375,5 +1498,258 @@ mod tests {
         assert_eq!(banned.len(), 1);
         assert!(!banned.contains(&peer1));
         assert!(banned.contains(&peer2));
+    }
+
+    // ========================================================================
+    // SeenMessages Tests (VERITAS-2026-0014 - Replay Window Fix)
+    // ========================================================================
+
+    #[test]
+    fn test_seen_messages_basic_insert_and_contains() {
+        let mut seen = SeenMessages::new(100);
+
+        let id1 = MessageId::from(vec![1u8; 32]);
+        let id2 = MessageId::from(vec![2u8; 32]);
+
+        assert!(!seen.contains(&id1));
+        seen.insert(id1.clone());
+        assert!(seen.contains(&id1));
+        assert!(!seen.contains(&id2));
+        assert_eq!(seen.len(), 1);
+    }
+
+    #[test]
+    fn test_seen_messages_duplicate_insert_ignored() {
+        let mut seen = SeenMessages::new(100);
+
+        let id1 = MessageId::from(vec![1u8; 32]);
+        seen.insert(id1.clone());
+        seen.insert(id1.clone());
+
+        assert_eq!(seen.len(), 1);
+    }
+
+    #[test]
+    fn test_seen_messages_fifo_eviction() {
+        let mut seen = SeenMessages::new(3);
+
+        let id1 = MessageId::from(vec![1u8; 32]);
+        let id2 = MessageId::from(vec![2u8; 32]);
+        let id3 = MessageId::from(vec![3u8; 32]);
+        let id4 = MessageId::from(vec![4u8; 32]);
+
+        seen.insert(id1.clone());
+        seen.insert(id2.clone());
+        seen.insert(id3.clone());
+        assert_eq!(seen.len(), 3);
+
+        // Insert a 4th -- oldest (id1) should be evicted
+        seen.insert(id4.clone());
+        assert_eq!(seen.len(), 3);
+
+        // id1 should no longer be present (evicted)
+        assert!(!seen.contains(&id1));
+        // id2, id3, id4 should still be present
+        assert!(seen.contains(&id2));
+        assert!(seen.contains(&id3));
+        assert!(seen.contains(&id4));
+    }
+
+    #[test]
+    fn test_seen_messages_no_complete_clear() {
+        // This is the key security test: after eviction, previously seen
+        // messages (except the evicted one) should NOT be replayable.
+        let mut seen = SeenMessages::new(5);
+
+        // Fill with 5 messages
+        let ids: Vec<MessageId> = (0..5)
+            .map(|i| MessageId::from(vec![i as u8; 32]))
+            .collect();
+        for id in &ids {
+            seen.insert(id.clone());
+        }
+        assert_eq!(seen.len(), 5);
+
+        // Insert one more -- only the oldest (ids[0]) should be evicted
+        let new_id = MessageId::from(vec![99u8; 32]);
+        seen.insert(new_id.clone());
+        assert_eq!(seen.len(), 5);
+
+        // ids[0] was evicted
+        assert!(!seen.contains(&ids[0]));
+
+        // ids[1..4] should still be tracked (NOT cleared)
+        for id in &ids[1..] {
+            assert!(seen.contains(id), "Previously seen message should still be tracked after FIFO eviction");
+        }
+
+        // New ID should be tracked
+        assert!(seen.contains(&new_id));
+    }
+
+    #[test]
+    fn test_seen_messages_sequential_eviction() {
+        let mut seen = SeenMessages::new(3);
+
+        // Insert messages 1-5 sequentially
+        for i in 1u8..=5 {
+            seen.insert(MessageId::from(vec![i; 32]));
+        }
+
+        // Only last 3 should remain (3, 4, 5)
+        assert_eq!(seen.len(), 3);
+        assert!(!seen.contains(&MessageId::from(vec![1u8; 32])));
+        assert!(!seen.contains(&MessageId::from(vec![2u8; 32])));
+        assert!(seen.contains(&MessageId::from(vec![3u8; 32])));
+        assert!(seen.contains(&MessageId::from(vec![4u8; 32])));
+        assert!(seen.contains(&MessageId::from(vec![5u8; 32])));
+    }
+
+    // ========================================================================
+    // Pre-deserialization size check tests (VERITAS-2026-0003)
+    // ========================================================================
+
+    #[test]
+    fn test_message_announcement_from_bytes_rejects_oversized() {
+        let oversized = vec![0u8; MAX_MESSAGE_ANNOUNCEMENT_SIZE + 1];
+        let result = MessageAnnouncement::from_bytes(&oversized);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("too large"),
+            "Expected 'too large' in error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_message_announcement_from_bytes_accepts_at_limit() {
+        // Data at exactly the limit should pass the size check.
+        // Bincode may or may not succeed deserializing depending on
+        // the data, but the size check must NOT reject it.
+        let at_limit = vec![0u8; MAX_MESSAGE_ANNOUNCEMENT_SIZE];
+        let result = MessageAnnouncement::from_bytes(&at_limit);
+        if let Err(ref e) = result {
+            let err_msg = format!("{}", e);
+            assert!(
+                !err_msg.contains("too large"),
+                "Should not be a size error at the limit, got: {}",
+                err_msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_message_announcement_roundtrip_within_limit() {
+        let mailbox_key = MailboxKey::from_bytes([1u8; 32]);
+        let message_hash = Hash256::hash(b"test message");
+        let announcement =
+            MessageAnnouncement::new(mailbox_key, message_hash, 1704067200, 256).unwrap();
+
+        let bytes = announcement.to_bytes().unwrap();
+        assert!(
+            bytes.len() <= MAX_MESSAGE_ANNOUNCEMENT_SIZE,
+            "Serialized MessageAnnouncement ({} bytes) exceeds limit ({})",
+            bytes.len(),
+            MAX_MESSAGE_ANNOUNCEMENT_SIZE
+        );
+
+        let restored = MessageAnnouncement::from_bytes(&bytes).unwrap();
+        assert_eq!(announcement, restored);
+    }
+
+    #[test]
+    fn test_block_announcement_from_bytes_rejects_oversized() {
+        let oversized = vec![0u8; MAX_BLOCK_ANNOUNCEMENT_SIZE + 1];
+        let result = BlockAnnouncement::from_bytes(&oversized);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("too large"),
+            "Expected 'too large' in error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_block_announcement_from_bytes_accepts_at_limit() {
+        // Data at exactly the limit should pass the size check.
+        // Bincode may or may not succeed deserializing depending on
+        // the data, but the size check must NOT reject it.
+        let at_limit = vec![0u8; MAX_BLOCK_ANNOUNCEMENT_SIZE];
+        let result = BlockAnnouncement::from_bytes(&at_limit);
+        if let Err(ref e) = result {
+            let err_msg = format!("{}", e);
+            assert!(
+                !err_msg.contains("too large"),
+                "Should not be a size error at the limit, got: {}",
+                err_msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_block_announcement_roundtrip_within_limit() {
+        let block_hash = Hash256::hash(b"block data");
+        let announcement = BlockAnnouncement::new(block_hash, 42, 1704067200);
+
+        let bytes = announcement.to_bytes().unwrap();
+        assert!(
+            bytes.len() <= MAX_BLOCK_ANNOUNCEMENT_SIZE,
+            "Serialized BlockAnnouncement ({} bytes) exceeds limit ({})",
+            bytes.len(),
+            MAX_BLOCK_ANNOUNCEMENT_SIZE
+        );
+
+        let restored = BlockAnnouncement::from_bytes(&bytes).unwrap();
+        assert_eq!(announcement, restored);
+    }
+
+    #[test]
+    fn test_receipt_announcement_from_bytes_rejects_oversized() {
+        let oversized = vec![0u8; MAX_RECEIPT_ANNOUNCEMENT_SIZE + 1];
+        let result = ReceiptAnnouncement::from_bytes(&oversized);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("too large"),
+            "Expected 'too large' in error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_receipt_announcement_from_bytes_accepts_at_limit() {
+        // Data at exactly the limit should pass the size check.
+        // Bincode may or may not succeed deserializing depending on
+        // the data, but the size check must NOT reject it.
+        let at_limit = vec![0u8; MAX_RECEIPT_ANNOUNCEMENT_SIZE];
+        let result = ReceiptAnnouncement::from_bytes(&at_limit);
+        if let Err(ref e) = result {
+            let err_msg = format!("{}", e);
+            assert!(
+                !err_msg.contains("too large"),
+                "Should not be a size error at the limit, got: {}",
+                err_msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_receipt_announcement_roundtrip_within_limit() {
+        let message_hash = Hash256::hash(b"message");
+        let receipt_hash = Hash256::hash(b"receipt");
+        let announcement = ReceiptAnnouncement::new(message_hash, receipt_hash, 1704067200);
+
+        let bytes = announcement.to_bytes().unwrap();
+        assert!(
+            bytes.len() <= MAX_RECEIPT_ANNOUNCEMENT_SIZE,
+            "Serialized ReceiptAnnouncement ({} bytes) exceeds limit ({})",
+            bytes.len(),
+            MAX_RECEIPT_ANNOUNCEMENT_SIZE
+        );
+
+        let restored = ReceiptAnnouncement::from_bytes(&bytes).unwrap();
+        assert_eq!(announcement, restored);
     }
 }

@@ -112,4 +112,13 @@ impl SafetyNumber {
     fn __eq__(&self, other: &Self) -> bool {
         self.inner == other.inner
     }
+
+    /// PY-FIX-2: Implement __hash__ so SafetyNumber can be used in sets and as dict keys.
+    /// Required because defining __eq__ without __hash__ makes the type unhashable in Python.
+    fn __hash__(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.inner.as_bytes().hash(&mut hasher);
+        hasher.finish()
+    }
 }

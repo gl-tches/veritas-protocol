@@ -37,6 +37,9 @@ pub const VERITAS_GOSSIPSUB_PREFIX: &str = "veritas";
 /// Default channel buffer size for events.
 const EVENT_CHANNEL_SIZE: usize = 256;
 
+/// NET-FIX-10: Maximum number of addresses to store per peer.
+const MAX_ADDRESSES_PER_PEER: usize = 16;
+
 /// Configuration for creating a VERITAS node.
 #[derive(Debug, Clone)]
 pub struct NodeConfig {
@@ -313,6 +316,10 @@ pub struct VeritasNode {
     ///
     /// Ensures routing table diversity by limiting peers per /24 subnet.
     subnet_limiter: SubnetLimiter,
+
+    /// NET-FIX-8: Address book for tracking peer addresses from identify events.
+    /// NET-FIX-10: Each peer is limited to MAX_ADDRESSES_PER_PEER addresses.
+    peer_addresses: HashMap<PeerId, Vec<Multiaddr>>,
 }
 
 impl VeritasNode {
@@ -344,6 +351,7 @@ impl VeritasNode {
             subscribed_topics: HashMap::new(),
             config: config.clone(),
             subnet_limiter,
+            peer_addresses: HashMap::new(),
         };
 
         // Start listening on configured addresses
@@ -769,6 +777,8 @@ impl VeritasNode {
 
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                 info!("Disconnected from peer: {}", peer_id);
+                // NET-FIX-8: Clean up address book entry on disconnect
+                self.peer_addresses.remove(&peer_id);
                 self.emit_event(NodeEvent::PeerDisconnected { peer_id })
                     .await;
             }
@@ -1057,6 +1067,18 @@ impl VeritasNode {
                     peer_id, info.protocol_version, info.agent_version
                 );
 
+                // NET-FIX-8: Store peer addresses in the address book
+                // NET-FIX-10: Limit addresses per peer to MAX_ADDRESSES_PER_PEER
+                let addrs = self.peer_addresses.entry(peer_id).or_default();
+                for addr in &info.listen_addrs {
+                    if addrs.len() >= MAX_ADDRESSES_PER_PEER {
+                        break;
+                    }
+                    if !addrs.contains(addr) {
+                        addrs.push(addr.clone());
+                    }
+                }
+
                 // Add listen addresses to Kademlia with subnet diversity checks.
                 // We try each address until one is accepted (to ensure the peer is tracked).
                 if self.config.enable_kademlia {
@@ -1125,13 +1147,13 @@ impl VeritasNode {
 
     /// Get known addresses for a peer.
     ///
-    /// Note: In libp2p 0.53, direct address lookup requires maintaining
-    /// an address book. This implementation is a placeholder that returns
-    /// an empty vector. In production, consider storing addresses received
-    /// from identify events.
-    pub fn addresses_of_peer(&self, _peer_id: &PeerId) -> Vec<Multiaddr> {
-        // TODO: Implement address book to track peer addresses from identify events
-        Vec::new()
+    /// NET-FIX-8: Returns addresses collected from identify events.
+    /// NET-FIX-10: Limited to MAX_ADDRESSES_PER_PEER per peer.
+    pub fn addresses_of_peer(&self, peer_id: &PeerId) -> Vec<Multiaddr> {
+        self.peer_addresses
+            .get(peer_id)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Check if Kademlia is enabled.

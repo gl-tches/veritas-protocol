@@ -104,7 +104,8 @@ impl MlDsaPrivateKey {
 /// ML-DSA key pair.
 pub struct MlDsaKeyPair {
     /// The private key (for signing).
-    pub private: MlDsaPrivateKey,
+    /// SECURITY: pub(crate) to prevent external access to private key (CRYPTO-FIX-6).
+    pub(crate) private: MlDsaPrivateKey,
     /// The public key (for verification).
     pub public: MlDsaPublicKey,
 }

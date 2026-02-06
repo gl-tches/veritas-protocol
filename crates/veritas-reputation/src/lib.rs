@@ -77,7 +77,10 @@ pub use collusion::{
 pub use decay::{apply_decay, DecayConfig, DecayState};
 pub use effects::{get_effects, get_tier, ReputationTier, TierEffects};
 pub use error::{ReputationError, Result};
-pub use manager::{ReputationManager, ReputationStats, MAX_TRACKED_NONCES};
+pub use manager::{
+    ReputationManager, ReputationStats, DEFAULT_NONCE_EXPIRY_SECS, MAX_TRACKED_NONCES,
+    NONCE_BUCKET_DURATION_SECS,
+};
 pub use proof::{
     generate_nonce, InteractionProof, InteractionType, PubkeyRegistry, Signature,
     MAX_CLOCK_SKEW_SECS, MAX_PROOF_AGE_SECS, MAX_SIGNATURE_SIZE, NONCE_SIZE,
