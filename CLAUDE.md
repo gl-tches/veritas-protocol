@@ -12,7 +12,7 @@ VERITAS (Verified Encrypted Real-time Integrity Transmission And Signing) is a p
 **Security Level**: HARDENED + POST-QUANTUM
 **Edition**: Rust 2024
 **MSRV**: 1.85
-**Version**: 0.3.0-beta
+**Version**: 0.3.1-beta
 
 ## ✅ Completed Work Streams
 
@@ -35,11 +35,23 @@ All 90 actionable vulnerabilities from SECURITY_AUDIT_REPORT.md have been addres
 - 13 clippy warnings fixed for Rust 2024 stricter lints
 - cbindgen 0.26 → 0.29, PyO3 0.20 → 0.23 for compatibility
 
+### 3. Milestone 1: Critical Code Fixes (COMPLETED — v0.3.1-beta)
+
+**Status**: All ~60 bugs fixed across 12 crates (44 files changed)
+**Tracking**: See VERITAS_TODO_V2.md sections 1.1–1.20, TASKS.md for summary
+
+All 20 fix categories (1.1–1.20) from the comprehensive code review have been implemented:
+- **1 CRITICAL**: Collusion detection cluster index mapping (REP-FIX-1)
+- **16 HIGH**: Identity keypair loss, FFI UB, WASM salt, ephemeral key validation, mailbox salt, receipt forgery, sync validation, nonce replay, signature verification skip, self-interaction bypass, gossip replay window, DHT unbounded deserialization, plaintext zeroization, node binary non-functional
+- **~23 MEDIUM**: Zeroize/ZeroizeOnDrop on PQ keys, constant-time checks, chain state fixes, reputation fixes, rate limiter ordering, bounded collections, WASM mutex/lock fixes, Python/FFI fixes
+- **~20 LOW**: Clone on secret types, error variants, timestamp validation, dead code removal, overflow fixes, shutdown handling, formatting fixes
+- **All 1,549 tests pass** (0 failures), build succeeds cleanly
+
 ## 📋 Remaining Work
 
 | Item | Priority | Status |
 |------|----------|--------|
-| M1: Critical code fixes (~60 bugs) | P0 | See VERITAS_TODO_v2.md |
+| M1: Critical code fixes (~60 bugs) | P0 | Completed (v0.3.1-beta) |
 | M2: ML-DSA signing + wire format v2 | P0 | Design complete |
 | M2: Message-as-transaction chain model | P0 | Design complete |
 | M2: Epoch-based pruning (30-day) | P0 | Design complete |

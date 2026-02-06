@@ -314,6 +314,11 @@ impl IdentityLimiter {
         new_identity: IdentityHash,
         current_time: u64,
     ) -> crate::Result<KeyLifecycle> {
+        // IDENT-FIX-5: Check that the new identity doesn't already exist
+        if self.identities.iter().any(|(id, _)| id == &new_identity) {
+            return Err(crate::IdentityError::AlreadyExists);
+        }
+
         // Find and rotate the old identity
         let old_idx = self
             .identities

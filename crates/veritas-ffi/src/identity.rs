@@ -72,14 +72,8 @@ unsafe fn identity_hash_impl(
         None => return ErrorCode::NullPointer,
     };
 
-    // Create runtime
-    let runtime = match tokio::runtime::Runtime::new() {
-        Ok(rt) => rt,
-        Err(_) => return ErrorCode::Unknown,
-    };
-
-    // Get identity hash
-    let hash = match runtime.block_on(client_handle.client.identity_hash()) {
+    // Get identity hash using the stored runtime
+    let hash = match client_handle.runtime.block_on(client_handle.client.identity_hash()) {
         Ok(h) => h,
         Err(e) => return FfiError::from(e).into(),
     };
@@ -184,14 +178,8 @@ unsafe fn create_identity_impl(
         }
     };
 
-    // Create runtime
-    let runtime = match tokio::runtime::Runtime::new() {
-        Ok(rt) => rt,
-        Err(_) => return ErrorCode::Unknown,
-    };
-
-    // Create identity
-    let hash = match runtime.block_on(client_handle.client.create_identity(label_str)) {
+    // Create identity using the stored runtime
+    let hash = match client_handle.runtime.block_on(client_handle.client.create_identity(label_str)) {
         Ok(h) => h,
         Err(e) => return FfiError::from(e).into(),
     };
@@ -284,14 +272,8 @@ unsafe fn identity_slots_impl(
         None => return ErrorCode::NullPointer,
     };
 
-    // Create runtime
-    let runtime = match tokio::runtime::Runtime::new() {
-        Ok(rt) => rt,
-        Err(_) => return ErrorCode::Unknown,
-    };
-
-    // Get slot info
-    let info = match runtime.block_on(client_handle.client.identity_slots()) {
+    // Get slot info using the stored runtime
+    let info = match client_handle.runtime.block_on(client_handle.client.identity_slots()) {
         Ok(i) => i,
         Err(e) => return FfiError::from(e).into(),
     };

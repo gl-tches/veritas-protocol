@@ -210,16 +210,31 @@ impl KeyLifecycle {
     }
 
     /// Update the last active timestamp.
+    ///
+    /// IDENT-FIX-7: Only updates if the timestamp is valid and not in the past
+    /// relative to the current last_active time.
     pub fn touch(&mut self, current_time: u64) {
-        self.last_active = current_time;
+        // IDENT-FIX-7: Validate timestamp before updating
+        if Self::is_valid_timestamp(current_time) && current_time >= self.last_active {
+            self.last_active = current_time;
+        }
     }
 
     /// Calculate the current state based on time.
     ///
     /// This updates the state field if the key has moved to Expiring or Expired.
+    ///
+    /// IDENT-FIX-6: Validates timestamps before updating state. Invalid timestamps
+    /// cause the key to be marked as Expired for safety.
     pub fn update_state(&mut self, current_time: u64) {
         // Don't change state if already terminated
         if self.state.is_terminated() {
+            return;
+        }
+
+        // IDENT-FIX-6: Validate timestamps before computing state
+        if !Self::is_valid_timestamp(current_time) || !Self::is_valid_timestamp(self.created_at) {
+            self.state = KeyState::Expired;
             return;
         }
 

@@ -32,6 +32,7 @@
 //! let keypair = manager.primary_keypair()?;
 //! ```
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use chrono::Utc;
@@ -39,7 +40,7 @@ use serde::{Deserialize, Serialize};
 
 use veritas_identity::{
     HardwareAttestation, IdentityHash, IdentityKeyPair, IdentityLimiter, IdentityPublicKeys,
-    IdentitySlotInfo, KeyLifecycle, KeyState, OriginFingerprint,
+    IdentitySlotInfo, KeyLifecycle, KeyState, OriginFingerprint, MAX_IDENTITIES_PER_ORIGIN,
 };
 use veritas_store::{Keyring, KeyringEntry};
 
@@ -116,6 +117,9 @@ pub struct IdentityManager {
     config: ClientConfig,
     /// The primary identity keypair (if set).
     primary_identity: Option<IdentityKeyPair>,
+    /// All stored keypairs, indexed by identity hash.
+    /// This ensures non-primary keypairs are not lost.
+    keypairs: HashMap<IdentityHash, IdentityKeyPair>,
     /// List of all identity info (metadata only).
     identities: Vec<IdentityInfo>,
 }
@@ -133,6 +137,7 @@ impl IdentityManager {
         Self {
             config,
             primary_identity: None,
+            keypairs: HashMap::new(),
             identities: Vec::new(),
         }
     }
@@ -162,6 +167,15 @@ impl IdentityManager {
     ///
     /// The hash of the newly created identity.
     pub fn create_identity(&mut self, label: Option<&str>) -> Result<IdentityHash> {
+        // Enforce the 3-identity slot limit
+        if self.identities.len() >= MAX_IDENTITIES_PER_ORIGIN as usize {
+            return Err(CoreError::Identity(
+                veritas_identity::IdentityError::MaxIdentitiesReached {
+                    max: MAX_IDENTITIES_PER_ORIGIN,
+                },
+            ));
+        }
+
         let keypair = IdentityKeyPair::generate();
         let hash = keypair.identity_hash().clone();
 
@@ -181,6 +195,9 @@ impl IdentityManager {
         };
 
         self.identities.push(info);
+
+        // Store the keypair so it is not lost
+        self.keypairs.insert(hash.clone(), keypair.clone());
 
         if is_primary {
             self.primary_identity = Some(keypair);
@@ -205,13 +222,20 @@ impl IdentityManager {
             return Err(CoreError::IdentityNotFound(hash.to_hex()));
         }
 
+        // Look up the keypair from the stored keypairs
+        let keypair = self
+            .keypairs
+            .get(hash)
+            .ok_or_else(|| CoreError::IdentityNotFound(hash.to_hex()))?
+            .clone();
+
         // Update is_primary flags
         for info in &mut self.identities {
             info.is_primary = &info.hash == hash;
         }
 
-        // Note: In a full implementation, we would load the keypair from storage here
-        // For now, this is a stub that only updates the flags
+        // Update the cached primary identity keypair
+        self.primary_identity = Some(keypair);
 
         Ok(())
     }
@@ -240,6 +264,9 @@ impl IdentityManager {
             // IdentityKeyPair implements ZeroizeOnDrop
             drop(primary);
         }
+        // Zeroize all stored keypairs (ZeroizeOnDrop handles cleanup)
+        let keypairs = std::mem::take(&mut self.keypairs);
+        drop(keypairs);
     }
 
     // ========================================================================
@@ -305,6 +332,7 @@ impl std::fmt::Debug for IdentityManager {
                 &self.primary_identity.as_ref().map(|k| k.identity_hash()),
             )
             .field("identity_count", &self.identities.len())
+            .field("stored_keypairs", &self.keypairs.len())
             .finish()
     }
 }
@@ -804,5 +832,110 @@ mod tests {
 
         assert!(info.is_usable());
         assert!(!info.is_expiring());
+    }
+
+    #[test]
+    fn test_create_three_identities_and_switch_primary() {
+        let mut manager = IdentityManager::new(test_config());
+
+        // Create 3 identities (the maximum allowed)
+        let hash1 = manager.create_identity(Some("First")).unwrap();
+        let hash2 = manager.create_identity(Some("Second")).unwrap();
+        let hash3 = manager.create_identity(Some("Third")).unwrap();
+
+        assert_eq!(manager.list_identities().len(), 3);
+
+        // First identity should be primary
+        assert_eq!(manager.primary_identity_hash(), Some(&hash1));
+
+        // All keypairs should be accessible
+        assert!(manager.keypairs.contains_key(&hash1));
+        assert!(manager.keypairs.contains_key(&hash2));
+        assert!(manager.keypairs.contains_key(&hash3));
+
+        // Switch primary to second identity
+        manager.set_primary_identity(&hash2).unwrap();
+        assert_eq!(manager.primary_identity_hash(), Some(&hash2));
+
+        // Verify the primary keypair was updated
+        let primary_kp = manager.primary_keypair().unwrap();
+        assert_eq!(primary_kp.identity_hash(), &hash2);
+
+        // Switch primary to third identity
+        manager.set_primary_identity(&hash3).unwrap();
+        assert_eq!(manager.primary_identity_hash(), Some(&hash3));
+        let primary_kp = manager.primary_keypair().unwrap();
+        assert_eq!(primary_kp.identity_hash(), &hash3);
+
+        // Switch back to first identity
+        manager.set_primary_identity(&hash1).unwrap();
+        assert_eq!(manager.primary_identity_hash(), Some(&hash1));
+        let primary_kp = manager.primary_keypair().unwrap();
+        assert_eq!(primary_kp.identity_hash(), &hash1);
+    }
+
+    #[test]
+    fn test_fourth_identity_creation_fails() {
+        let mut manager = IdentityManager::new(test_config());
+
+        // Create 3 identities successfully
+        manager.create_identity(Some("First")).unwrap();
+        manager.create_identity(Some("Second")).unwrap();
+        manager.create_identity(Some("Third")).unwrap();
+
+        // Fourth identity should fail
+        let result = manager.create_identity(Some("Fourth"));
+        assert!(result.is_err());
+
+        // Verify the error is MaxIdentitiesReached
+        match result.unwrap_err() {
+            CoreError::Identity(veritas_identity::IdentityError::MaxIdentitiesReached {
+                max,
+            }) => {
+                assert_eq!(max, 3);
+            }
+            other => panic!("Expected MaxIdentitiesReached, got: {:?}", other),
+        }
+
+        // Should still have exactly 3 identities
+        assert_eq!(manager.list_identities().len(), 3);
+    }
+
+    #[test]
+    fn test_all_keypairs_accessible_after_creation() {
+        let mut manager = IdentityManager::new(test_config());
+
+        let hash1 = manager.create_identity(Some("First")).unwrap();
+        let hash2 = manager.create_identity(Some("Second")).unwrap();
+
+        // Both keypairs should be in the keypairs map
+        let kp1 = manager.keypairs.get(&hash1).unwrap();
+        let kp2 = manager.keypairs.get(&hash2).unwrap();
+
+        // Verify they have the correct identity hashes
+        assert_eq!(kp1.identity_hash(), &hash1);
+        assert_eq!(kp2.identity_hash(), &hash2);
+
+        // Verify they are different keypairs
+        assert_ne!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_set_primary_updates_primary_keypair() {
+        let mut manager = IdentityManager::new(test_config());
+
+        let hash1 = manager.create_identity(Some("First")).unwrap();
+        let hash2 = manager.create_identity(Some("Second")).unwrap();
+
+        // Initially first is primary
+        let primary_kp = manager.primary_keypair().unwrap();
+        assert_eq!(primary_kp.identity_hash(), &hash1);
+
+        // Switch to second
+        manager.set_primary_identity(&hash2).unwrap();
+
+        // Primary keypair should now return the second identity's keypair
+        let primary_kp = manager.primary_keypair().unwrap();
+        assert_eq!(primary_kp.identity_hash(), &hash2);
     }
 }

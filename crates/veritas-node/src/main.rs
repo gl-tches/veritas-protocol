@@ -7,10 +7,12 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
-use tracing::{info, warn, Level};
+use std::time::Duration;
+use tracing::{debug, error, info, warn, Level};
 use tracing_subscriber::{fmt, EnvFilter};
 
 use veritas_core::{ClientConfig, ClientConfigBuilder, VeritasClient};
+use veritas_net::{NodeConfig, NodeEvent, VeritasNode};
 
 /// VERITAS Protocol Node
 ///
@@ -20,7 +22,10 @@ use veritas_core::{ClientConfig, ClientConfigBuilder, VeritasClient};
 #[command(version, about, long_about = None)]
 struct Args {
     /// Path to data directory
-    #[arg(short, long, env = "VERITAS_DATA_DIR", default_value = "/var/lib/veritas")]
+    ///
+    /// NODE-FIX-5: Changed default from /var/lib/veritas (requires root) to a
+    /// user-writable directory. Uses ~/.local/share/veritas on Linux/macOS.
+    #[arg(short, long, env = "VERITAS_DATA_DIR", default_value = "~/.local/share/veritas")]
     data_dir: PathBuf,
 
     /// Listen address for P2P connections
@@ -195,15 +200,29 @@ async fn main() -> Result<()> {
         "Starting VERITAS node"
     );
 
+    // NODE-FIX-5: Expand ~ in data directory path
+    let data_dir = if args.data_dir.starts_with("~") {
+        if let Some(home) = std::env::var_os("HOME") {
+            PathBuf::from(home).join(args.data_dir.strip_prefix("~").unwrap_or(&args.data_dir))
+        } else {
+            args.data_dir.clone()
+        }
+    } else {
+        args.data_dir.clone()
+    };
+
     // Ensure data directory exists
-    if !args.data_dir.exists() {
-        std::fs::create_dir_all(&args.data_dir)
+    if !data_dir.exists() {
+        std::fs::create_dir_all(&data_dir)
             .context("Failed to create data directory")?;
-        info!(path = %args.data_dir.display(), "Created data directory");
+        info!(path = %data_dir.display(), "Created data directory");
     }
 
-    // Build configuration
-    let config = build_config(&args)?;
+    // Build configuration (use expanded data_dir)
+    let mut args_expanded = args;
+    args_expanded.data_dir = data_dir;
+    let config = build_config(&args_expanded)?;
+    let args = args_expanded;
 
     // Start health check server
     let health_port = args.health_port;
@@ -215,10 +234,56 @@ async fn main() -> Result<()> {
 
     // Initialize the client
     info!("Initializing VERITAS client...");
-    let _client = VeritasClient::new(config).await
+    let client = VeritasClient::new(config).await
         .context("Failed to initialize VERITAS client")?;
 
     info!("VERITAS node initialized successfully");
+
+    // Build the P2P node configuration
+    let listen_addr: veritas_net::Multiaddr = args
+        .listen_addr
+        .parse()
+        .context("Failed to parse listen address as multiaddr")?;
+
+    let mut node_config = NodeConfig::new()
+        .with_listen_addresses(vec![listen_addr]);
+
+    // Parse and add bootstrap peers
+    if let Some(ref bootstrap_str) = args.bootstrap_nodes {
+        for addr_str in bootstrap_str.split(',').map(|s| s.trim()) {
+            if addr_str.is_empty() {
+                continue;
+            }
+            let addr: veritas_net::Multiaddr = addr_str
+                .parse()
+                .with_context(|| format!("Failed to parse bootstrap address: {}", addr_str))?;
+
+            if let Some(peer_id) = veritas_net::peer_id_from_multiaddr(&addr) {
+                node_config = node_config.with_bootstrap_peer(peer_id, addr);
+            } else {
+                warn!(
+                    address = %addr_str,
+                    "Bootstrap address does not contain a peer ID (/p2p/...), skipping"
+                );
+            }
+        }
+    }
+
+    // Create the P2P node
+    info!("Starting P2P networking layer...");
+    let mut node = VeritasNode::new(node_config)
+        .await
+        .context("Failed to create P2P node")?;
+
+    info!(
+        peer_id = %node.local_peer_id(),
+        "P2P node created"
+    );
+
+    // Take the event receiver before starting the run loop
+    let mut event_rx = node
+        .take_event_receiver()
+        .expect("Event receiver should be available");
 
     // Print node info
     info!(
@@ -235,9 +300,58 @@ async fn main() -> Result<()> {
         info!("Relay mode enabled - will relay messages for other peers");
     }
 
-    // Wait for shutdown signal
+    // Spawn a task to process node events (peer connections, gossip messages, etc.)
+    tokio::spawn(async move {
+        let mut maintenance_interval = tokio::time::interval(Duration::from_secs(30));
+        maintenance_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tokio::select! {
+                event = event_rx.recv() => {
+                    match event {
+                        Some(NodeEvent::PeerConnected { peer_id }) => {
+                            info!(peer = %peer_id, "Peer connected");
+                        }
+                        Some(NodeEvent::PeerDisconnected { peer_id }) => {
+                            info!(peer = %peer_id, "Peer disconnected");
+                        }
+                        Some(NodeEvent::ListeningOn { address }) => {
+                            info!(address = %address, "Now listening on address");
+                        }
+                        Some(NodeEvent::GossipMessage { topic, source, .. }) => {
+                            debug!(
+                                topic = %topic,
+                                source = ?source,
+                                "Received gossip message"
+                            );
+                        }
+                        Some(NodeEvent::Error { message }) => {
+                            warn!(error = %message, "Node event error");
+                        }
+                        Some(_) => {
+                            debug!("Received node event");
+                        }
+                        None => {
+                            warn!("Event channel closed");
+                            break;
+                        }
+                    }
+                }
+                _ = maintenance_interval.tick() => {
+                    debug!("Periodic maintenance tick");
+                }
+            }
+        }
+    });
+
+    // Run the P2P event loop on the main task.
+    // node.run() drives the libp2p swarm and processes network events.
+    // It runs until interrupted by Ctrl+C.
     info!("Press Ctrl+C to stop the node");
     tokio::select! {
+        _ = node.run() => {
+            error!("P2P event loop exited unexpectedly");
+        }
         _ = tokio::signal::ctrl_c() => {
             info!("Received shutdown signal");
         }
@@ -246,7 +360,7 @@ async fn main() -> Result<()> {
     info!("Shutting down VERITAS node...");
 
     // Graceful shutdown
-    // client.shutdown().await?;
+    client.shutdown().await.context("Failed to shut down client")?;
 
     info!("VERITAS node stopped");
     Ok(())

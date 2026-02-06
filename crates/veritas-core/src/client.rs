@@ -509,6 +509,17 @@ impl VeritasClient {
     /// - `CoreError::NotInitialized` if in Created state
     /// - `CoreError::Locked` if in Locked state
     /// - `CoreError::ShuttingDown` if shutting down
+    ///
+    /// # CORE-FIX-1: TOCTOU Race Condition Note
+    ///
+    /// There is a time-of-check-to-time-of-use (TOCTOU) race between
+    /// checking the state and acquiring the services lock. Between `drop(state)`
+    /// and `self.services.read().await`, another task could lock the client,
+    /// causing `services` to be `None`. The `services.is_none()` check below
+    /// mitigates this by returning `NotInitialized` if services were destroyed
+    /// in the gap. This is a known design trade-off to avoid holding two locks
+    /// simultaneously, which could cause deadlocks. The worst case is a
+    /// spurious `NotInitialized` error, which callers should handle by retrying.
     async fn require_unlocked(
         &self,
     ) -> Result<tokio::sync::RwLockReadGuard<'_, Option<ClientServices>>> {
@@ -532,6 +543,8 @@ impl VeritasClient {
     }
 
     /// Require the client to be unlocked and return a mutable guard.
+    ///
+    /// CORE-FIX-1: See TOCTOU note on `require_unlocked()` above.
     async fn require_unlocked_mut(
         &self,
     ) -> Result<tokio::sync::RwLockWriteGuard<'_, Option<ClientServices>>> {

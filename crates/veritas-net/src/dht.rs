@@ -60,6 +60,19 @@ pub const DEFAULT_MAX_RECORD_SIZE: usize = 4096;
 /// Default query timeout in seconds.
 pub const DEFAULT_QUERY_TIMEOUT_SECS: u64 = 30;
 
+/// Maximum size of a serialized DHT record in bytes.
+///
+/// SECURITY: Pre-deserialization size validation prevents crafted input from
+/// causing excessive memory allocation during bincode deserialization.
+pub const MAX_DHT_RECORD_SIZE: usize = 8192;
+
+/// Maximum size of a serialized DHT record set in bytes.
+///
+/// SECURITY: Pre-deserialization size validation prevents crafted input from
+/// causing excessive memory allocation during bincode deserialization.
+/// A record set can contain multiple records, so the limit is higher.
+pub const MAX_DHT_RECORD_SET_SIZE: usize = 65536;
+
 /// Configuration for DHT storage operations.
 #[derive(Debug, Clone)]
 pub struct DhtConfig {
@@ -227,7 +240,20 @@ impl DhtRecord {
     }
 
     /// Deserialize a record from bytes.
+    ///
+    /// # Security
+    ///
+    /// Validates input size BEFORE deserialization to prevent crafted input
+    /// from causing excessive memory allocation.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        // SECURITY: Check size BEFORE deserialization to prevent memory exhaustion
+        if bytes.len() > MAX_DHT_RECORD_SIZE {
+            return Err(NetError::Dht(format!(
+                "Record too large: {} bytes (max: {})",
+                bytes.len(),
+                MAX_DHT_RECORD_SIZE
+            )));
+        }
         bincode::deserialize(bytes)
             .map_err(|e| NetError::Dht(format!("Deserialization failed: {}", e)))
     }
@@ -318,7 +344,20 @@ impl DhtRecordSet {
     }
 
     /// Deserialize a record set from bytes.
+    ///
+    /// # Security
+    ///
+    /// Validates input size BEFORE deserialization to prevent crafted input
+    /// from causing excessive memory allocation.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        // SECURITY: Check size BEFORE deserialization to prevent memory exhaustion
+        if bytes.len() > MAX_DHT_RECORD_SET_SIZE {
+            return Err(NetError::Dht(format!(
+                "Record set too large: {} bytes (max: {})",
+                bytes.len(),
+                MAX_DHT_RECORD_SET_SIZE
+            )));
+        }
         bincode::deserialize(bytes)
             .map_err(|e| NetError::Dht(format!("Deserialization failed: {}", e)))
     }
@@ -899,3 +938,143 @@ pub type DhtKey = [u8; 32];
 
 /// Type alias for message ID bytes.
 pub type MessageId = [u8; 32];
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dht_record_from_bytes_size_check() {
+        // Create data that exceeds MAX_DHT_RECORD_SIZE
+        let oversized = vec![0u8; MAX_DHT_RECORD_SIZE + 1];
+        let result = DhtRecord::from_bytes(&oversized);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("Record too large"),
+            "Expected 'Record too large' error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_dht_record_from_bytes_at_limit_passes_size_check() {
+        // Create data exactly at MAX_DHT_RECORD_SIZE with invalid content.
+        // The first 8 bytes encode a huge Vec length that cannot be fulfilled,
+        // ensuring deserialization fails while the size check passes.
+        let mut at_limit = vec![0u8; MAX_DHT_RECORD_SIZE];
+        // Set message_id (32 bytes), then encode a massive envelope_data length
+        // that exceeds remaining bytes, forcing bincode to fail.
+        at_limit[32] = 0xFF;
+        at_limit[33] = 0xFF;
+        at_limit[34] = 0xFF;
+        at_limit[35] = 0xFF;
+        at_limit[36] = 0xFF;
+        at_limit[37] = 0xFF;
+        at_limit[38] = 0xFF;
+        at_limit[39] = 0x7F; // large length that can't be satisfied
+        let result = DhtRecord::from_bytes(&at_limit);
+        // Should fail at deserialization, NOT at size check
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("Deserialization failed"),
+            "Expected deserialization error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_dht_record_from_bytes_valid_roundtrip() {
+        // Create a valid DhtRecord, serialize, then deserialize
+        let record = DhtRecord {
+            message_id: [1u8; 32],
+            envelope_data: vec![2u8; 100],
+            stored_at: 1700000000,
+            expires_at: 1700604800,
+        };
+        let bytes = record.to_bytes().unwrap();
+        assert!(bytes.len() <= MAX_DHT_RECORD_SIZE);
+
+        let restored = DhtRecord::from_bytes(&bytes).unwrap();
+        assert_eq!(restored.message_id, record.message_id);
+        assert_eq!(restored.envelope_data, record.envelope_data);
+    }
+
+    #[test]
+    fn test_dht_record_set_from_bytes_size_check() {
+        // Create data that exceeds MAX_DHT_RECORD_SET_SIZE
+        let oversized = vec![0u8; MAX_DHT_RECORD_SET_SIZE + 1];
+        let result = DhtRecordSet::from_bytes(&oversized);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("Record set too large"),
+            "Expected 'Record set too large' error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_dht_record_set_from_bytes_at_limit_passes_size_check() {
+        // Create data exactly at MAX_DHT_RECORD_SET_SIZE with invalid content.
+        // Encode a huge Vec length for the records field, forcing bincode to fail
+        // while the size check passes.
+        let mut at_limit = vec![0u8; MAX_DHT_RECORD_SET_SIZE];
+        // First 8 bytes = Vec length for records; set to a huge value
+        at_limit[0] = 0xFF;
+        at_limit[1] = 0xFF;
+        at_limit[2] = 0xFF;
+        at_limit[3] = 0xFF;
+        at_limit[4] = 0xFF;
+        at_limit[5] = 0xFF;
+        at_limit[6] = 0xFF;
+        at_limit[7] = 0x7F; // large length that can't be satisfied
+        let result = DhtRecordSet::from_bytes(&at_limit);
+        // Should fail at deserialization, NOT at size check
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("Deserialization failed"),
+            "Expected deserialization error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_dht_record_set_from_bytes_valid_roundtrip() {
+        // Create a valid DhtRecordSet, serialize, then deserialize
+        let mut record_set = DhtRecordSet::new();
+        record_set.add(DhtRecord {
+            message_id: [1u8; 32],
+            envelope_data: vec![2u8; 50],
+            stored_at: 1700000000,
+            expires_at: 1700604800,
+        });
+        record_set.add(DhtRecord {
+            message_id: [3u8; 32],
+            envelope_data: vec![4u8; 50],
+            stored_at: 1700000100,
+            expires_at: 1700604900,
+        });
+
+        let bytes = record_set.to_bytes().unwrap();
+        assert!(bytes.len() <= MAX_DHT_RECORD_SET_SIZE);
+
+        let restored = DhtRecordSet::from_bytes(&bytes).unwrap();
+        assert_eq!(restored.len(), 2);
+    }
+
+    #[test]
+    fn test_dht_record_from_bytes_empty_input() {
+        // Empty input should fail deserialization, not size check
+        let result = DhtRecord::from_bytes(&[]);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("Deserialization failed"));
+    }
+}

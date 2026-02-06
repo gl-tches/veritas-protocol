@@ -76,6 +76,8 @@ pub enum ErrorCode {
     NetworkError = -6,
     /// Storage error.
     StorageError = -7,
+    /// FFI-FIX-4: Buffer too small for output data.
+    BufferTooSmall = -8,
     /// Unknown error.
     Unknown = -99,
 }
@@ -387,7 +389,7 @@ mod tests {
             // Try to get hash with too small buffer
             let mut small_buf = [0u8; 10];
             let result = veritas_identity_hash(handle, small_buf.as_mut_ptr(), small_buf.len());
-            assert_eq!(result, ErrorCode::InvalidArgument); // BufferTooSmall maps to InvalidArgument
+            assert_eq!(result, ErrorCode::BufferTooSmall); // FFI-FIX-4: BufferTooSmall has its own error code
 
             veritas_client_free(handle);
         }

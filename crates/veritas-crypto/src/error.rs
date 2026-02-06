@@ -48,6 +48,10 @@ pub enum CryptoError {
         actual: usize,
     },
 
+    /// Invalid hex string format (CRYPTO-FIX-5).
+    #[error("Invalid hex string: {0}")]
+    InvalidHexFormat(String),
+
     /// Key encapsulation failed.
     #[error("Key encapsulation failed: {0}")]
     Encapsulation(String),

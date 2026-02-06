@@ -9,7 +9,7 @@ use veritas_identity::{IdentityHash, IdentityKeyPair, IdentityPublicKeys};
 
 use crate::error::{ProtocolError, Result};
 use crate::groups::keys::{EncryptedGroupKey, GroupKey, GroupKeyManager};
-use crate::groups::metadata::{GroupMetadata, GroupRole};
+use crate::groups::metadata::GroupMetadata;
 use crate::limits::GROUP_KEY_ROTATION_SECS;
 
 /// Reason for key rotation.
@@ -170,16 +170,13 @@ impl KeyRotationManager {
             ));
         }
 
-        // Get member info before removal for the trigger
-        let member = group
+        // Verify member exists before removal
+        let _member = group
             .get_member(member_to_remove)
             .ok_or(ProtocolError::MemberNotInGroup)?;
 
-        // Check if trying to remove an admin when not authorized
-        if member.role == GroupRole::Admin && admin.identity_hash() != member_to_remove {
-            // Only the admin themselves or another admin can remove an admin
-            // But we already verified the caller is an admin above
-        }
+        // PROTO-FIX-7: Removed empty check for admin removal - already
+        // handled by group.remove_member() authorization logic.
 
         // Remove the member
         group.remove_member(member_to_remove, admin.identity_hash())?;
@@ -193,7 +190,7 @@ impl KeyRotationManager {
         )?;
 
         // Update group metadata with new key info
-        group.increment_key_generation(result.new_key.hash());
+        group.increment_key_generation(result.new_key.hash())?;
 
         Ok(result)
     }
@@ -209,7 +206,7 @@ impl KeyRotationManager {
         let result = Self::rotate(group, admin, member_keys, RotationTrigger::Scheduled)?;
 
         // Update group metadata with new key info
-        group.increment_key_generation(result.new_key.hash());
+        group.increment_key_generation(result.new_key.hash())?;
 
         Ok(result)
     }
@@ -225,7 +222,7 @@ impl KeyRotationManager {
         let result = Self::rotate(group, admin, member_keys, RotationTrigger::Manual)?;
 
         // Update group metadata with new key info
-        group.increment_key_generation(result.new_key.hash());
+        group.increment_key_generation(result.new_key.hash())?;
 
         Ok(result)
     }
@@ -242,7 +239,7 @@ impl KeyRotationManager {
         let result = Self::rotate(group, admin, member_keys, RotationTrigger::Compromise)?;
 
         // Update group metadata with new key info
-        group.increment_key_generation(result.new_key.hash());
+        group.increment_key_generation(result.new_key.hash())?;
 
         Ok(result)
     }
@@ -251,6 +248,7 @@ impl KeyRotationManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::groups::metadata::GroupRole;
 
     fn create_test_identity(seed: &[u8]) -> IdentityHash {
         IdentityHash::from_public_key(seed)

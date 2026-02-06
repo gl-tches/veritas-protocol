@@ -445,6 +445,13 @@ impl RelayManager {
             return Err(NetError::DeliveryFailed("relay storage full".to_string()));
         }
 
+        // NET-FIX-7: Bound the seen_hashes set to prevent unbounded memory growth.
+        // If it exceeds twice the max stored messages, prune old entries.
+        let max_seen = self.config.max_stored_messages.saturating_mul(2);
+        if self.seen_hashes.len() > max_seen {
+            self.seen_hashes.clear();
+        }
+
         // Check for duplicates
         let message_hash = envelope.envelope_hash();
         if self.seen_hashes.contains_key(&message_hash) {

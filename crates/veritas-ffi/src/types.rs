@@ -24,32 +24,44 @@ pub struct VeritasHandle {
 
 /// Internal representation of the client handle.
 ///
-/// This wraps the Arc<VeritasClient> in a Box so we can pass it across
-/// the FFI boundary safely.
+/// This wraps the Arc<VeritasClient> and a shared tokio Runtime in a Box
+/// so we can pass it across the FFI boundary safely. The runtime is created
+/// once at client creation time and reused for all subsequent FFI calls,
+/// avoiding the overhead of spawning a new thread pool per call.
 pub(crate) struct ClientHandle {
     pub(crate) client: Arc<VeritasClient>,
+    pub(crate) runtime: tokio::runtime::Runtime,
 }
 
 impl ClientHandle {
-    /// Create a new handle from a client.
+    /// Create a new handle from a client and its associated tokio runtime.
+    ///
+    /// The runtime is stored alongside the client so that all FFI calls
+    /// can reuse the same thread pool instead of creating a new one each time.
     #[allow(clippy::new_ret_no_self)]
-    pub(crate) fn new(client: VeritasClient) -> *mut VeritasHandle {
+    pub(crate) fn new(client: VeritasClient, runtime: tokio::runtime::Runtime) -> *mut VeritasHandle {
         let handle = Box::new(ClientHandle {
             client: Arc::new(client),
+            runtime,
         });
         Box::into_raw(handle) as *mut VeritasHandle
     }
 
-    /// Convert a raw pointer back to a reference.
+    /// Convert a raw pointer back to a shared reference.
+    ///
+    /// Returns `&ClientHandle` (not `&mut`) to allow safe concurrent access
+    /// from multiple FFI calls. The `VeritasClient` inside uses interior
+    /// mutability (Arc<RwLock<...>>) and `Runtime::block_on` takes `&self`,
+    /// so a shared reference is sufficient for all operations.
     ///
     /// # Safety
     ///
     /// The pointer must be a valid handle created by `new()` and not yet freed.
-    pub(crate) unsafe fn from_ptr<'a>(ptr: *mut VeritasHandle) -> Option<&'a mut ClientHandle> { unsafe {
+    pub(crate) unsafe fn from_ptr<'a>(ptr: *mut VeritasHandle) -> Option<&'a ClientHandle> { unsafe {
         if ptr.is_null() {
             None
         } else {
-            Some(&mut *(ptr as *mut ClientHandle))
+            Some(&*(ptr as *mut ClientHandle))
         }
     }}
 

@@ -14,13 +14,11 @@ name = "veritas-node"
 path = "src/main.rs"
 
 [dependencies]
+# NODE-FIX-3: Removed unused direct dependencies (veritas-crypto, veritas-identity,
+# veritas-protocol, veritas-store, veritas-reputation). These are transitive
+# dependencies through veritas-core and are not directly used by the node binary.
 veritas-core.workspace = true
-veritas-crypto.workspace = true
-veritas-identity.workspace = true
-veritas-protocol.workspace = true
 veritas-net.workspace = true
-veritas-store.workspace = true
-veritas-reputation.workspace = true
 
 # Async
 tokio = { workspace = true, features = ["full", "signal"] }

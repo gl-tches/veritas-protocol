@@ -22,7 +22,7 @@ veritas-chain = { path = "../veritas-chain", default-features = false }
 # WASM
 wasm-bindgen.workspace = true
 js-sys.workspace = true
-web-sys.workspace = true
+web-sys = { workspace = true, features = ["Location", "Navigator"] }
 getrandom = { workspace = true, features = ["js"] }
 serde-wasm-bindgen = "0.6"
 

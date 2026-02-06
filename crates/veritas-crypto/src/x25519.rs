@@ -149,11 +149,9 @@ impl std::fmt::Debug for X25519StaticPrivateKey {
     }
 }
 
-impl Clone for X25519StaticPrivateKey {
-    fn clone(&self) -> Self {
-        Self { bytes: self.bytes }
-    }
-}
+// SECURITY: Clone intentionally NOT implemented for X25519StaticPrivateKey.
+// Private keys should not be cloneable to prevent accidental duplication
+// of secret material in memory (CRYPTO-FIX-3).
 
 /// X25519 ephemeral key pair for single-use key exchange.
 ///

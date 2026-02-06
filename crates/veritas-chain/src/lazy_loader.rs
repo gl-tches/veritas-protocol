@@ -117,8 +117,9 @@ impl LazyBlockLoader {
     /// * `storage` - Storage backend for block persistence
     /// * `max_hot_blocks` - Maximum blocks to keep in hot cache
     pub fn new(storage: Box<dyn StorageBackend>, max_hot_blocks: usize) -> Self {
-        // Estimate memory per block (2KB) * max blocks, minimum 64MB
-        let memory_budget = (max_hot_blocks * 2048).max(64 * 1024 * 1024);
+        // CHAIN-FIX-7: Use saturating_mul to prevent overflow on 32-bit platforms.
+        // Estimate memory per block (2KB) * max blocks, minimum 64MB.
+        let memory_budget = max_hot_blocks.saturating_mul(2048).max(64 * 1024 * 1024);
 
         Self {
             hot_cache: MemoryBudget::new(memory_budget),

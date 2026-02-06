@@ -276,7 +276,8 @@ impl GroupMessageData {
     /// Useful for message identification and deduplication.
     pub fn hash(&self) -> Hash256 {
         let group_id_bytes = self.group_id.as_bytes();
-        let generation_bytes = self.key_generation.to_le_bytes();
+        // PROTO-FIX-10: Use big-endian for consistency with protocol wire format.
+        let generation_bytes = self.key_generation.to_be_bytes();
         let ciphertext_bytes = self.encrypted_content.to_bytes();
 
         Hash256::hash_many(&[

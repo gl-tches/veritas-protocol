@@ -61,6 +61,13 @@ const VERIFICATION_KEY: &[u8] = b"password_verification";
 /// Current schema version.
 const SCHEMA_VERSION: u32 = 1;
 
+/// Maximum size of a serialized `ExportedIdentity` in bytes.
+///
+/// SECURITY: Pre-deserialization size validation prevents crafted input from
+/// causing excessive memory allocation during bincode deserialization (VERITAS-2026-0003).
+/// Exported identities include an encrypted keypair, so the limit is generous.
+pub const MAX_EXPORTED_IDENTITY_SIZE: usize = 16384;
+
 /// Domain separation for password key derivation.
 const PASSWORD_KEY_CONTEXT: &str = "VERITAS keyring password key v1";
 
@@ -162,7 +169,20 @@ impl ExportedIdentity {
     }
 
     /// Deserialize from bytes.
+    ///
+    /// # Security
+    ///
+    /// Validates input size BEFORE deserialization to prevent crafted input
+    /// from causing excessive memory allocation (VERITAS-2026-0003).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        // SECURITY: Pre-deserialization size check (VERITAS-2026-0003)
+        if bytes.len() > MAX_EXPORTED_IDENTITY_SIZE {
+            return Err(StoreError::Serialization(format!(
+                "ExportedIdentity data too large: {} bytes (max: {})",
+                bytes.len(),
+                MAX_EXPORTED_IDENTITY_SIZE
+            )));
+        }
         bincode::deserialize(bytes).map_err(|e| StoreError::Serialization(e.to_string()))
     }
 }
@@ -190,6 +210,11 @@ impl PasswordKey {
     }
 
     /// Get as SymmetricKey for encryption operations.
+    ///
+    /// STORE-FIX-1: This creates a new SymmetricKey each call (copies the bytes).
+    /// This is intentional: SymmetricKey is a lightweight wrapper, and caching it
+    /// would require managing an additional zeroizable field. The performance
+    /// impact is negligible compared to the Argon2 derivation.
     fn as_symmetric_key(&self) -> SymmetricKey {
         SymmetricKey::from_bytes(&self.bytes).expect("PasswordKey is always 32 bytes")
     }
@@ -836,6 +861,10 @@ impl Keyring {
     // --- Private Helpers ---
 
     /// Update metadata with a closure.
+    ///
+    /// STORE-FIX-4: Flushes metadata to disk on every update. This prioritizes
+    /// durability over throughput. For batch operations (e.g., importing many
+    /// identities), consider a batch API that flushes once at the end.
     fn update_metadata<F>(&self, f: F) -> Result<()>
     where
         F: FnOnce(&mut KeyringMetadata),
@@ -1345,5 +1374,64 @@ mod tests {
 
         assert!(debug.contains("ExportedIdentity"));
         assert!(debug.contains("version"));
+    }
+
+    // ========================================================================
+    // Pre-deserialization size check tests (VERITAS-2026-0003)
+    // ========================================================================
+
+    #[test]
+    fn test_exported_identity_from_bytes_rejects_oversized() {
+        let oversized = vec![0u8; MAX_EXPORTED_IDENTITY_SIZE + 1];
+        let result = ExportedIdentity::from_bytes(&oversized);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("too large"),
+            "Expected 'too large' in error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_exported_identity_from_bytes_accepts_at_limit() {
+        // Data at exactly the limit should pass the size check.
+        // Bincode may or may not succeed deserializing depending on
+        // the data, but the size check must NOT reject it.
+        let at_limit = vec![0u8; MAX_EXPORTED_IDENTITY_SIZE];
+        let result = ExportedIdentity::from_bytes(&at_limit);
+        // If it fails, it should NOT be because of the size check
+        if let Err(ref e) = result {
+            let err_msg = format!("{}", e);
+            assert!(
+                !err_msg.contains("too large"),
+                "Should not be a size error at the limit, got: {}",
+                err_msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_exported_identity_roundtrip_within_limit() {
+        let (_dir, db) = create_test_db();
+        let keyring = Keyring::open(&db, b"password").unwrap();
+
+        let keypair = IdentityKeyPair::generate();
+        let hash = keypair.identity_hash().to_bytes();
+        keyring.add_identity(&keypair, None).unwrap();
+
+        let exported = keyring.export_identity(&hash, b"export-pass").unwrap();
+        let bytes = exported.to_bytes().unwrap();
+
+        assert!(
+            bytes.len() <= MAX_EXPORTED_IDENTITY_SIZE,
+            "Serialized ExportedIdentity ({} bytes) exceeds MAX_EXPORTED_IDENTITY_SIZE ({})",
+            bytes.len(),
+            MAX_EXPORTED_IDENTITY_SIZE
+        );
+
+        let restored = ExportedIdentity::from_bytes(&bytes).unwrap();
+        assert_eq!(restored.identity_hash, hash);
+        assert_eq!(restored.version, exported.version);
     }
 }

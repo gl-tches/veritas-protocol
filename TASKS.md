@@ -477,6 +477,52 @@
 
 -----
 
+## Milestone 1: Critical Code Fixes (Completed — v0.3.1-beta)
+
+**Branch**: `fix/milestone-1-code-fixes`
+**Status**: COMPLETED
+**Date**: 2026-02-06
+**Tracking**: See VERITAS_TODO_V2.md sections 1.1–1.20
+
+### Summary
+
+All ~60 bugs from the comprehensive code review have been fixed:
+- **1 CRITICAL**: Collusion detection cluster index mapping (REP-FIX-1)
+- **16 HIGH**: Identity keypair loss, FFI UB, WASM salt, ephemeral key validation, mailbox salt, receipt forgery, sync validation, nonce replay, signature skip, self-interaction bypass, gossip replay, DHT unbounded, plaintext zeroization, node binary
+- **~23 MEDIUM**: Zeroize/ZeroizeOnDrop on PQ keys, constant-time checks, chain state fixes, reputation fixes, rate limiter ordering, bounded collections, WASM mutex/lock fixes, Python/FFI fixes
+- **~20 LOW**: Clone on secret types, error variants, timestamp validation, dead code, overflow fixes, shutdown handling, formatting fixes
+
+### Scope
+
+- **44 files changed** across 12 crates
+- **All 20 fix categories** (1.1–1.20) implemented
+- **All 1,549 tests pass** (0 failures)
+- **Build succeeds cleanly**
+
+### Key Fixes by Category
+
+| Task | Category | Description |
+|------|----------|-------------|
+| 1.1 | CRITICAL | Collusion detection cluster index mapping fixed |
+| 1.2 | HIGH | Non-primary keypairs now stored in identity manager |
+| 1.3+1.4 | HIGH | FFI uses single runtime + shared reference (no UB) |
+| 1.5 | HIGH | WASM uses random Argon2 salt + persisted installation ID |
+| 1.6+1.7 | HIGH | Ephemeral key validated before ECDH, mailbox salt consistent |
+| 1.8 | HIGH | Receipt signatures use keyed HMAC-BLAKE3 + ConstantTimeEq |
+| 1.9+1.10 | HIGH | Sync validates parent hash linkage + bounded vectors |
+| 1.11 | HIGH | Time-bucketed nonce tracking replaces random pruning |
+| 1.12 | HIGH | Signature verification returns error when registry unavailable |
+| 1.13 | HIGH | Self-interaction check at recording time (not just construction) |
+| 1.14 | HIGH | LRU-style seen-messages replaces clear-all approach |
+| 1.15 | HIGH | Pre-deserialization size checks on DHT records |
+| 1.16 | HIGH | Decrypted plaintext wrapped in Zeroizing<Vec<u8>> |
+| 1.17 | HIGH | Node binary wired up with event loop |
+| 1.18 | MEDIUM | Pre-deserialization size checks on all 9 from_bytes locations |
+| 1.19 | MEDIUM | 23 medium-severity fixes across crypto, chain, net, store, FFI, WASM, Python |
+| 1.20 | LOW | 33 low-severity fixes across all crates |
+
+-----
+
 ## Completed Tasks
 
 ### Security Remediation (Completed)
@@ -511,7 +557,8 @@
 |150-159|Phase 5: FFI & Bindings    |
 |160-169|Phase 6: Workspace & Docs  |
 |170-179|Post-Migration Refactoring |
-|200+   |Future Features            |
+|200-299|Future Features            |
+|300-399|M1: Critical Code Fixes    |
 
 -----
 

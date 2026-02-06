@@ -331,11 +331,15 @@ impl CollusionDetector {
 
         let components = self.find_connected_components();
 
-        for (idx, component) in components.iter().enumerate() {
+        for component in components.iter() {
             if let Some(cluster) = self.analyze_component(component) {
+                // Use the actual index within suspicious_clusters, not the component index.
+                // Previously, using the component enumeration index caused lookups to return
+                // None when non-suspicious components offset the indices.
+                let cluster_idx = self.suspicious_clusters.len();
                 // Map identities to cluster index
                 for member in &cluster.members {
-                    self.identity_clusters.insert(member.identity, idx);
+                    self.identity_clusters.insert(member.identity, cluster_idx);
                 }
                 self.suspicious_clusters.push(cluster);
             }
@@ -542,5 +546,124 @@ mod tests {
 
         // Clean identity has no penalty
         assert!((detector.get_suspicion_penalty(&clean) - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_collusion_cluster_index_mapping_with_non_suspicious_components() {
+        let mut detector = CollusionDetector::new();
+
+        // Create a non-suspicious component first (3 nodes, sparse interactions)
+        // These nodes interact lightly and with many external connections
+        let non_suspicious: Vec<_> = (50..=52).map(make_identity).collect();
+        for i in 0..3 {
+            for j in 0..3 {
+                if i != j {
+                    detector.record_interaction(non_suspicious[i], non_suspicious[j]);
+                }
+            }
+        }
+        // Add many external connections to make this component non-suspicious
+        for ext in 60..70 {
+            let ext_id = make_identity(ext);
+            for ns in &non_suspicious {
+                for _ in 0..5 {
+                    detector.record_interaction(*ns, ext_id);
+                    detector.record_interaction(ext_id, *ns);
+                }
+            }
+        }
+
+        // Create a suspicious cluster of 5+ nodes with dense mutual interactions
+        let suspicious: Vec<_> = (1..=6).map(make_identity).collect();
+        for i in 0..6 {
+            for j in 0..6 {
+                if i != j {
+                    for _ in 0..20 {
+                        detector.record_interaction(suspicious[i], suspicious[j]);
+                    }
+                }
+            }
+        }
+
+        detector.analyze_clusters();
+
+        // The suspicious cluster should be detected
+        assert!(
+            !detector.suspicious_clusters.is_empty(),
+            "Should detect at least one suspicious cluster"
+        );
+
+        // All suspicious nodes should be mapped correctly via is_in_suspicious_cluster
+        for id in &suspicious {
+            assert!(
+                detector.is_in_suspicious_cluster(id),
+                "Suspicious node should be in a suspicious cluster"
+            );
+        }
+
+        // get_cluster_for should return the correct cluster for suspicious nodes
+        for id in &suspicious {
+            let cluster = detector.get_cluster_for(id);
+            assert!(
+                cluster.is_some(),
+                "get_cluster_for should return a cluster for suspicious nodes"
+            );
+            let cluster = cluster.unwrap();
+            assert!(
+                cluster.contains(id),
+                "Returned cluster should contain the queried identity"
+            );
+        }
+
+        // get_suspicion_penalty should return a penalty < 1.0 for suspicious nodes
+        for id in &suspicious {
+            let penalty = detector.get_suspicion_penalty(id);
+            assert!(
+                penalty < 1.0,
+                "Suspicious nodes should have a penalty multiplier < 1.0, got {}",
+                penalty
+            );
+        }
+    }
+
+    #[test]
+    fn test_five_node_dense_collusion_detected() {
+        let mut detector = CollusionDetector::new();
+
+        // Create exactly 5 nodes with dense mutual interactions (collusion pattern)
+        let ids: Vec<_> = (1..=5).map(make_identity).collect();
+        for i in 0..5 {
+            for j in 0..5 {
+                if i != j {
+                    // Many symmetric interactions
+                    for _ in 0..15 {
+                        detector.record_interaction(ids[i], ids[j]);
+                    }
+                }
+            }
+        }
+
+        detector.analyze_clusters();
+
+        // Should detect as suspicious
+        assert!(
+            !detector.suspicious_clusters.is_empty(),
+            "5 nodes with dense mutual interactions should be flagged as suspicious"
+        );
+
+        // All nodes should be in a suspicious cluster
+        for id in &ids {
+            assert!(
+                detector.is_in_suspicious_cluster(id),
+                "Each node in the collusion ring should be flagged"
+            );
+        }
+
+        // The cluster should have high internal density
+        let cluster = detector.get_cluster_for(&ids[0]).unwrap();
+        assert!(
+            cluster.internal_density > CLUSTER_SUSPICION_THRESHOLD,
+            "Collusion cluster should have density above threshold"
+        );
     }
 }

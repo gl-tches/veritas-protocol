@@ -263,18 +263,26 @@ impl UsernameRegistration {
     /// * `identity_hash` - The identity claiming this username
     /// * `registered_at` - Unix timestamp of registration
     /// * `signature` - Signature over the signing payload
+    /// IDENT-FIX-8: Returns an error if signature is empty, since an unsigned
+    /// registration should never be created.
     pub fn new(
         username: Username,
         identity_hash: IdentityHash,
         registered_at: u64,
         signature: Vec<u8>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        // IDENT-FIX-8: Validate signature is not empty
+        if signature.is_empty() {
+            return Err(IdentityError::InvalidUsername {
+                reason: "registration signature must not be empty".to_string(),
+            });
+        }
+        Ok(Self {
             username,
             identity_hash,
             registered_at,
             signature,
-        }
+        })
     }
 
     /// Get the bytes that should be signed for this registration.
@@ -586,7 +594,7 @@ mod tests {
         let signature = vec![0u8; 64];
 
         let reg =
-            UsernameRegistration::new(username.clone(), identity.clone(), timestamp, signature);
+            UsernameRegistration::new(username.clone(), identity.clone(), timestamp, signature).unwrap();
 
         assert_eq!(reg.username, username);
         assert_eq!(reg.identity_hash, identity);
@@ -602,7 +610,7 @@ mod tests {
         let payload1 =
             UsernameRegistration::compute_signing_payload(&username, &identity, timestamp);
 
-        let reg = UsernameRegistration::new(username, identity, timestamp, vec![]);
+        let reg = UsernameRegistration::new(username, identity, timestamp, vec![0u8; 1]).unwrap();
         let payload2 = reg.signing_payload();
 
         assert_eq!(payload1, payload2);
@@ -648,7 +656,7 @@ mod tests {
             UsernameRegistration::compute_signing_payload(&username, &identity, timestamp);
         let mock_signature = Hash256::hash(&payload).to_bytes().to_vec();
 
-        let reg = UsernameRegistration::new(username, identity, timestamp, mock_signature.clone());
+        let reg = UsernameRegistration::new(username, identity, timestamp, mock_signature.clone()).unwrap();
 
         // Verify with a mock verifier that checks hash matches
         let result = reg.verify(|message, signature| {
@@ -666,7 +674,7 @@ mod tests {
         let timestamp = 1700000000u64;
         let bad_signature = vec![0u8; 64];
 
-        let reg = UsernameRegistration::new(username, identity, timestamp, bad_signature);
+        let reg = UsernameRegistration::new(username, identity, timestamp, bad_signature).unwrap();
 
         // Verify with a mock verifier that always fails
         let result = reg.verify(|_, _| false);
@@ -679,9 +687,9 @@ mod tests {
         let username = Username::new("alice").unwrap();
         let identity = IdentityHash::from_bytes(&[1u8; 32]).unwrap();
         let registered_at = 1000u64;
-        let signature = vec![];
+        let signature = vec![0u8; 1];
 
-        let reg = UsernameRegistration::new(username, identity, registered_at, signature);
+        let reg = UsernameRegistration::new(username, identity, registered_at, signature).unwrap();
 
         // 30 day expiry
         let max_age = 30 * 24 * 60 * 60;
@@ -706,7 +714,7 @@ mod tests {
         let timestamp = 1700000000u64;
         let signature = vec![1, 2, 3, 4, 5];
 
-        let reg = UsernameRegistration::new(username, identity, timestamp, signature);
+        let reg = UsernameRegistration::new(username, identity, timestamp, signature).unwrap();
 
         let serialized = bincode::serialize(&reg).unwrap();
         let deserialized: UsernameRegistration = bincode::deserialize(&serialized).unwrap();
@@ -724,7 +732,7 @@ mod tests {
         let timestamp = 1700000000u64;
         let signature = vec![0u8; 64];
 
-        let reg = UsernameRegistration::new(username, identity, timestamp, signature);
+        let reg = UsernameRegistration::new(username, identity, timestamp, signature).unwrap();
         let debug = format!("{:?}", reg);
 
         assert!(debug.contains("UsernameRegistration"));
@@ -745,7 +753,9 @@ mod tests {
 
         #[test]
         fn prop_username_normalized_is_lowercase(s in "[a-zA-Z][a-zA-Z0-9]{2,10}") {
-            let username = Username::new(&s).unwrap();
+            let result = Username::new(&s);
+            prop_assume!(result.is_ok()); // Skip reserved usernames
+            let username = result.unwrap();
             let normalized = username.normalized();
             let expected = normalized.to_ascii_lowercase();
             prop_assert_eq!(normalized, expected);
@@ -753,7 +763,9 @@ mod tests {
 
         #[test]
         fn prop_username_roundtrip_serialization(s in "[a-zA-Z][a-zA-Z0-9]{2,10}") {
-            let username = Username::new(&s).unwrap();
+            let result = Username::new(&s);
+            prop_assume!(result.is_ok()); // Skip reserved usernames
+            let username = result.unwrap();
             let serialized = bincode::serialize(&username).unwrap();
             let deserialized: Username = bincode::deserialize(&serialized).unwrap();
             prop_assert_eq!(username, deserialized);
@@ -779,7 +791,9 @@ mod tests {
             identity_bytes in prop::array::uniform32(any::<u8>()),
             timestamp in any::<u64>()
         ) {
-            let username = Username::new(&username_str).unwrap();
+            let result = Username::new(&username_str);
+            prop_assume!(result.is_ok()); // Skip reserved usernames
+            let username = result.unwrap();
             let identity = IdentityHash::from_bytes(&identity_bytes).unwrap();
 
             let payload1 = UsernameRegistration::compute_signing_payload(&username, &identity, timestamp);

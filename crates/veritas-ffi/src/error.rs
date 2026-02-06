@@ -40,7 +40,8 @@ impl From<FfiError> for crate::ErrorCode {
             FfiError::NullPointer => crate::ErrorCode::NullPointer,
             FfiError::InvalidArgument(_) => crate::ErrorCode::InvalidArgument,
             FfiError::InvalidUtf8 => crate::ErrorCode::InvalidArgument,
-            FfiError::BufferTooSmall { .. } => crate::ErrorCode::InvalidArgument,
+            // FFI-FIX-4: Use distinct error code for BufferTooSmall
+            FfiError::BufferTooSmall { .. } => crate::ErrorCode::BufferTooSmall,
             FfiError::Core(e) => match e {
                 veritas_core::CoreError::Crypto(_) => crate::ErrorCode::CryptoError,
                 veritas_core::CoreError::Identity(_) => crate::ErrorCode::IdentityError,

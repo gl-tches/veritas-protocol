@@ -26,6 +26,19 @@ const KEYPAIR_IDENTITY_HASH_CONTEXT: &[u8] = b"VERITAS-KEYPAIR-IDENTITY-v1";
 /// Domain separation context for key exchange derivation.
 const KEY_EXCHANGE_CONTEXT: &str = "VERITAS key exchange v1";
 
+/// Maximum size of serialized `IdentityPublicKeys` in bytes.
+///
+/// SECURITY: Pre-deserialization size validation prevents crafted input from
+/// causing excessive memory allocation during bincode deserialization (VERITAS-2026-0003).
+/// Public keys are small, so 4096 bytes is generous.
+pub const MAX_IDENTITY_PUBLIC_KEYS_SIZE: usize = 4096;
+
+/// Maximum size of serialized `EncryptedIdentityKeyPair` in bytes.
+///
+/// SECURITY: Pre-deserialization size validation prevents crafted input from
+/// causing excessive memory allocation during bincode deserialization (VERITAS-2026-0003).
+pub const MAX_ENCRYPTED_IDENTITY_KEYPAIR_SIZE: usize = 8192;
+
 /// Derive an identity hash from multiple public keys.
 ///
 /// This function creates a unique identity hash by combining:
@@ -77,8 +90,22 @@ impl IdentityPublicKeys {
     ///
     /// # Errors
     ///
-    /// Returns an error if deserialization fails.
+    /// Returns an error if the input exceeds [`MAX_IDENTITY_PUBLIC_KEYS_SIZE`]
+    /// or if deserialization fails.
+    ///
+    /// # Security
+    ///
+    /// Validates input size BEFORE deserialization to prevent crafted input
+    /// from causing excessive memory allocation (VERITAS-2026-0003).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        // SECURITY: Pre-deserialization size check (VERITAS-2026-0003)
+        if bytes.len() > MAX_IDENTITY_PUBLIC_KEYS_SIZE {
+            return Err(IdentityError::Validation(format!(
+                "IdentityPublicKeys data too large: {} bytes (max: {})",
+                bytes.len(),
+                MAX_IDENTITY_PUBLIC_KEYS_SIZE
+            )));
+        }
         bincode::deserialize(bytes)
             .map_err(|_| IdentityError::Crypto(veritas_crypto::CryptoError::Decryption))
     }
@@ -336,7 +363,9 @@ impl IdentityKeyPair {
         encrypted: &EncryptedIdentityKeyPair,
         storage_key: &SymmetricKey,
     ) -> Result<Self> {
-        let plaintext = decrypt(storage_key, &encrypted.encrypted_keys)?;
+        // SECURITY: Wrap decrypted key material in Zeroizing to ensure it is
+        // cleared from memory when no longer needed.
+        let plaintext = zeroize::Zeroizing::new(decrypt(storage_key, &encrypted.encrypted_keys)?);
 
         let serializable: SerializableKeyPair = bincode::deserialize(&plaintext)
             .map_err(|_| IdentityError::Crypto(veritas_crypto::CryptoError::Decryption))?;
@@ -378,8 +407,14 @@ impl std::fmt::Debug for IdentityKeyPair {
 
 impl Clone for IdentityKeyPair {
     fn clone(&self) -> Self {
+        // SECURITY: Reconstruct private key from bytes rather than cloning,
+        // since X25519StaticPrivateKey intentionally does not implement Clone
+        // to prevent accidental duplication of secret material (CRYPTO-FIX-3).
+        let exchange_private =
+            X25519StaticPrivateKey::from_bytes(self.exchange_private.as_bytes())
+                .expect("cloning existing valid private key should not fail");
         Self {
-            exchange_private: self.exchange_private.clone(),
+            exchange_private,
             signing_private: None, // ML-DSA keys are not Clone
             identity_hash: self.identity_hash.clone(),
             public_keys: self.public_keys.clone(),
@@ -422,8 +457,22 @@ impl EncryptedIdentityKeyPair {
     ///
     /// # Errors
     ///
-    /// Returns an error if deserialization fails.
+    /// Returns an error if the input exceeds [`MAX_ENCRYPTED_IDENTITY_KEYPAIR_SIZE`]
+    /// or if deserialization fails.
+    ///
+    /// # Security
+    ///
+    /// Validates input size BEFORE deserialization to prevent crafted input
+    /// from causing excessive memory allocation (VERITAS-2026-0003).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        // SECURITY: Pre-deserialization size check (VERITAS-2026-0003)
+        if bytes.len() > MAX_ENCRYPTED_IDENTITY_KEYPAIR_SIZE {
+            return Err(IdentityError::Validation(format!(
+                "EncryptedIdentityKeyPair data too large: {} bytes (max: {})",
+                bytes.len(),
+                MAX_ENCRYPTED_IDENTITY_KEYPAIR_SIZE
+            )));
+        }
         bincode::deserialize(bytes)
             .map_err(|_| IdentityError::Crypto(veritas_crypto::CryptoError::Decryption))
     }
@@ -654,5 +703,107 @@ mod tests {
 
         assert_eq!(public_keys.exchange, restored.exchange);
         assert_eq!(public_keys.identity_hash(), restored.identity_hash());
+    }
+
+    // ========================================================================
+    // Pre-deserialization size check tests (VERITAS-2026-0003)
+    // ========================================================================
+
+    #[test]
+    fn test_identity_public_keys_from_bytes_rejects_oversized() {
+        let oversized = vec![0u8; MAX_IDENTITY_PUBLIC_KEYS_SIZE + 1];
+        let result = IdentityPublicKeys::from_bytes(&oversized);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("too large"),
+            "Expected 'too large' in error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_identity_public_keys_from_bytes_accepts_at_limit() {
+        // Data at exactly the limit should pass the size check.
+        // Bincode may or may not succeed deserializing depending on
+        // the data, but the size check must NOT reject it.
+        let at_limit = vec![0u8; MAX_IDENTITY_PUBLIC_KEYS_SIZE];
+        let result = IdentityPublicKeys::from_bytes(&at_limit);
+        // If it fails, it should NOT be because of the size check
+        if let Err(ref e) = result {
+            let err_msg = format!("{}", e);
+            assert!(
+                !err_msg.contains("too large"),
+                "Should not be a size error at the limit, got: {}",
+                err_msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_identity_public_keys_roundtrip_within_limit() {
+        let identity = IdentityKeyPair::generate();
+        let public_keys = identity.public_keys();
+        let bytes = public_keys.to_bytes();
+
+        assert!(
+            bytes.len() <= MAX_IDENTITY_PUBLIC_KEYS_SIZE,
+            "Serialized IdentityPublicKeys ({} bytes) exceeds MAX_IDENTITY_PUBLIC_KEYS_SIZE ({})",
+            bytes.len(),
+            MAX_IDENTITY_PUBLIC_KEYS_SIZE
+        );
+
+        let restored = IdentityPublicKeys::from_bytes(&bytes).unwrap();
+        assert_eq!(public_keys.exchange, restored.exchange);
+    }
+
+    #[test]
+    fn test_encrypted_identity_keypair_from_bytes_rejects_oversized() {
+        let oversized = vec![0u8; MAX_ENCRYPTED_IDENTITY_KEYPAIR_SIZE + 1];
+        let result = EncryptedIdentityKeyPair::from_bytes(&oversized);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("too large"),
+            "Expected 'too large' in error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_encrypted_identity_keypair_from_bytes_accepts_at_limit() {
+        // Data at exactly the limit should pass the size check.
+        // Bincode may or may not succeed deserializing depending on
+        // the data, but the size check must NOT reject it.
+        let at_limit = vec![0u8; MAX_ENCRYPTED_IDENTITY_KEYPAIR_SIZE];
+        let result = EncryptedIdentityKeyPair::from_bytes(&at_limit);
+        // If it fails, it should NOT be because of the size check
+        if let Err(ref e) = result {
+            let err_msg = format!("{}", e);
+            assert!(
+                !err_msg.contains("too large"),
+                "Should not be a size error at the limit, got: {}",
+                err_msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_encrypted_identity_keypair_roundtrip_within_limit() {
+        let identity = IdentityKeyPair::generate();
+        let storage_key = SymmetricKey::generate();
+        let encrypted = identity.to_encrypted(&storage_key).unwrap();
+
+        let bytes = encrypted.to_bytes();
+        assert!(
+            bytes.len() <= MAX_ENCRYPTED_IDENTITY_KEYPAIR_SIZE,
+            "Serialized EncryptedIdentityKeyPair ({} bytes) exceeds MAX_ENCRYPTED_IDENTITY_KEYPAIR_SIZE ({})",
+            bytes.len(),
+            MAX_ENCRYPTED_IDENTITY_KEYPAIR_SIZE
+        );
+
+        let restored = EncryptedIdentityKeyPair::from_bytes(&bytes).unwrap();
+        let restored_keypair = IdentityKeyPair::from_encrypted(&restored, &storage_key).unwrap();
+        assert_eq!(identity.identity_hash(), restored_keypair.identity_hash());
     }
 }

@@ -3936,12 +3936,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "veritas-core",
- "veritas-crypto",
- "veritas-identity",
  "veritas-net",
- "veritas-protocol",
- "veritas-reputation",
- "veritas-store",
 ]
 
 [[package]]
