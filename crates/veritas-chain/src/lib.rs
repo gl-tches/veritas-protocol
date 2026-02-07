@@ -91,6 +91,7 @@ pub mod block;
 pub mod chain;
 pub mod compression;
 pub mod config;
+pub mod consensus;
 pub mod epoch;
 pub mod error;
 pub mod lazy_loader;
@@ -104,6 +105,8 @@ pub mod storage;
 pub mod sync;
 pub mod transaction;
 pub mod validator;
+pub mod validator_trust;
+pub mod vrf;
 
 #[cfg(feature = "sled-storage")]
 pub mod sled_backend;
@@ -139,4 +142,13 @@ pub use sync::{
 pub use transaction::{EncryptedBody, MessageHeader, MessageTransaction, Transaction};
 pub use validator::{
     ValidatorEpochMetrics, ValidatorSelection, ValidatorSet, ValidatorSla, ValidatorStake,
+};
+pub use consensus::{
+    ConsensusAction, ConsensusEngine, ConsensusMessage, ConsensusPhase, ConsensusVote,
+    BlockProposal, NotarizedBlock, RoundState, bft_quorum,
+};
+pub use vrf::{VrfOutput, VrfValidatorSelection, calculate_weight_fixed};
+pub use validator_trust::{
+    TrustError, TrustManager, ValidatorAlert, ValidatorHeartbeat, ValidatorInfo,
+    ValidatorRegistration as ValidatorRegistrationTx, ValidatorExit as ValidatorExitTx,
 };
