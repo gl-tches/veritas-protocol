@@ -41,6 +41,6 @@
 pub mod message_sig;
 
 pub use message_sig::{
-    sign_message, verify_signature, MessageSignature, SignatureVersion, SigningData,
-    DOMAIN_SEPARATOR, SIGNATURE_SIZE,
+    DOMAIN_SEPARATOR, MessageSignature, SIGNATURE_SIZE, SignatureVersion, SigningData,
+    sign_message, verify_signature,
 };

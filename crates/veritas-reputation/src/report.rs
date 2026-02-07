@@ -305,8 +305,7 @@ mod tests {
 
         // 3rd report triggers penalty
         let reporter = make_identity(3);
-        let report =
-            NegativeReport::new(reporter, target, 500, ReportReason::Spam, None).unwrap();
+        let report = NegativeReport::new(reporter, target, 500, ReportReason::Spam, None).unwrap();
         aggregator.add_report(report).unwrap();
         assert!(aggregator.should_penalize(&target));
     }
@@ -360,9 +359,7 @@ mod tests {
 
         let r2 = make_identity(2);
         aggregator
-            .add_report(
-                NegativeReport::new(r2, target, 500, ReportReason::Malware, None).unwrap(),
-            )
+            .add_report(NegativeReport::new(r2, target, 500, ReportReason::Malware, None).unwrap())
             .unwrap();
 
         let r3 = make_identity(3);
@@ -383,8 +380,7 @@ mod tests {
         let reporter = make_identity(1);
         let target = make_identity(10);
 
-        let report1 =
-            NegativeReport::new(reporter, target, 500, ReportReason::Spam, None).unwrap();
+        let report1 = NegativeReport::new(reporter, target, 500, ReportReason::Spam, None).unwrap();
         aggregator.add_report(report1).unwrap();
 
         let report2 =
@@ -399,8 +395,7 @@ mod tests {
         let target = make_identity(10);
 
         let reporter = make_identity(1);
-        let report =
-            NegativeReport::new(reporter, target, 500, ReportReason::Spam, None).unwrap();
+        let report = NegativeReport::new(reporter, target, 500, ReportReason::Spam, None).unwrap();
         aggregator.add_report(report).unwrap();
 
         assert_eq!(aggregator.get_report_count(&target), 1);

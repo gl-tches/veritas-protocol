@@ -3,8 +3,8 @@
 use veritas_core::SafetyNumber;
 use veritas_identity::IdentityPublicKeys;
 
-use crate::error::FfiError;
 use crate::ErrorCode;
+use crate::error::FfiError;
 
 // ============================================================================
 // Safety Number Computation
@@ -55,22 +55,24 @@ pub unsafe extern "C" fn veritas_safety_number_compute(
     their_len: usize,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode { unsafe {
-    // Check null pointers
-    if our_keys.is_null() || their_keys.is_null() || out_buf.is_null() {
-        return ErrorCode::NullPointer;
-    }
+) -> ErrorCode {
+    unsafe {
+        // Check null pointers
+        if our_keys.is_null() || their_keys.is_null() || out_buf.is_null() {
+            return ErrorCode::NullPointer;
+        }
 
-    // Catch panics
-    let result = std::panic::catch_unwind(|| {
-        safety_number_compute_impl(our_keys, our_len, their_keys, their_len, out_buf, out_len)
-    });
+        // Catch panics
+        let result = std::panic::catch_unwind(|| {
+            safety_number_compute_impl(our_keys, our_len, their_keys, their_len, out_buf, out_len)
+        });
 
-    match result {
-        Ok(code) => code,
-        Err(_) => ErrorCode::Unknown,
+        match result {
+            Ok(code) => code,
+            Err(_) => ErrorCode::Unknown,
+        }
     }
-}}
+}
 
 unsafe fn safety_number_compute_impl(
     our_keys: *const u8,
@@ -79,44 +81,46 @@ unsafe fn safety_number_compute_impl(
     their_len: usize,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode { unsafe {
-    // Check buffer size
-    if out_len < 32 {
-        return FfiError::BufferTooSmall {
-            needed: 32,
-            actual: out_len,
+) -> ErrorCode {
+    unsafe {
+        // Check buffer size
+        if out_len < 32 {
+            return FfiError::BufferTooSmall {
+                needed: 32,
+                actual: out_len,
+            }
+            .into();
         }
-        .into();
+
+        // Get key slices
+        let our_slice = std::slice::from_raw_parts(our_keys, our_len);
+        let their_slice = std::slice::from_raw_parts(their_keys, their_len);
+
+        // Deserialize keys
+        let our_public = match IdentityPublicKeys::from_bytes(our_slice) {
+            Ok(k) => k,
+            Err(_) => {
+                return FfiError::InvalidArgument("Failed to parse our_keys".to_string()).into();
+            }
+        };
+
+        let their_public = match IdentityPublicKeys::from_bytes(their_slice) {
+            Ok(k) => k,
+            Err(_) => {
+                return FfiError::InvalidArgument("Failed to parse their_keys".to_string()).into();
+            }
+        };
+
+        // Compute safety number
+        let safety = SafetyNumber::compute(&our_public, &their_public);
+
+        // Copy raw bytes to output
+        let bytes = safety.as_bytes();
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, 32);
+
+        ErrorCode::Success
     }
-
-    // Get key slices
-    let our_slice = std::slice::from_raw_parts(our_keys, our_len);
-    let their_slice = std::slice::from_raw_parts(their_keys, their_len);
-
-    // Deserialize keys
-    let our_public = match IdentityPublicKeys::from_bytes(our_slice) {
-        Ok(k) => k,
-        Err(_) => {
-            return FfiError::InvalidArgument("Failed to parse our_keys".to_string()).into()
-        }
-    };
-
-    let their_public = match IdentityPublicKeys::from_bytes(their_slice) {
-        Ok(k) => k,
-        Err(_) => {
-            return FfiError::InvalidArgument("Failed to parse their_keys".to_string()).into()
-        }
-    };
-
-    // Compute safety number
-    let safety = SafetyNumber::compute(&our_public, &their_public);
-
-    // Copy raw bytes to output
-    let bytes = safety.as_bytes();
-    std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, 32);
-
-    ErrorCode::Success
-}}
+}
 
 // ============================================================================
 // Safety Number Formatting
@@ -162,64 +166,68 @@ pub unsafe extern "C" fn veritas_safety_number_to_numeric(
     raw_len: usize,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode { unsafe {
-    // Check null pointers
-    if raw.is_null() || out_buf.is_null() {
-        return ErrorCode::NullPointer;
-    }
+) -> ErrorCode {
+    unsafe {
+        // Check null pointers
+        if raw.is_null() || out_buf.is_null() {
+            return ErrorCode::NullPointer;
+        }
 
-    // Catch panics
-    let result = std::panic::catch_unwind(|| {
-        safety_number_to_numeric_impl(raw, raw_len, out_buf, out_len)
-    });
+        // Catch panics
+        let result = std::panic::catch_unwind(|| {
+            safety_number_to_numeric_impl(raw, raw_len, out_buf, out_len)
+        });
 
-    match result {
-        Ok(code) => code,
-        Err(_) => ErrorCode::Unknown,
+        match result {
+            Ok(code) => code,
+            Err(_) => ErrorCode::Unknown,
+        }
     }
-}}
+}
 
 unsafe fn safety_number_to_numeric_impl(
     raw: *const u8,
     raw_len: usize,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode { unsafe {
-    // Verify raw length
-    if raw_len != 32 {
-        return FfiError::InvalidArgument(format!(
-            "Expected 32 bytes for safety number, got {}",
-            raw_len
-        ))
-        .into();
-    }
-
-    // Check buffer size (71 chars + null terminator)
-    let needed = 72;
-    if out_len < needed {
-        return FfiError::BufferTooSmall {
-            needed,
-            actual: out_len,
+) -> ErrorCode {
+    unsafe {
+        // Verify raw length
+        if raw_len != 32 {
+            return FfiError::InvalidArgument(format!(
+                "Expected 32 bytes for safety number, got {}",
+                raw_len
+            ))
+            .into();
         }
-        .into();
+
+        // Check buffer size (71 chars + null terminator)
+        let needed = 72;
+        if out_len < needed {
+            return FfiError::BufferTooSmall {
+                needed,
+                actual: out_len,
+            }
+            .into();
+        }
+
+        // Copy raw bytes to array
+        let mut bytes = [0u8; 32];
+        std::ptr::copy_nonoverlapping(raw, bytes.as_mut_ptr(), 32);
+
+        // Create SafetyNumber from bytes
+        // We need to use a hacky way since SafetyNumber doesn't expose from_bytes
+        // For FFI purposes, we'll compute the numeric string directly
+        let numeric_string = format_safety_number_numeric(&bytes);
+
+        // Copy to output buffer
+        let str_bytes = numeric_string.as_bytes();
+        std::ptr::copy_nonoverlapping(str_bytes.as_ptr(), out_buf, str_bytes.len());
+        *out_buf.add(str_bytes.len()) = 0; // Null terminator
+
+        ErrorCode::Success
     }
-
-    // Copy raw bytes to array
-    let mut bytes = [0u8; 32];
-    std::ptr::copy_nonoverlapping(raw, bytes.as_mut_ptr(), 32);
-
-    // Create SafetyNumber from bytes
-    // We need to use a hacky way since SafetyNumber doesn't expose from_bytes
-    // For FFI purposes, we'll compute the numeric string directly
-    let numeric_string = format_safety_number_numeric(&bytes);
-
-    // Copy to output buffer
-    let str_bytes = numeric_string.as_bytes();
-    std::ptr::copy_nonoverlapping(str_bytes.as_ptr(), out_buf, str_bytes.len());
-    *out_buf.add(str_bytes.len()) = 0; // Null terminator
-
-    ErrorCode::Success
-}}
+}
 
 /// Format safety number bytes as numeric string.
 ///
@@ -283,59 +291,62 @@ pub unsafe extern "C" fn veritas_safety_number_to_qr(
     raw_len: usize,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode { unsafe {
-    // Check null pointers
-    if raw.is_null() || out_buf.is_null() {
-        return ErrorCode::NullPointer;
-    }
+) -> ErrorCode {
+    unsafe {
+        // Check null pointers
+        if raw.is_null() || out_buf.is_null() {
+            return ErrorCode::NullPointer;
+        }
 
-    // Catch panics
-    let result = std::panic::catch_unwind(|| {
-        safety_number_to_qr_impl(raw, raw_len, out_buf, out_len)
-    });
+        // Catch panics
+        let result =
+            std::panic::catch_unwind(|| safety_number_to_qr_impl(raw, raw_len, out_buf, out_len));
 
-    match result {
-        Ok(code) => code,
-        Err(_) => ErrorCode::Unknown,
+        match result {
+            Ok(code) => code,
+            Err(_) => ErrorCode::Unknown,
+        }
     }
-}}
+}
 
 unsafe fn safety_number_to_qr_impl(
     raw: *const u8,
     raw_len: usize,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode { unsafe {
-    // Verify raw length
-    if raw_len != 32 {
-        return FfiError::InvalidArgument(format!(
-            "Expected 32 bytes for safety number, got {}",
-            raw_len
-        ))
-        .into();
-    }
-
-    // Check buffer size (64 hex chars + null terminator)
-    let needed = 65;
-    if out_len < needed {
-        return FfiError::BufferTooSmall {
-            needed,
-            actual: out_len,
+) -> ErrorCode {
+    unsafe {
+        // Verify raw length
+        if raw_len != 32 {
+            return FfiError::InvalidArgument(format!(
+                "Expected 32 bytes for safety number, got {}",
+                raw_len
+            ))
+            .into();
         }
-        .into();
+
+        // Check buffer size (64 hex chars + null terminator)
+        let needed = 65;
+        if out_len < needed {
+            return FfiError::BufferTooSmall {
+                needed,
+                actual: out_len,
+            }
+            .into();
+        }
+
+        // Convert to hex
+        let raw_slice = std::slice::from_raw_parts(raw, 32);
+        let mut hex = String::with_capacity(64);
+        for byte in raw_slice {
+            hex.push_str(&format!("{:02x}", byte));
+        }
+
+        // Copy to output buffer
+        let hex_bytes = hex.as_bytes();
+        std::ptr::copy_nonoverlapping(hex_bytes.as_ptr(), out_buf, hex_bytes.len());
+        *out_buf.add(hex_bytes.len()) = 0; // Null terminator
+
+        ErrorCode::Success
     }
-
-    // Convert to hex
-    let raw_slice = std::slice::from_raw_parts(raw, 32);
-    let mut hex = String::with_capacity(64);
-    for byte in raw_slice {
-        hex.push_str(&format!("{:02x}", byte));
-    }
-
-    // Copy to output buffer
-    let hex_bytes = hex.as_bytes();
-    std::ptr::copy_nonoverlapping(hex_bytes.as_ptr(), out_buf, hex_bytes.len());
-    *out_buf.add(hex_bytes.len()) = 0; // Null terminator
-
-    ErrorCode::Success
-}}
+}

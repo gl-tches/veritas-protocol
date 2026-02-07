@@ -2,8 +2,8 @@
 //!
 //! Provides group identification, membership tracking, and role management.
 
-use rand::rngs::OsRng;
 use rand::RngCore;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 
 use veritas_crypto::Hash256;

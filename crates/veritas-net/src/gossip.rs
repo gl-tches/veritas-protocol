@@ -21,12 +21,12 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use libp2p::PeerId;
 use libp2p::gossipsub::{
     self, Behaviour as GossipsubBehaviour, ConfigBuilder as GossipsubConfigBuilder, IdentTopic,
     Message as GossipsubMessage, MessageAuthenticity, MessageId, ValidationMode,
 };
 use libp2p::identity::Keypair;
-use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
@@ -1318,7 +1318,8 @@ mod tests {
         let mailbox_key = MailboxKey::from_bytes([2u8; 32]);
         let message_hash = Hash256::hash(b"test");
 
-        let original = MessageAnnouncement::new(mailbox_key, message_hash, 1704067200, 2048).unwrap();
+        let original =
+            MessageAnnouncement::new(mailbox_key, message_hash, 1704067200, 2048).unwrap();
 
         let bytes = original.to_bytes().unwrap();
         let deserialized = MessageAnnouncement::from_bytes(&bytes).unwrap();
@@ -1565,9 +1566,7 @@ mod tests {
         let mut seen = SeenMessages::new(5);
 
         // Fill with 5 messages
-        let ids: Vec<MessageId> = (0..5)
-            .map(|i| MessageId::from(vec![i as u8; 32]))
-            .collect();
+        let ids: Vec<MessageId> = (0..5).map(|i| MessageId::from(vec![i as u8; 32])).collect();
         for id in &ids {
             seen.insert(id.clone());
         }
@@ -1583,7 +1582,10 @@ mod tests {
 
         // ids[1..4] should still be tracked (NOT cleared)
         for id in &ids[1..] {
-            assert!(seen.contains(id), "Previously seen message should still be tracked after FIFO eviction");
+            assert!(
+                seen.contains(id),
+                "Previously seen message should still be tracked after FIFO eviction"
+            );
         }
 
         // New ID should be tracked

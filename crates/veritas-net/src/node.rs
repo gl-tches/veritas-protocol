@@ -13,14 +13,15 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use libp2p::{
+    Multiaddr, PeerId, Swarm, SwarmBuilder,
     gossipsub::{self, IdentTopic, MessageAuthenticity, MessageId, ValidationMode},
     identify,
-    kad::{self, store::MemoryStore, Mode as KadMode},
+    kad::{self, Mode as KadMode, store::MemoryStore},
     mdns,
     multiaddr::Protocol,
     noise,
     swarm::SwarmEvent,
-    tcp, yamux, Multiaddr, PeerId, Swarm, SwarmBuilder,
+    tcp, yamux,
 };
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, trace, warn};
@@ -396,10 +397,10 @@ impl VeritasNode {
         let kademlia = {
             let store = MemoryStore::new(local_peer_id);
             let mut kad_config = kad::Config::default();
-            kad_config.set_protocol_names(vec![libp2p::StreamProtocol::try_from_owned(
-                VERITAS_KAD_PROTOCOL.to_string(),
-            )
-            .expect("valid protocol name")]);
+            kad_config.set_protocol_names(vec![
+                libp2p::StreamProtocol::try_from_owned(VERITAS_KAD_PROTOCOL.to_string())
+                    .expect("valid protocol name"),
+            ]);
             let mut kademlia = kad::Behaviour::with_config(local_peer_id, store, kad_config);
 
             // Set mode based on configuration

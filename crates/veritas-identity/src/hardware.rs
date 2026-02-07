@@ -167,8 +167,8 @@ impl HardwareAttestation {
     /// and should NEVER be used in production code.
     #[cfg(test)]
     pub fn test_attestation() -> Self {
-        use rand::rngs::OsRng;
         use rand::RngCore;
+        use rand::rngs::OsRng;
 
         let mut hardware_id = vec![0u8; 32];
         let mut nonce = [0u8; 32];
@@ -196,8 +196,8 @@ impl HardwareAttestation {
     /// Collect attestation from Apple Secure Enclave.
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     fn collect_secure_enclave() -> Result<Self> {
-        use rand::rngs::OsRng;
         use rand::RngCore;
+        use rand::rngs::OsRng;
 
         // TODO: Implement actual Secure Enclave attestation via Security.framework
         // This requires:

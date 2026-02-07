@@ -208,11 +208,10 @@ impl BlockCompressor {
         }
 
         // Decompress using zstd with size limit
-        let decompressed =
-            zstd::decode_all(compressed).map_err(|e| {
-                self.metrics.failures += 1;
-                ChainError::Storage(format!("Decompression failed: {}", e))
-            })?;
+        let decompressed = zstd::decode_all(compressed).map_err(|e| {
+            self.metrics.failures += 1;
+            ChainError::Storage(format!("Decompression failed: {}", e))
+        })?;
 
         // SECURITY: Validate decompressed size
         if decompressed.len() > MAX_DECOMPRESSED_BLOCK_SIZE {
@@ -539,7 +538,7 @@ mod tests {
             let compressed = compressor.compress_bytes(&data).unwrap();
 
             // Should successfully compress
-            prop_assert!(compressed.len() > 0);
+            prop_assert!(!compressed.is_empty());
         }
     }
 }

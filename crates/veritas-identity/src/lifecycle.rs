@@ -164,8 +164,16 @@ impl std::fmt::Display for KeyState {
             KeyState::Active => write!(f, "Active"),
             KeyState::Expiring => write!(f, "Expiring"),
             KeyState::Expired => write!(f, "Expired"),
-            KeyState::Rotated { new_identity, rotated_at } => {
-                write!(f, "Rotated({}... at {})", hex::encode(&new_identity[..8]), rotated_at)
+            KeyState::Rotated {
+                new_identity,
+                rotated_at,
+            } => {
+                write!(
+                    f,
+                    "Rotated({}... at {})",
+                    hex::encode(&new_identity[..8]),
+                    rotated_at
+                )
             }
             KeyState::Revoked => write!(f, "Revoked"),
         }
@@ -389,7 +397,9 @@ impl KeyLifecycle {
     /// `true` if the key is in Rotated state and the grace period has expired,
     /// `false` otherwise.
     pub fn should_destroy_for_pfs(&self, current_time: u64) -> bool {
-        self.state.rotation_grace_expired(current_time).unwrap_or(false)
+        self.state
+            .rotation_grace_expired(current_time)
+            .unwrap_or(false)
     }
 
     /// Check if decryption is allowed based on key state and PFS grace period.
@@ -477,11 +487,13 @@ mod tests {
         assert!(KeyState::Expiring.is_usable());
         assert!(!KeyState::Expired.is_usable());
         assert!(!KeyState::Revoked.is_usable());
-        assert!(!KeyState::Rotated {
-            new_identity: [0; 32],
-            rotated_at: BASE_TIME,
-        }
-        .is_usable());
+        assert!(
+            !KeyState::Rotated {
+                new_identity: [0; 32],
+                rotated_at: BASE_TIME,
+            }
+            .is_usable()
+        );
     }
 
     #[test]
@@ -490,11 +502,13 @@ mod tests {
         assert!(!KeyState::Expiring.is_terminated());
         assert!(KeyState::Expired.is_terminated());
         assert!(KeyState::Revoked.is_terminated());
-        assert!(KeyState::Rotated {
-            new_identity: [0; 32],
-            rotated_at: BASE_TIME,
-        }
-        .is_terminated());
+        assert!(
+            KeyState::Rotated {
+                new_identity: [0; 32],
+                rotated_at: BASE_TIME,
+            }
+            .is_terminated()
+        );
     }
 
     #[test]
@@ -619,7 +633,10 @@ mod tests {
         lifecycle.rotate(new_id.clone(), rotation_time).unwrap();
 
         match lifecycle.state {
-            KeyState::Rotated { new_identity, rotated_at } => {
+            KeyState::Rotated {
+                new_identity,
+                rotated_at,
+            } => {
                 assert_eq!(new_identity, new_id.to_bytes());
                 assert_eq!(rotated_at, rotation_time);
             }
@@ -833,10 +850,16 @@ mod tests {
         assert_eq!(state.rotation_grace_expired(BASE_TIME), Some(false));
 
         // 30 minutes after rotation: not expired
-        assert_eq!(state.rotation_grace_expired(BASE_TIME + 30 * 60), Some(false));
+        assert_eq!(
+            state.rotation_grace_expired(BASE_TIME + 30 * 60),
+            Some(false)
+        );
 
         // 59 minutes after rotation: not expired
-        assert_eq!(state.rotation_grace_expired(BASE_TIME + 59 * 60), Some(false));
+        assert_eq!(
+            state.rotation_grace_expired(BASE_TIME + 59 * 60),
+            Some(false)
+        );
     }
 
     #[test]
@@ -847,10 +870,16 @@ mod tests {
         };
 
         // Exactly 1 hour after rotation: expired
-        assert_eq!(state.rotation_grace_expired(BASE_TIME + ROTATION_GRACE_PERIOD_SECS), Some(true));
+        assert_eq!(
+            state.rotation_grace_expired(BASE_TIME + ROTATION_GRACE_PERIOD_SECS),
+            Some(true)
+        );
 
         // 2 hours after rotation: expired
-        assert_eq!(state.rotation_grace_expired(BASE_TIME + 2 * ROTATION_GRACE_PERIOD_SECS), Some(true));
+        assert_eq!(
+            state.rotation_grace_expired(BASE_TIME + 2 * ROTATION_GRACE_PERIOD_SECS),
+            Some(true)
+        );
     }
 
     #[test]

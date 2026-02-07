@@ -45,7 +45,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use veritas_crypto::Hash256;
-use veritas_protocol::{MailboxKey, MinimalEnvelope, MESSAGE_TTL_SECS};
+use veritas_protocol::{MESSAGE_TTL_SECS, MailboxKey, MinimalEnvelope};
 
 use crate::error::{NetError, Result};
 

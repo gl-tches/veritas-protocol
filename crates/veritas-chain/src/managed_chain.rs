@@ -234,10 +234,7 @@ impl ManagedBlockchain {
     /// # Errors
     ///
     /// Returns an error if the backend is empty or corrupted.
-    pub async fn open(
-        config: BlockchainConfig,
-        backend: Box<dyn StorageBackend>,
-    ) -> Result<Self> {
+    pub async fn open(config: BlockchainConfig, backend: Box<dyn StorageBackend>) -> Result<Self> {
         config.validate().map_err(ChainError::InvalidBlock)?;
 
         if backend.count_blocks() == 0 {
@@ -328,7 +325,8 @@ impl ManagedBlockchain {
 
         // Update fork choice - remove old tip, add new tip
         self.fork_choice.remove_tip(&self.tip);
-        self.fork_choice.add_tip(hash.clone(), height, self.tip.clone());
+        self.fork_choice
+            .add_tip(hash.clone(), height, self.tip.clone());
 
         // Update tip (unpin old tip if not genesis, pin new tip)
         // Genesis must never be unpinned - it's always needed for chain validation
@@ -371,7 +369,9 @@ impl ManagedBlockchain {
 
             // Insert into hot cache (may evict old blocks, but not pinned ones)
             // Ignore errors here - if cache is full with pinned blocks, that's OK
-            let _ = self.hot_cache.try_insert(hash.clone(), Arc::clone(&arc_block));
+            let _ = self
+                .hot_cache
+                .try_insert(hash.clone(), Arc::clone(&arc_block));
 
             return Ok(Some(arc_block));
         }
@@ -493,7 +493,9 @@ impl ManagedBlockchain {
                 .map(|(height, _)| *height)
         };
 
-        self.pruner.prune(&*self.backend, self.height, get_height).await
+        self.pruner
+            .prune(&*self.backend, self.height, get_height)
+            .await
     }
 
     /// Get memory usage metrics.
@@ -579,7 +581,9 @@ impl ManagedBlockchain {
                 {
                     let normalized = username.to_ascii_lowercase();
                     // Only insert if not already present (first registration wins)
-                    if let std::collections::hash_map::Entry::Vacant(e) = self.username_index.entry(normalized) {
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        self.username_index.entry(normalized)
+                    {
                         e.insert(identity_hash.clone());
                         stats.usernames_found += 1;
                     }
@@ -606,10 +610,14 @@ impl ManagedBlockchain {
                     ));
                 }
                 self.hot_cache.pin(genesis_hash);
-                let _ = self.hot_cache.try_insert(genesis_hash.clone(), Arc::new(genesis));
+                let _ = self
+                    .hot_cache
+                    .try_insert(genesis_hash.clone(), Arc::new(genesis));
             }
         } else {
-            return Err(ChainError::Storage("No blocks found in backend".to_string()));
+            return Err(ChainError::Storage(
+                "No blocks found in backend".to_string(),
+            ));
         }
 
         if let Some((&tip_height, tip_hash)) = self.height_index.last_key_value() {
@@ -620,7 +628,9 @@ impl ManagedBlockchain {
             // Load and pin tip
             if let Some(tip_block) = self.backend.load_block(tip_hash).await? {
                 self.hot_cache.pin(tip_hash);
-                let _ = self.hot_cache.try_insert(tip_hash.clone(), Arc::new(tip_block));
+                let _ = self
+                    .hot_cache
+                    .try_insert(tip_hash.clone(), Arc::new(tip_block));
 
                 // Initialize fork choice with tip
                 self.fork_choice = ForkChoice::new();
@@ -935,9 +945,10 @@ mod tests {
             let backend = Box::new(InMemoryBackend::new());
             let genesis = create_genesis();
 
-            let mut chain = ManagedBlockchain::with_genesis(config.clone(), backend, genesis.clone())
-                .await
-                .unwrap();
+            let mut chain =
+                ManagedBlockchain::with_genesis(config.clone(), backend, genesis.clone())
+                    .await
+                    .unwrap();
 
             // Add some blocks
             let mut parent_hash = genesis.hash().clone();
@@ -1040,8 +1051,8 @@ mod tests {
     #[cfg(feature = "sled-storage")]
     #[tokio::test]
     async fn test_managed_open_from_existing() {
-        use crate::sled_backend::SledBackend;
         use crate::config::DEFAULT_SLED_CACHE_MB;
+        use crate::sled_backend::SledBackend;
 
         let tempdir = tempfile::tempdir().unwrap();
         let config = BlockchainConfig::default();
@@ -1050,10 +1061,12 @@ mod tests {
 
         // Create chain and add blocks
         {
-            let backend = Box::new(SledBackend::open(tempdir.path(), DEFAULT_SLED_CACHE_MB, None).unwrap());
-            let mut chain = ManagedBlockchain::with_genesis(config.clone(), backend, genesis.clone())
-                .await
-                .unwrap();
+            let backend =
+                Box::new(SledBackend::open(tempdir.path(), DEFAULT_SLED_CACHE_MB, None).unwrap());
+            let mut chain =
+                ManagedBlockchain::with_genesis(config.clone(), backend, genesis.clone())
+                    .await
+                    .unwrap();
 
             let mut parent_hash = genesis_hash.clone();
             for i in 1..=5 {
@@ -1064,7 +1077,8 @@ mod tests {
         }
 
         // Reopen from backend (sled persists to disk)
-        let backend = Box::new(SledBackend::open(tempdir.path(), DEFAULT_SLED_CACHE_MB, None).unwrap());
+        let backend =
+            Box::new(SledBackend::open(tempdir.path(), DEFAULT_SLED_CACHE_MB, None).unwrap());
         let reopened = ManagedBlockchain::open(config, backend).await.unwrap();
 
         assert_eq!(reopened.height(), 5);

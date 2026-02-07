@@ -47,18 +47,18 @@ pub mod signing;
 pub mod transcript;
 pub mod wire_error;
 
-pub use chunking::{split_into_chunks, ChunkInfo, ChunkReassembler, MessageChunk};
+pub use chunking::{ChunkInfo, ChunkReassembler, MessageChunk, split_into_chunks};
 pub use encryption::{
+    DecryptionContext, EncryptedMessage, MESSAGE_ENCRYPTION_CONTEXT, PreparedMessage, SendConfig,
     add_timing_jitter, decrypt_and_verify, decrypt_as_recipient, encrypt_for_recipient,
-    prepare_for_send, DecryptionContext, EncryptedMessage, PreparedMessage, SendConfig,
-    MESSAGE_ENCRYPTION_CONTEXT,
+    prepare_for_send,
 };
 pub use envelope::{
-    bucket_for_size, current_epoch, derive_mailbox_key, epoch_from_timestamp,
-    generate_mailbox_salt, is_valid_padded, max_bucket_size, max_data_size, pad_to_bucket, unpad,
-    InnerPayload, MailboxKey, MailboxKeyParams, MessageContent, MinimalEnvelope,
-    MinimalEnvelopeBuilder, PaddingError, ENVELOPE_NONCE_SIZE, LENGTH_PREFIX_SIZE,
-    MAILBOX_KEY_SIZE, MAILBOX_SALT_SIZE, MIN_CIPHERTEXT_SIZE, PADDING_MARKER,
+    ENVELOPE_NONCE_SIZE, InnerPayload, LENGTH_PREFIX_SIZE, MAILBOX_KEY_SIZE, MAILBOX_SALT_SIZE,
+    MIN_CIPHERTEXT_SIZE, MailboxKey, MailboxKeyParams, MessageContent, MinimalEnvelope,
+    MinimalEnvelopeBuilder, PADDING_MARKER, PaddingError, bucket_for_size, current_epoch,
+    derive_mailbox_key, epoch_from_timestamp, generate_mailbox_salt, is_valid_padded,
+    max_bucket_size, max_data_size, pad_to_bucket, unpad,
 };
 pub use error::{ProtocolError, Result};
 pub use groups::{
@@ -68,7 +68,7 @@ pub use groups::{
 pub use limits::*;
 pub use receipts::{DeliveryError, DeliveryReceipt, DeliveryReceiptData, ReceiptType};
 pub use signing::{
-    sign_message, verify_signature, MessageSignature, SignatureVersion, SigningData,
-    DOMAIN_SEPARATOR, SIGNATURE_SIZE,
+    DOMAIN_SEPARATOR, MessageSignature, SIGNATURE_SIZE, SignatureVersion, SigningData,
+    sign_message, verify_signature,
 };
 pub use wire_error::{WireError, WireErrorCode};

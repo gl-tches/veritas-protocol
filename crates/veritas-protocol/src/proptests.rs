@@ -9,14 +9,14 @@
 
 use proptest::prelude::*;
 
-use crate::chunking::{split_into_chunks, ChunkReassembler};
+use crate::chunking::{ChunkReassembler, split_into_chunks};
 use crate::envelope::{
-    bucket_for_size, is_valid_padded, max_data_size, pad_to_bucket, unpad, LENGTH_PREFIX_SIZE,
+    LENGTH_PREFIX_SIZE, bucket_for_size, is_valid_padded, max_data_size, pad_to_bucket, unpad,
 };
 use crate::limits::{
     MAX_CHUNKS_PER_MESSAGE, MAX_MESSAGE_CHARS, MAX_TOTAL_MESSAGE_CHARS, PADDING_BUCKETS,
 };
-use crate::signing::{sign_message, verify_signature, SigningData};
+use crate::signing::{SigningData, sign_message, verify_signature};
 
 use veritas_crypto::Hash256;
 use veritas_identity::IdentityKeyPair;

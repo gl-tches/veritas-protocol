@@ -13,18 +13,18 @@ use veritas_core::{ClientConfigBuilder, ClientState, CoreError, VeritasClient};
 use veritas_crypto::Hash256;
 use veritas_identity::{IdentityKeyPair, IdentityPublicKeys};
 use veritas_net::{
-    gossip::{GossipConfig, GossipManager, TOPIC_MESSAGES},
     RelayConfig, RelayManager,
+    gossip::{GossipConfig, GossipManager, TOPIC_MESSAGES},
 };
 use veritas_protocol::{
-    chunking::{split_into_chunks, ChunkReassembler},
+    chunking::{ChunkReassembler, split_into_chunks},
     encryption::{
-        add_timing_jitter, decrypt_and_verify, decrypt_as_recipient, encrypt_for_recipient,
-        DecryptionContext, EncryptedMessage,
+        DecryptionContext, EncryptedMessage, add_timing_jitter, decrypt_and_verify,
+        decrypt_as_recipient, encrypt_for_recipient,
     },
     envelope::{
-        derive_mailbox_key, generate_mailbox_salt, InnerPayload, MailboxKey, MailboxKeyParams,
-        MessageContent, MinimalEnvelope,
+        InnerPayload, MailboxKey, MailboxKeyParams, MessageContent, MinimalEnvelope,
+        derive_mailbox_key, generate_mailbox_salt,
     },
     limits::{EPOCH_DURATION_SECS, MAX_MESSAGE_CHARS, MAX_TOTAL_MESSAGE_CHARS, PADDING_BUCKETS},
     receipts::{DeliveryError, DeliveryReceipt, DeliveryReceiptData, ReceiptType},
@@ -148,8 +148,7 @@ mod e2e_messaging {
             encrypt_for_recipient(&alice, bob.public_keys(), content.clone(), None).unwrap();
 
         // Decrypt and verify with known sender keys
-        let payload =
-            decrypt_and_verify(&bob, &encrypted.envelope, alice.public_keys()).unwrap();
+        let payload = decrypt_and_verify(&bob, &encrypted.envelope, alice.public_keys()).unwrap();
 
         assert_eq!(payload.content(), &content);
         assert_eq!(payload.sender_id(), alice.identity_hash());
@@ -163,8 +162,7 @@ mod e2e_messaging {
         let eve = IdentityKeyPair::generate();
 
         let content = MessageContent::text("Secret for Bob only").unwrap();
-        let encrypted =
-            encrypt_for_recipient(&alice, bob.public_keys(), content, None).unwrap();
+        let encrypted = encrypt_for_recipient(&alice, bob.public_keys(), content, None).unwrap();
 
         // Eve should not be able to decrypt
         let result = decrypt_as_recipient(&eve, &encrypted.envelope);
@@ -179,8 +177,7 @@ mod e2e_messaging {
         let mallory = IdentityKeyPair::generate();
 
         let content = MessageContent::text("From Mallory pretending to be Alice").unwrap();
-        let encrypted =
-            encrypt_for_recipient(&mallory, bob.public_keys(), content, None).unwrap();
+        let encrypted = encrypt_for_recipient(&mallory, bob.public_keys(), content, None).unwrap();
 
         // Bob tries to verify as if it's from Alice
         let result = decrypt_and_verify(&bob, &encrypted.envelope, alice.public_keys());
@@ -333,8 +330,7 @@ mod e2e_messaging {
         let encrypted1 =
             encrypt_for_recipient(&alice, bob.public_keys(), content.clone(), None).unwrap();
 
-        let encrypted2 =
-            encrypt_for_recipient(&alice, bob.public_keys(), content, None).unwrap();
+        let encrypted2 = encrypt_for_recipient(&alice, bob.public_keys(), content, None).unwrap();
 
         // Ephemeral keys should differ (forward secrecy)
         assert_ne!(
@@ -447,10 +443,14 @@ mod chunking {
         let current_time = 1000u64;
 
         // Add chunks in order
-        let result1 = reassembler.add_chunk(chunks[0].clone(), current_time).unwrap();
+        let result1 = reassembler
+            .add_chunk(chunks[0].clone(), current_time)
+            .unwrap();
         assert!(result1.is_none()); // Not complete yet
 
-        let result2 = reassembler.add_chunk(chunks[1].clone(), current_time).unwrap();
+        let result2 = reassembler
+            .add_chunk(chunks[1].clone(), current_time)
+            .unwrap();
         assert_eq!(result2, Some(message));
     }
 
@@ -464,10 +464,14 @@ mod chunking {
         let current_time = 1000u64;
 
         // Add chunks in reverse order
-        let result2 = reassembler.add_chunk(chunks[1].clone(), current_time).unwrap();
+        let result2 = reassembler
+            .add_chunk(chunks[1].clone(), current_time)
+            .unwrap();
         assert!(result2.is_none());
 
-        let result1 = reassembler.add_chunk(chunks[0].clone(), current_time).unwrap();
+        let result1 = reassembler
+            .add_chunk(chunks[0].clone(), current_time)
+            .unwrap();
         assert_eq!(result1, Some(message));
     }
 
@@ -555,12 +559,8 @@ mod receipts {
         let bob = IdentityKeyPair::generate();
         let message_hash = Hash256::hash(b"failed-message");
 
-        let receipt = DeliveryReceipt::error(
-            &message_hash,
-            &bob,
-            DeliveryError::RecipientNotFound,
-        )
-        .unwrap();
+        let receipt =
+            DeliveryReceipt::error(&message_hash, &bob, DeliveryError::RecipientNotFound).unwrap();
 
         assert!(receipt.is_for_message(&message_hash));
         assert!(receipt.is_error());
@@ -727,16 +727,15 @@ mod multi_node {
         let bob = IdentityKeyPair::generate();
 
         // Create many messages concurrently
-        let messages: Vec<EncryptedMessage> =
-            futures::future::join_all((0..20).map(|i| {
-                let alice = alice.clone();
-                let bob_public = bob.public_keys().clone();
-                async move {
-                    let content = MessageContent::text(&format!("Message {}", i)).unwrap();
-                    encrypt_for_recipient(&alice, &bob_public, content, None).unwrap()
-                }
-            }))
-            .await;
+        let messages: Vec<EncryptedMessage> = futures::future::join_all((0..20).map(|i| {
+            let alice = alice.clone();
+            let bob_public = bob.public_keys().clone();
+            async move {
+                let content = MessageContent::text(&format!("Message {}", i)).unwrap();
+                encrypt_for_recipient(&alice, &bob_public, content, None).unwrap()
+            }
+        }))
+        .await;
 
         // Decrypt all concurrently
         let payloads: Vec<InnerPayload> =
@@ -819,8 +818,7 @@ mod gossip {
         let message_hash = Hash256::hash(b"original");
         let receipt_hash = Hash256::hash(b"receipt");
 
-        let announcement =
-            ReceiptAnnouncement::new_now(message_hash.clone(), receipt_hash.clone());
+        let announcement = ReceiptAnnouncement::new_now(message_hash.clone(), receipt_hash.clone());
 
         assert_eq!(announcement.message_hash, message_hash);
         assert_eq!(announcement.receipt_hash, receipt_hash);
@@ -841,10 +839,10 @@ mod gossip {
         let ts1 = 3600 * 10 + 100; // 10th hour + 100 seconds
         let ts2 = 3600 * 10 + 3500; // 10th hour + 3500 seconds
 
-        let ann1 = MessageAnnouncement::new(mailbox_key.clone(), message_hash.clone(), ts1, 1024)
-            .unwrap();
-        let ann2 = MessageAnnouncement::new(mailbox_key.clone(), message_hash.clone(), ts2, 1024)
-            .unwrap();
+        let ann1 =
+            MessageAnnouncement::new(mailbox_key.clone(), message_hash.clone(), ts1, 1024).unwrap();
+        let ann2 =
+            MessageAnnouncement::new(mailbox_key.clone(), message_hash.clone(), ts2, 1024).unwrap();
 
         // Should be in same bucket
         assert_eq!(ann1.timestamp_bucket, ann2.timestamp_bucket);
@@ -965,7 +963,9 @@ mod offline {
         let (_dir, _db, queue) = create_test_queue();
 
         let recipient = [1u8; 32];
-        let id = queue.queue_outgoing(&recipient, b"retry-me".to_vec()).unwrap();
+        let id = queue
+            .queue_outgoing(&recipient, b"retry-me".to_vec())
+            .unwrap();
 
         // First failure
         queue.mark_failed(&id).unwrap();
@@ -1125,8 +1125,7 @@ mod relay {
         let alice = IdentityKeyPair::generate();
         let bob = IdentityKeyPair::generate();
         let content = MessageContent::text("Relay me").unwrap();
-        let encrypted =
-            encrypt_for_recipient(&alice, bob.public_keys(), content, None).unwrap();
+        let encrypted = encrypt_for_recipient(&alice, bob.public_keys(), content, None).unwrap();
         encrypted.envelope
     }
 
@@ -1538,8 +1537,7 @@ mod errors {
         let bob = IdentityKeyPair::generate();
 
         let content = MessageContent::text("Corrupt me").unwrap();
-        let encrypted =
-            encrypt_for_recipient(&alice, bob.public_keys(), content, None).unwrap();
+        let encrypted = encrypt_for_recipient(&alice, bob.public_keys(), content, None).unwrap();
 
         // Corrupt the ciphertext
         let ciphertext = encrypted.envelope.ciphertext().to_vec();
@@ -1568,8 +1566,7 @@ mod errors {
         let bob = IdentityKeyPair::generate();
 
         let content = MessageContent::text("Nonce test").unwrap();
-        let encrypted =
-            encrypt_for_recipient(&alice, bob.public_keys(), content, None).unwrap();
+        let encrypted = encrypt_for_recipient(&alice, bob.public_keys(), content, None).unwrap();
 
         // Corrupt the nonce
         let mut corrupted_nonce = *encrypted.envelope.nonce();
@@ -1676,7 +1673,10 @@ mod client {
         // Verify via list_identities that id1 is now primary
         let identities = client.list_identities().await.unwrap();
         let id1_entry = identities.iter().find(|i| i.hash == id1).unwrap();
-        assert!(id1_entry.is_primary, "id1 should be primary after set_primary_identity");
+        assert!(
+            id1_entry.is_primary,
+            "id1 should be primary after set_primary_identity"
+        );
 
         // Switch to id2
         client.set_primary_identity(&id2).await.unwrap();
@@ -1684,9 +1684,15 @@ mod client {
         // Verify via list_identities that id2 is now primary
         let identities = client.list_identities().await.unwrap();
         let id2_entry = identities.iter().find(|i| i.hash == id2).unwrap();
-        assert!(id2_entry.is_primary, "id2 should be primary after set_primary_identity");
+        assert!(
+            id2_entry.is_primary,
+            "id2 should be primary after set_primary_identity"
+        );
         let id1_entry = identities.iter().find(|i| i.hash == id1).unwrap();
-        assert!(!id1_entry.is_primary, "id1 should not be primary after switching to id2");
+        assert!(
+            !id1_entry.is_primary,
+            "id1 should not be primary after switching to id2"
+        );
     }
 
     /// Test concurrent client access.

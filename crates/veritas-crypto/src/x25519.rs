@@ -370,5 +370,4 @@ mod tests {
         assert!(debug.contains("X25519PublicKey"));
         assert!(!debug.contains("REDACTED"));
     }
-
 }

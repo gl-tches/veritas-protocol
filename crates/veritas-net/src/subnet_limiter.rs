@@ -131,7 +131,9 @@ impl SubnetKey {
             }
             IpAddr::V6(ipv6) => {
                 let octets = ipv6.octets();
-                SubnetKey::V6([octets[0], octets[1], octets[2], octets[3], octets[4], octets[5]])
+                SubnetKey::V6([
+                    octets[0], octets[1], octets[2], octets[3], octets[4], octets[5],
+                ])
             }
         }
     }
@@ -161,7 +163,6 @@ impl SubnetKey {
         }
         SubnetKey::Unknown
     }
-
 }
 
 impl std::fmt::Display for SubnetKey {
@@ -338,7 +339,9 @@ impl SubnetLimiter {
         // Handle unknown subnets
         if subnet_key == SubnetKey::Unknown {
             if !self.config.allow_unknown_subnets {
-                self.stats.peers_rejected_subnet.fetch_add(1, Ordering::Relaxed);
+                self.stats
+                    .peers_rejected_subnet
+                    .fetch_add(1, Ordering::Relaxed);
                 return PeerAcceptResult::RejectedSubnetLimit {
                     subnet: "unknown".to_string(),
                     current_count: 0,
@@ -352,7 +355,9 @@ impl SubnetLimiter {
                 .unwrap_or(0);
 
             if unknown_count >= self.config.max_unknown_subnet_peers {
-                self.stats.peers_rejected_subnet.fetch_add(1, Ordering::Relaxed);
+                self.stats
+                    .peers_rejected_subnet
+                    .fetch_add(1, Ordering::Relaxed);
                 return PeerAcceptResult::RejectedSubnetLimit {
                     subnet: "unknown".to_string(),
                     current_count: unknown_count,
@@ -386,7 +391,9 @@ impl SubnetLimiter {
                 }
             }
 
-            self.stats.peers_rejected_subnet.fetch_add(1, Ordering::Relaxed);
+            self.stats
+                .peers_rejected_subnet
+                .fetch_add(1, Ordering::Relaxed);
             return PeerAcceptResult::RejectedSubnetLimit {
                 subnet: subnet_key.to_string(),
                 current_count,
@@ -452,7 +459,9 @@ impl SubnetLimiter {
         if let Some(info) = self.peer_info.get_mut(peer_id) {
             info.successes += 1;
             info.reputation = (info.reputation + REPUTATION_GAIN_SUCCESS).min(MAX_REPUTATION);
-            self.stats.successful_operations.fetch_add(1, Ordering::Relaxed);
+            self.stats
+                .successful_operations
+                .fetch_add(1, Ordering::Relaxed);
             debug!(
                 "Recorded success for peer {}, reputation now {}",
                 peer_id, info.reputation
@@ -503,7 +512,10 @@ impl SubnetLimiter {
 
     /// Get the number of peers in a subnet.
     pub fn subnet_peer_count(&self, subnet_key: &SubnetKey) -> usize {
-        self.subnet_peers.get(subnet_key).map(|v| v.len()).unwrap_or(0)
+        self.subnet_peers
+            .get(subnet_key)
+            .map(|v| v.len())
+            .unwrap_or(0)
     }
 
     /// Get the total number of tracked peers.
@@ -654,7 +666,10 @@ mod tests {
         let peer = create_test_peer_id(100);
         let addr = create_multiaddr_v4(192, 168, 1, 200);
         let result = limiter.try_add_peer(peer, &addr);
-        assert!(matches!(result, PeerAcceptResult::RejectedSubnetLimit { .. }));
+        assert!(matches!(
+            result,
+            PeerAcceptResult::RejectedSubnetLimit { .. }
+        ));
     }
 
     #[test]

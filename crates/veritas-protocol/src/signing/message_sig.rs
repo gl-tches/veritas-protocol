@@ -134,7 +134,10 @@ impl std::fmt::Debug for MessageSignature {
             .collect();
 
         f.debug_struct("MessageSignature")
-            .field("bytes", &format!("{}... ({} bytes)", short_hex, self.bytes.len()))
+            .field(
+                "bytes",
+                &format!("{}... ({} bytes)", short_hex, self.bytes.len()),
+            )
             .field("version", &self.version)
             .finish()
     }
@@ -170,7 +173,11 @@ impl SigningData {
     /// - Sender identity hash (32 bytes)
     /// - Timestamp (8 bytes, big-endian)
     /// - Content hash (32 bytes)
-    pub fn new(sender_id: &veritas_identity::IdentityHash, timestamp: u64, content_hash: &Hash256) -> Self {
+    pub fn new(
+        sender_id: &veritas_identity::IdentityHash,
+        timestamp: u64,
+        content_hash: &Hash256,
+    ) -> Self {
         let data_hash = Hash256::hash_many(&[
             DOMAIN_SEPARATOR,
             sender_id.as_bytes(),
@@ -314,7 +321,8 @@ mod tests {
         let (sender, signing_data) = create_test_signing_data();
         let signature = sign_message(&sender, &signing_data).unwrap();
 
-        let restored = MessageSignature::from_bytes(signature.as_bytes(), SignatureVersion::MlDsa).unwrap();
+        let restored =
+            MessageSignature::from_bytes(signature.as_bytes(), SignatureVersion::MlDsa).unwrap();
         assert_eq!(restored.as_bytes(), signature.as_bytes());
         assert_eq!(restored.version(), SignatureVersion::MlDsa);
     }

@@ -224,13 +224,8 @@ impl InteractionProof {
         }
 
         // Compute the interaction hash
-        let interaction_hash = Self::compute_interaction_hash(
-            &from,
-            &to,
-            &interaction_type,
-            timestamp,
-            &nonce,
-        );
+        let interaction_hash =
+            Self::compute_interaction_hash(&from, &to, &interaction_type, timestamp, &nonce);
 
         Ok(Self {
             interaction_hash,
@@ -259,14 +254,7 @@ impl InteractionProof {
         let timestamp_bytes = timestamp.to_le_bytes();
 
         // Create deterministic hash of all fields
-        Hash256::hash_many(&[
-            domain,
-            from,
-            to,
-            &timestamp_bytes,
-            nonce,
-        ])
-        .to_bytes()
+        Hash256::hash_many(&[domain, from, to, &timestamp_bytes, nonce]).to_bytes()
     }
 
     /// Get the signing payload for this proof.
@@ -297,7 +285,11 @@ impl InteractionProof {
         let payload = self.signing_payload();
 
         // Verify the initiator's signature
-        if !verify_fn(&self.from_identity, &payload, self.from_signature.as_bytes()) {
+        if !verify_fn(
+            &self.from_identity,
+            &payload,
+            self.from_signature.as_bytes(),
+        ) {
             return Err(ReputationError::InvalidSignature(
                 "from_signature verification failed".into(),
             ));
@@ -404,12 +396,7 @@ pub trait PubkeyRegistry: Send + Sync {
     /// # Returns
     ///
     /// `true` if the signature is valid, `false` otherwise.
-    fn verify_signature(
-        &self,
-        identity: &IdentityHash,
-        message: &[u8],
-        signature: &[u8],
-    ) -> bool;
+    fn verify_signature(&self, identity: &IdentityHash, message: &[u8], signature: &[u8]) -> bool;
 }
 
 /// Generate a random nonce for interaction proofs.

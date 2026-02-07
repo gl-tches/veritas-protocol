@@ -2,9 +2,9 @@
 
 use std::ffi::CStr;
 
+use crate::ErrorCode;
 use crate::error::FfiError;
 use crate::types::{ClientHandle, IdentitySlots, VeritasHandle};
-use crate::ErrorCode;
 
 // ============================================================================
 // Identity Hash
@@ -42,61 +42,66 @@ pub unsafe extern "C" fn veritas_identity_hash(
     handle: *mut VeritasHandle,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode { unsafe {
-    // Check null pointers
-    if handle.is_null() {
-        return ErrorCode::NullPointer;
-    }
-    if out_buf.is_null() {
-        return ErrorCode::NullPointer;
-    }
+) -> ErrorCode {
+    unsafe {
+        // Check null pointers
+        if handle.is_null() {
+            return ErrorCode::NullPointer;
+        }
+        if out_buf.is_null() {
+            return ErrorCode::NullPointer;
+        }
 
-    // Catch panics
-    let result = std::panic::catch_unwind(|| {
-        identity_hash_impl(handle, out_buf, out_len)
-    });
+        // Catch panics
+        let result = std::panic::catch_unwind(|| identity_hash_impl(handle, out_buf, out_len));
 
-    match result {
-        Ok(code) => code,
-        Err(_) => ErrorCode::Unknown,
+        match result {
+            Ok(code) => code,
+            Err(_) => ErrorCode::Unknown,
+        }
     }
-}}
+}
 
 unsafe fn identity_hash_impl(
     handle: *mut VeritasHandle,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode { unsafe {
-    let client_handle = match ClientHandle::from_ptr(handle) {
-        Some(h) => h,
-        None => return ErrorCode::NullPointer,
-    };
+) -> ErrorCode {
+    unsafe {
+        let client_handle = match ClientHandle::from_ptr(handle) {
+            Some(h) => h,
+            None => return ErrorCode::NullPointer,
+        };
 
-    // Get identity hash using the stored runtime
-    let hash = match client_handle.runtime.block_on(client_handle.client.identity_hash()) {
-        Ok(h) => h,
-        Err(e) => return FfiError::from(e).into(),
-    };
+        // Get identity hash using the stored runtime
+        let hash = match client_handle
+            .runtime
+            .block_on(client_handle.client.identity_hash())
+        {
+            Ok(h) => h,
+            Err(e) => return FfiError::from(e).into(),
+        };
 
-    // Convert to hex string
-    let hex_string = hash.to_string();
-    let needed = hex_string.len() + 1; // +1 for null terminator
+        // Convert to hex string
+        let hex_string = hash.to_string();
+        let needed = hex_string.len() + 1; // +1 for null terminator
 
-    if out_len < needed {
-        return FfiError::BufferTooSmall {
-            needed,
-            actual: out_len,
+        if out_len < needed {
+            return FfiError::BufferTooSmall {
+                needed,
+                actual: out_len,
+            }
+            .into();
         }
-        .into();
+
+        // Copy to output buffer
+        let bytes = hex_string.as_bytes();
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, bytes.len());
+        *out_buf.add(bytes.len()) = 0; // Null terminator
+
+        ErrorCode::Success
     }
-
-    // Copy to output buffer
-    let bytes = hex_string.as_bytes();
-    std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, bytes.len());
-    *out_buf.add(bytes.len()) = 0; // Null terminator
-
-    ErrorCode::Success
-}}
+}
 
 // ============================================================================
 // Create Identity
@@ -137,72 +142,78 @@ pub unsafe extern "C" fn veritas_create_identity(
     label: *const libc::c_char,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode { unsafe {
-    // Check null pointers
-    if handle.is_null() {
-        return ErrorCode::NullPointer;
-    }
-    if out_buf.is_null() {
-        return ErrorCode::NullPointer;
-    }
+) -> ErrorCode {
+    unsafe {
+        // Check null pointers
+        if handle.is_null() {
+            return ErrorCode::NullPointer;
+        }
+        if out_buf.is_null() {
+            return ErrorCode::NullPointer;
+        }
 
-    // Catch panics
-    let result = std::panic::catch_unwind(|| {
-        create_identity_impl(handle, label, out_buf, out_len)
-    });
+        // Catch panics
+        let result =
+            std::panic::catch_unwind(|| create_identity_impl(handle, label, out_buf, out_len));
 
-    match result {
-        Ok(code) => code,
-        Err(_) => ErrorCode::Unknown,
+        match result {
+            Ok(code) => code,
+            Err(_) => ErrorCode::Unknown,
+        }
     }
-}}
+}
 
 unsafe fn create_identity_impl(
     handle: *mut VeritasHandle,
     label: *const libc::c_char,
     out_buf: *mut u8,
     out_len: usize,
-) -> ErrorCode { unsafe {
-    let client_handle = match ClientHandle::from_ptr(handle) {
-        Some(h) => h,
-        None => return ErrorCode::NullPointer,
-    };
+) -> ErrorCode {
+    unsafe {
+        let client_handle = match ClientHandle::from_ptr(handle) {
+            Some(h) => h,
+            None => return ErrorCode::NullPointer,
+        };
 
-    // Parse label
-    let label_str = if label.is_null() {
-        None
-    } else {
-        match CStr::from_ptr(label).to_str() {
-            Ok(s) => Some(s),
-            Err(_) => return FfiError::InvalidUtf8.into(),
+        // Parse label
+        let label_str = if label.is_null() {
+            None
+        } else {
+            match CStr::from_ptr(label).to_str() {
+                Ok(s) => Some(s),
+                Err(_) => return FfiError::InvalidUtf8.into(),
+            }
+        };
+
+        // Create identity using the stored runtime
+        let hash = match client_handle
+            .runtime
+            .block_on(client_handle.client.create_identity(label_str))
+        {
+            Ok(h) => h,
+            Err(e) => return FfiError::from(e).into(),
+        };
+
+        // Convert to hex string
+        let hex_string = hash.to_string();
+        let needed = hex_string.len() + 1;
+
+        if out_len < needed {
+            return FfiError::BufferTooSmall {
+                needed,
+                actual: out_len,
+            }
+            .into();
         }
-    };
 
-    // Create identity using the stored runtime
-    let hash = match client_handle.runtime.block_on(client_handle.client.create_identity(label_str)) {
-        Ok(h) => h,
-        Err(e) => return FfiError::from(e).into(),
-    };
+        // Copy to output buffer
+        let bytes = hex_string.as_bytes();
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, bytes.len());
+        *out_buf.add(bytes.len()) = 0;
 
-    // Convert to hex string
-    let hex_string = hash.to_string();
-    let needed = hex_string.len() + 1;
-
-    if out_len < needed {
-        return FfiError::BufferTooSmall {
-            needed,
-            actual: out_len,
-        }
-        .into();
+        ErrorCode::Success
     }
-
-    // Copy to output buffer
-    let bytes = hex_string.as_bytes();
-    std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, bytes.len());
-    *out_buf.add(bytes.len()) = 0;
-
-    ErrorCode::Success
-}}
+}
 
 // ============================================================================
 // Identity Slots
@@ -241,49 +252,56 @@ pub unsafe extern "C" fn veritas_identity_slots(
     out_used: *mut u32,
     out_max: *mut u32,
     out_available: *mut u32,
-) -> ErrorCode { unsafe {
-    // Check null pointers
-    if handle.is_null() {
-        return ErrorCode::NullPointer;
-    }
-    if out_used.is_null() || out_max.is_null() || out_available.is_null() {
-        return ErrorCode::NullPointer;
-    }
+) -> ErrorCode {
+    unsafe {
+        // Check null pointers
+        if handle.is_null() {
+            return ErrorCode::NullPointer;
+        }
+        if out_used.is_null() || out_max.is_null() || out_available.is_null() {
+            return ErrorCode::NullPointer;
+        }
 
-    // Catch panics
-    let result = std::panic::catch_unwind(|| {
-        identity_slots_impl(handle, out_used, out_max, out_available)
-    });
+        // Catch panics
+        let result = std::panic::catch_unwind(|| {
+            identity_slots_impl(handle, out_used, out_max, out_available)
+        });
 
-    match result {
-        Ok(code) => code,
-        Err(_) => ErrorCode::Unknown,
+        match result {
+            Ok(code) => code,
+            Err(_) => ErrorCode::Unknown,
+        }
     }
-}}
+}
 
 unsafe fn identity_slots_impl(
     handle: *mut VeritasHandle,
     out_used: *mut u32,
     out_max: *mut u32,
     out_available: *mut u32,
-) -> ErrorCode { unsafe {
-    let client_handle = match ClientHandle::from_ptr(handle) {
-        Some(h) => h,
-        None => return ErrorCode::NullPointer,
-    };
+) -> ErrorCode {
+    unsafe {
+        let client_handle = match ClientHandle::from_ptr(handle) {
+            Some(h) => h,
+            None => return ErrorCode::NullPointer,
+        };
 
-    // Get slot info using the stored runtime
-    let info = match client_handle.runtime.block_on(client_handle.client.identity_slots()) {
-        Ok(i) => i,
-        Err(e) => return FfiError::from(e).into(),
-    };
+        // Get slot info using the stored runtime
+        let info = match client_handle
+            .runtime
+            .block_on(client_handle.client.identity_slots())
+        {
+            Ok(i) => i,
+            Err(e) => return FfiError::from(e).into(),
+        };
 
-    let slots = IdentitySlots::from_slot_info(&info);
+        let slots = IdentitySlots::from_slot_info(&info);
 
-    // Write outputs
-    *out_used = slots.used;
-    *out_max = slots.max;
-    *out_available = slots.available;
+        // Write outputs
+        *out_used = slots.used;
+        *out_max = slots.max;
+        *out_available = slots.available;
 
-    ErrorCode::Success
-}}
+        ErrorCode::Success
+    }
+}

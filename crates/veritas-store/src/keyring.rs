@@ -35,13 +35,13 @@
 
 use argon2::{Algorithm, Argon2, Params, Version};
 use chrono::Utc;
-use rand::rngs::OsRng;
 use rand::RngCore;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use veritas_crypto::{decrypt, encrypt, SymmetricKey};
+use veritas_crypto::{SymmetricKey, decrypt, encrypt};
 use veritas_identity::{EncryptedIdentityKeyPair, IdentityKeyPair};
 
 use crate::{Result, StoreError};
@@ -268,63 +268,66 @@ impl Keyring {
         match meta_tree
             .get(VERIFICATION_KEY)
             .map_err(|e| StoreError::Database(e.to_string()))?
-        { Some(verification_bytes) => {
-            // Existing keyring - verify password
-            let verification: PasswordVerification = bincode::deserialize(&verification_bytes)
-                .map_err(|e| StoreError::Serialization(e.to_string()))?;
+        {
+            Some(verification_bytes) => {
+                // Existing keyring - verify password
+                let verification: PasswordVerification = bincode::deserialize(&verification_bytes)
+                    .map_err(|e| StoreError::Serialization(e.to_string()))?;
 
-            let password_key = derive_password_key(password, &verification.salt)?;
-            let computed_hash = compute_verification_hash(&password_key.bytes);
+                let password_key = derive_password_key(password, &verification.salt)?;
+                let computed_hash = compute_verification_hash(&password_key.bytes);
 
-            // Constant-time comparison
-            if bool::from(computed_hash.ct_eq(&verification.verification_hash)) {
+                // Constant-time comparison
+                if bool::from(computed_hash.ct_eq(&verification.verification_hash)) {
+                    Ok(Self {
+                        tree,
+                        meta_tree,
+                        password_key,
+                    })
+                } else {
+                    Err(StoreError::InvalidPassword)
+                }
+            }
+            _ => {
+                // New keyring - create with password
+                let mut salt = [0u8; 32];
+                OsRng.fill_bytes(&mut salt);
+
+                let password_key = derive_password_key(password, &salt)?;
+                let verification_hash = compute_verification_hash(&password_key.bytes);
+
+                let verification = PasswordVerification {
+                    salt,
+                    verification_hash,
+                };
+
+                let verification_bytes = bincode::serialize(&verification)
+                    .map_err(|e| StoreError::Serialization(e.to_string()))?;
+
+                meta_tree
+                    .insert(VERIFICATION_KEY, verification_bytes)
+                    .map_err(|e| StoreError::Database(e.to_string()))?;
+
+                // Initialize metadata
+                let metadata = KeyringMetadata::default();
+                let metadata_bytes = bincode::serialize(&metadata)
+                    .map_err(|e| StoreError::Serialization(e.to_string()))?;
+
+                meta_tree
+                    .insert(META_KEY, metadata_bytes)
+                    .map_err(|e| StoreError::Database(e.to_string()))?;
+
+                meta_tree
+                    .flush()
+                    .map_err(|e| StoreError::Database(e.to_string()))?;
+
                 Ok(Self {
                     tree,
                     meta_tree,
                     password_key,
                 })
-            } else {
-                Err(StoreError::InvalidPassword)
             }
-        } _ => {
-            // New keyring - create with password
-            let mut salt = [0u8; 32];
-            OsRng.fill_bytes(&mut salt);
-
-            let password_key = derive_password_key(password, &salt)?;
-            let verification_hash = compute_verification_hash(&password_key.bytes);
-
-            let verification = PasswordVerification {
-                salt,
-                verification_hash,
-            };
-
-            let verification_bytes = bincode::serialize(&verification)
-                .map_err(|e| StoreError::Serialization(e.to_string()))?;
-
-            meta_tree
-                .insert(VERIFICATION_KEY, verification_bytes)
-                .map_err(|e| StoreError::Database(e.to_string()))?;
-
-            // Initialize metadata
-            let metadata = KeyringMetadata::default();
-            let metadata_bytes = bincode::serialize(&metadata)
-                .map_err(|e| StoreError::Serialization(e.to_string()))?;
-
-            meta_tree
-                .insert(META_KEY, metadata_bytes)
-                .map_err(|e| StoreError::Database(e.to_string()))?;
-
-            meta_tree
-                .flush()
-                .map_err(|e| StoreError::Database(e.to_string()))?;
-
-            Ok(Self {
-                tree,
-                meta_tree,
-                password_key,
-            })
-        }}
+        }
     }
 
     /// Change the keyring password.

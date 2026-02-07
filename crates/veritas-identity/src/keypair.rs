@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use veritas_crypto::{
-    decrypt, encrypt, EncryptedData, Hash256, MlDsaKeyPair, MlDsaPrivateKey, MlDsaPublicKey,
-    MlDsaSignature, SharedSecret, SymmetricKey, X25519PublicKey, X25519StaticPrivateKey,
+    EncryptedData, Hash256, MlDsaKeyPair, MlDsaPrivateKey, MlDsaPublicKey, MlDsaSignature,
+    SharedSecret, SymmetricKey, X25519PublicKey, X25519StaticPrivateKey, decrypt, encrypt,
 };
 
 use crate::{IdentityError, IdentityHash, Result};
@@ -69,7 +69,10 @@ mod signing_serde {
     use super::*;
     use serde::{Deserializer, Serializer};
 
-    pub fn serialize<S>(key: &Option<MlDsaPublicKey>, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    pub fn serialize<S>(
+        key: &Option<MlDsaPublicKey>,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -79,15 +82,16 @@ mod signing_serde {
         }
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> std::result::Result<Option<MlDsaPublicKey>, D::Error>
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> std::result::Result<Option<MlDsaPublicKey>, D::Error>
     where
         D: Deserializer<'de>,
     {
         let bytes: Option<Vec<u8>> = Option::deserialize(deserializer)?;
         match bytes {
             Some(b) => {
-                let key = MlDsaPublicKey::from_bytes(&b)
-                    .map_err(serde::de::Error::custom)?;
+                let key = MlDsaPublicKey::from_bytes(&b).map_err(serde::de::Error::custom)?;
                 Ok(Some(key))
             }
             None => Ok(None),
@@ -217,8 +221,8 @@ impl IdentityKeyPair {
         let exchange_public = exchange_private.public_key();
 
         // Generate ML-DSA-65 keypair for post-quantum signing
-        let mldsa_kp = MlDsaKeyPair::generate()
-            .expect("ML-DSA key generation should not fail with OsRng");
+        let mldsa_kp =
+            MlDsaKeyPair::generate().expect("ML-DSA key generation should not fail with OsRng");
         let (signing_priv, signing_pub) = mldsa_kp.into_parts();
 
         let identity_hash = derive_identity_hash(&exchange_public, Some(&signing_pub));
@@ -412,11 +416,10 @@ impl IdentityKeyPair {
         }
 
         // Restore ML-DSA signing key from seed
-        let signing_private: Option<MlDsaPrivateKey> =
-            serializable
-                .signing_private_bytes
-                .as_ref()
-                .and_then(|seed| MlDsaPrivateKey::from_seed(seed).ok());
+        let signing_private: Option<MlDsaPrivateKey> = serializable
+            .signing_private_bytes
+            .as_ref()
+            .and_then(|seed| MlDsaPrivateKey::from_seed(seed).ok());
 
         let identity_hash = encrypted.public_keys.identity_hash();
 
@@ -444,9 +447,8 @@ impl Clone for IdentityKeyPair {
         // SECURITY: Reconstruct private key from bytes rather than cloning,
         // since X25519StaticPrivateKey intentionally does not implement Clone
         // to prevent accidental duplication of secret material (CRYPTO-FIX-3).
-        let exchange_private =
-            X25519StaticPrivateKey::from_bytes(self.exchange_private.as_bytes())
-                .expect("cloning existing valid private key should not fail");
+        let exchange_private = X25519StaticPrivateKey::from_bytes(self.exchange_private.as_bytes())
+            .expect("cloning existing valid private key should not fail");
 
         // Reconstruct ML-DSA key from seed (MlDsaPrivateKey doesn't implement Clone by design)
         let signing_private = self

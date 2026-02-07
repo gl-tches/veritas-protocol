@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use veritas_crypto::{decrypt, encrypt, EncryptedData, Hash256, SymmetricKey};
+use veritas_crypto::{EncryptedData, Hash256, SymmetricKey, decrypt, encrypt};
 use veritas_identity::{IdentityHash, IdentityKeyPair, IdentityPublicKeys};
 
 use crate::error::{ProtocolError, Result};

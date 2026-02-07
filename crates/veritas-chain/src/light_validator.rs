@@ -13,18 +13,13 @@
 use serde::{Deserialize, Serialize};
 
 /// Validator operating mode.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ValidatorMode {
     /// Full validator: holds complete blocks.
+    #[default]
     Full,
     /// Light validator: holds headers + signatures only (no message bodies).
     Light,
-}
-
-impl Default for ValidatorMode {
-    fn default() -> Self {
-        ValidatorMode::Full
-    }
 }
 
 impl std::fmt::Display for ValidatorMode {
@@ -43,7 +38,10 @@ impl std::str::FromStr for ValidatorMode {
         match s {
             "full" | "full-validator" => Ok(ValidatorMode::Full),
             "light" | "light-validator" => Ok(ValidatorMode::Light),
-            _ => Err(format!("invalid validator mode: '{}'. Use 'full-validator' or 'light-validator'", s)),
+            _ => Err(format!(
+                "invalid validator mode: '{}'. Use 'full-validator' or 'light-validator'",
+                s
+            )),
         }
     }
 }
@@ -86,8 +84,8 @@ impl StorageEstimate {
     /// Estimate storage for a given number of transactions.
     pub fn estimate(mode: ValidatorMode, num_transactions: u64, epoch_ended: bool) -> Self {
         let header_size = 100u64; // ~100 bytes per header
-        let body_size = 4096u64;  // ~4KB average padded body
-        let sig_size = 3309u64;   // ML-DSA-65 signature
+        let body_size = 4096u64; // ~4KB average padded body
+        let sig_size = 3309u64; // ML-DSA-65 signature
 
         let headers_bytes = num_transactions * header_size;
 
@@ -129,10 +127,22 @@ mod tests {
 
     #[test]
     fn test_validator_mode_parse() {
-        assert_eq!("full".parse::<ValidatorMode>().unwrap(), ValidatorMode::Full);
-        assert_eq!("full-validator".parse::<ValidatorMode>().unwrap(), ValidatorMode::Full);
-        assert_eq!("light".parse::<ValidatorMode>().unwrap(), ValidatorMode::Light);
-        assert_eq!("light-validator".parse::<ValidatorMode>().unwrap(), ValidatorMode::Light);
+        assert_eq!(
+            "full".parse::<ValidatorMode>().unwrap(),
+            ValidatorMode::Full
+        );
+        assert_eq!(
+            "full-validator".parse::<ValidatorMode>().unwrap(),
+            ValidatorMode::Full
+        );
+        assert_eq!(
+            "light".parse::<ValidatorMode>().unwrap(),
+            ValidatorMode::Light
+        );
+        assert_eq!(
+            "light-validator".parse::<ValidatorMode>().unwrap(),
+            ValidatorMode::Light
+        );
         assert!("invalid".parse::<ValidatorMode>().is_err());
     }
 
@@ -155,7 +165,10 @@ mod tests {
         assert!(est.headers_bytes > 0);
         assert!(est.bodies_bytes > 0);
         assert!(est.signatures_bytes > 0);
-        assert_eq!(est.total_bytes, est.headers_bytes + est.bodies_bytes + est.signatures_bytes);
+        assert_eq!(
+            est.total_bytes,
+            est.headers_bytes + est.bodies_bytes + est.signatures_bytes
+        );
     }
 
     #[test]

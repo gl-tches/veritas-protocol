@@ -362,9 +362,10 @@ mod tests {
         assert_eq!(qr.len(), 64);
 
         // Should be valid lowercase hex
-        assert!(qr
-            .chars()
-            .all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()));
+        assert!(
+            qr.chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_uppercase())
+        );
     }
 
     #[test]

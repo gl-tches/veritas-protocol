@@ -1,7 +1,7 @@
 //! Error handling for Python bindings.
 
-use pyo3::prelude::*;
 use pyo3::exceptions::PyException;
+use pyo3::prelude::*;
 use veritas_core::CoreError;
 
 /// VERITAS error exception for Python.

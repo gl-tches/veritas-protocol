@@ -114,16 +114,14 @@ pub use block::{
 pub use chain::{BlockValidation, Blockchain, ChainState, ForkChoice};
 pub use compression::{BlockCompressor, CompressionMetrics};
 pub use config::{
-    BlockchainConfig, NodeRole, PruningMode, DEFAULT_SLED_CACHE_MB, MAX_HOT_CACHE_BLOCKS,
-    MAX_SLED_CACHE_MB,
+    BlockchainConfig, DEFAULT_SLED_CACHE_MB, MAX_HOT_CACHE_BLOCKS, MAX_SLED_CACHE_MB, NodeRole,
+    PruningMode,
 };
-pub use epoch::{EpochManager, PruneResult, EPOCH_DURATION_SECS, MIN_EPOCH};
+pub use epoch::{EPOCH_DURATION_SECS, EpochManager, MIN_EPOCH, PruneResult};
 pub use error::{ChainError, Result};
 pub use light_validator::{LightValidatorConfig, StorageEstimate, ValidatorMode};
 pub use managed_chain::{IndexRebuildStats, ManagedBlockchain, ManagedMemoryMetrics};
 
-#[cfg(feature = "sled-storage")]
-pub use sled_backend::{SledBackend, UsernameIndexMeta};
 pub use lazy_loader::{LazyBlockLoader, LoaderMetrics};
 pub use memory::{MemoryBudget, MemoryMetrics};
 pub use merkle::{Direction, MerkleProof, MerkleTree};
@@ -131,10 +129,12 @@ pub use pruner::{ChainPruner, PruningStats};
 pub use slashing::{
     SlaViolationType, SlashResult, SlashingConfig, SlashingManager, SlashingOffense,
 };
+#[cfg(feature = "sled-storage")]
+pub use sled_backend::{SledBackend, UsernameIndexMeta};
 pub use storage::{InMemoryBackend, MetricsBackend, SharedBackend, StorageBackend, StorageMetrics};
 pub use sync::{
-    PendingRequest, SyncAction, SyncManager, SyncMessage, SyncState,
     DEFAULT_MAX_BLOCKS_PER_REQUEST, DEFAULT_MAX_HEADERS_PER_REQUEST, DEFAULT_REQUEST_TIMEOUT_MS,
+    PendingRequest, SyncAction, SyncManager, SyncMessage, SyncState,
 };
 pub use transaction::{EncryptedBody, MessageHeader, MessageTransaction, Transaction};
 pub use validator::{

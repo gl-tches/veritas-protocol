@@ -1590,13 +1590,7 @@ mod tests {
         // ==================== Test: Block with empty signature is rejected ====================
         #[test]
         fn test_empty_signature_rejected() {
-            let mut block = Block::new(
-                test_hash(1),
-                1,
-                1700000001,
-                vec![],
-                test_identity(2),
-            );
+            let mut block = Block::new(test_hash(1), 1, 1700000001, vec![], test_identity(2));
 
             // Set pubkey but leave signature empty
             block.header.validator_pubkey = vec![1, 2, 3, 4]; // Fake pubkey
@@ -1609,13 +1603,7 @@ mod tests {
         // ==================== Test: Block with empty pubkey is rejected ====================
         #[test]
         fn test_empty_pubkey_rejected() {
-            let mut block = Block::new(
-                test_hash(1),
-                1,
-                1700000001,
-                vec![],
-                test_identity(2),
-            );
+            let mut block = Block::new(test_hash(1), 1, 1700000001, vec![], test_identity(2));
 
             // Set signature but leave pubkey empty
             block.header.signature = vec![1, 2, 3, 4]; // Fake signature
@@ -1628,13 +1616,7 @@ mod tests {
         // ==================== Test: Forged block with invalid signature rejected ====================
         #[test]
         fn test_forged_block_invalid_signature_rejected() {
-            let mut block = Block::new(
-                test_hash(1),
-                1,
-                1700000001,
-                vec![],
-                test_identity(2),
-            );
+            let mut block = Block::new(test_hash(1), 1, 1700000001, vec![], test_identity(2));
 
             // Attacker tries to forge by adding fake pubkey and signature
             // that don't actually verify
@@ -1650,13 +1632,8 @@ mod tests {
         // ==================== Test: Signing payload is deterministic ====================
         #[test]
         fn test_signing_payload_deterministic() {
-            let header = BlockHeader::new(
-                test_hash(1),
-                1,
-                1700000001,
-                test_hash(3),
-                test_identity(2),
-            );
+            let header =
+                BlockHeader::new(test_hash(1), 1, 1700000001, test_hash(3), test_identity(2));
 
             let payload1 = header.compute_signing_payload();
             let payload2 = header.compute_signing_payload();
@@ -1667,13 +1644,8 @@ mod tests {
         // ==================== Test: Different blocks have different signing payloads ====================
         #[test]
         fn test_different_blocks_different_payloads() {
-            let header1 = BlockHeader::new(
-                test_hash(1),
-                1,
-                1700000001,
-                test_hash(3),
-                test_identity(2),
-            );
+            let header1 =
+                BlockHeader::new(test_hash(1), 1, 1700000001, test_hash(3), test_identity(2));
 
             let header2 = BlockHeader::new(
                 test_hash(1),
@@ -1692,13 +1664,7 @@ mod tests {
         // ==================== Test: has_signature() helper ====================
         #[test]
         fn test_has_signature_helper() {
-            let mut block = Block::new(
-                test_hash(1),
-                1,
-                1700000001,
-                vec![],
-                test_identity(2),
-            );
+            let mut block = Block::new(test_hash(1), 1, 1700000001, vec![], test_identity(2));
 
             // Initially no signature
             assert!(!block.has_signature());
@@ -1715,13 +1681,8 @@ mod tests {
         // ==================== Test: Signing payload includes domain separator ====================
         #[test]
         fn test_signing_payload_includes_domain() {
-            let header = BlockHeader::new(
-                test_hash(1),
-                1,
-                1700000001,
-                test_hash(3),
-                test_identity(2),
-            );
+            let header =
+                BlockHeader::new(test_hash(1), 1, 1700000001, test_hash(3), test_identity(2));
 
             let payload = header.compute_signing_payload();
 
@@ -1733,13 +1694,7 @@ mod tests {
         #[test]
         fn test_verify_with_signature_full_check() {
             // Create a valid unsigned block
-            let mut block = Block::new(
-                test_hash(1),
-                1,
-                1700000001,
-                vec![],
-                test_identity(2),
-            );
+            let mut block = Block::new(test_hash(1), 1, 1700000001, vec![], test_identity(2));
 
             // Basic verify() should pass (hash and merkle are correct)
             assert!(block.verify().is_ok());
@@ -1770,13 +1725,7 @@ mod tests {
         // ==================== Test: Tampered block hash fails verification ====================
         #[test]
         fn test_tampered_hash_fails_signature_verification() {
-            let mut block = Block::new(
-                test_hash(1),
-                1,
-                1700000001,
-                vec![],
-                test_identity(2),
-            );
+            let mut block = Block::new(test_hash(1), 1, 1700000001, vec![], test_identity(2));
 
             // Add fake signature data
             block.header.validator_pubkey = vec![0u8; 50];
@@ -1815,13 +1764,7 @@ mod tests {
         // ==================== Test: Serialization preserves signature fields ====================
         #[test]
         fn test_serialization_preserves_signature_fields() {
-            let mut block = Block::new(
-                test_hash(1),
-                1,
-                1700000001,
-                vec![],
-                test_identity(2),
-            );
+            let mut block = Block::new(test_hash(1), 1, 1700000001, vec![], test_identity(2));
 
             // Add test signature data
             block.header.validator_pubkey = vec![1, 2, 3, 4, 5];
@@ -1839,13 +1782,7 @@ mod tests {
         // ==================== Test: Empty signature fields in new blocks ====================
         #[test]
         fn test_new_block_has_empty_signature_fields() {
-            let block = Block::new(
-                test_hash(1),
-                1,
-                1700000001,
-                vec![],
-                test_identity(2),
-            );
+            let block = Block::new(test_hash(1), 1, 1700000001, vec![], test_identity(2));
 
             assert!(block.header.validator_pubkey.is_empty());
             assert!(block.header.signature.is_empty());

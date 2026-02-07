@@ -20,7 +20,9 @@ mod lifecycle {
 
     /// Helper to create a test client with in-memory storage.
     async fn test_client() -> VeritasClient {
-        VeritasClient::in_memory().await.expect("Failed to create in-memory client")
+        VeritasClient::in_memory()
+            .await
+            .expect("Failed to create in-memory client")
     }
 
     #[tokio::test]
@@ -126,7 +128,10 @@ mod lifecycle {
 
         // All operations should fail with NotInitialized
         let identity_hash_result = client.identity_hash().await;
-        assert!(matches!(identity_hash_result, Err(CoreError::NotInitialized)));
+        assert!(matches!(
+            identity_hash_result,
+            Err(CoreError::NotInitialized)
+        ));
 
         let public_keys_result = client.public_keys().await;
         assert!(matches!(public_keys_result, Err(CoreError::NotInitialized)));
@@ -235,7 +240,9 @@ mod identity {
     use super::*;
 
     async fn test_client() -> VeritasClient {
-        VeritasClient::in_memory().await.expect("Failed to create in-memory client")
+        VeritasClient::in_memory()
+            .await
+            .expect("Failed to create in-memory client")
     }
 
     #[tokio::test]
@@ -462,7 +469,10 @@ mod safety_numbers {
 
         assert_eq!(alice_computes, bob_computes);
         assert_eq!(alice_computes.as_bytes(), bob_computes.as_bytes());
-        assert_eq!(alice_computes.to_numeric_string(), bob_computes.to_numeric_string());
+        assert_eq!(
+            alice_computes.to_numeric_string(),
+            bob_computes.to_numeric_string()
+        );
         assert_eq!(alice_computes.to_qr_string(), bob_computes.to_qr_string());
     }
 
@@ -525,7 +535,10 @@ mod safety_numbers {
         assert_eq!(qr.len(), 64);
 
         // All characters should be lowercase hex
-        assert!(qr.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+        assert!(
+            qr.chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+        );
     }
 
     #[test]
@@ -725,9 +738,7 @@ mod config {
 
     #[test]
     fn test_config_validation_invalid_decay_rate_negative() {
-        let config = ClientConfigBuilder::new()
-            .with_decay_rate(-1.0)
-            .build();
+        let config = ClientConfigBuilder::new().with_decay_rate(-1.0).build();
 
         let result = config.validate();
         assert!(result.is_err());
@@ -735,9 +746,7 @@ mod config {
 
     #[test]
     fn test_config_validation_invalid_decay_rate_over_100() {
-        let config = ClientConfigBuilder::new()
-            .with_decay_rate(101.0)
-            .build();
+        let config = ClientConfigBuilder::new().with_decay_rate(101.0).build();
 
         let result = config.validate();
         assert!(result.is_err());
@@ -977,7 +986,10 @@ mod display {
     async fn test_client_debug_no_sensitive_data() {
         let client = VeritasClient::in_memory().await.unwrap();
         client.unlock(b"secret_password").await.unwrap();
-        client.create_identity(Some("Sensitive Label")).await.unwrap();
+        client
+            .create_identity(Some("Sensitive Label"))
+            .await
+            .unwrap();
 
         let debug = format!("{:?}", client);
 

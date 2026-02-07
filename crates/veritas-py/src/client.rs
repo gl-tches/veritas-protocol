@@ -72,13 +72,15 @@ impl VeritasClient {
         let runtime = Runtime::new()
             .map_err(|e| VeritasError::new_err(veritas_core::CoreError::Config(e.to_string())))?;
 
-        let inner = runtime.block_on(async {
-            if let Some(p) = path {
-                CoreClient::with_data_dir(p).await
-            } else {
-                CoreClient::in_memory().await
-            }
-        }).map_err(|e| e.into_py_err())?;
+        let inner = runtime
+            .block_on(async {
+                if let Some(p) = path {
+                    CoreClient::with_data_dir(p).await
+                } else {
+                    CoreClient::in_memory().await
+                }
+            })
+            .map_err(|e| e.into_py_err())?;
 
         Ok(Self {
             inner: Arc::new(inner),
@@ -124,7 +126,8 @@ impl VeritasClient {
     ///     >>> # Later, unlock again
     ///     >>> client.unlock(b"my_secure_password")
     fn lock(&self) -> PyResult<()> {
-        self.runtime.block_on(async { self.inner.lock().await })
+        self.runtime
+            .block_on(async { self.inner.lock().await })
             .map_err(|e| e.into_py_err())?;
         Ok(())
     }
@@ -161,7 +164,8 @@ impl VeritasClient {
     ///     >>> if client.is_unlocked():
     ///     ...     print("Client is ready")
     fn is_unlocked(&self) -> bool {
-        self.runtime.block_on(async { self.inner.is_unlocked().await })
+        self.runtime
+            .block_on(async { self.inner.is_unlocked().await })
     }
 
     /// Get the current client state.
@@ -286,9 +290,9 @@ impl VeritasClient {
     fn set_primary_identity(&self, hash: &str) -> PyResult<()> {
         let identity_hash = IdentityHash::from_hex(hash)
             .map_err(|e: veritas_identity::IdentityError| VeritasError::new_err(e.into()))?;
-        self.runtime.block_on(async {
-            self.inner.set_primary_identity(&identity_hash).await
-        }).map_err(|e| e.into_py_err())?;
+        self.runtime
+            .block_on(async { self.inner.set_primary_identity(&identity_hash).await })
+            .map_err(|e| e.into_py_err())?;
         Ok(())
     }
 

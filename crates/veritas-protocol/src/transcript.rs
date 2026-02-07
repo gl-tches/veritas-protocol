@@ -79,12 +79,7 @@ mod tests {
 
     #[test]
     fn test_transcript_binding_serialization() {
-        let binding = TranscriptBinding::new(
-            test_identity(),
-            test_identity(),
-            [0xBB; 32],
-            42,
-        );
+        let binding = TranscriptBinding::new(test_identity(), test_identity(), [0xBB; 32], 42);
         let bytes = binding.to_bytes();
         assert_eq!(bytes.len(), 32 + 32 + 32 + 8); // 104 bytes
     }
@@ -98,12 +93,7 @@ mod tests {
 
     #[test]
     fn test_counter_increment() {
-        let mut binding = TranscriptBinding::new(
-            test_identity(),
-            test_identity(),
-            [0; 32],
-            0,
-        );
+        let mut binding = TranscriptBinding::new(test_identity(), test_identity(), [0; 32], 0);
         assert_eq!(binding.next_counter(), 1);
         assert_eq!(binding.next_counter(), 2);
         assert_eq!(binding.counter, 2);

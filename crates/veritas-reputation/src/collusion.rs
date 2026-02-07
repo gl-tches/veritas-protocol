@@ -143,16 +143,32 @@ impl CollusionDetector {
 
     /// Get the interaction count between two identities (bidirectional).
     fn get_interaction_count(&self, a: &IdentityHash, b: &IdentityHash) -> u32 {
-        let ab = self.interactions.get(&(*a, *b)).map(|r| r.count).unwrap_or(0);
-        let ba = self.interactions.get(&(*b, *a)).map(|r| r.count).unwrap_or(0);
+        let ab = self
+            .interactions
+            .get(&(*a, *b))
+            .map(|r| r.count)
+            .unwrap_or(0);
+        let ba = self
+            .interactions
+            .get(&(*b, *a))
+            .map(|r| r.count)
+            .unwrap_or(0);
         ab + ba
     }
 
     /// Calculate symmetry score between two identities.
     /// 1.0 = perfectly symmetric (equal A->B and B->A)
     fn calculate_symmetry(&self, a: &IdentityHash, b: &IdentityHash) -> f32 {
-        let ab = self.interactions.get(&(*a, *b)).map(|r| r.count).unwrap_or(0) as f32;
-        let ba = self.interactions.get(&(*b, *a)).map(|r| r.count).unwrap_or(0) as f32;
+        let ab = self
+            .interactions
+            .get(&(*a, *b))
+            .map(|r| r.count)
+            .unwrap_or(0) as f32;
+        let ba = self
+            .interactions
+            .get(&(*b, *a))
+            .map(|r| r.count)
+            .unwrap_or(0) as f32;
 
         if ab == 0.0 && ba == 0.0 {
             return 0.0;
@@ -161,11 +177,7 @@ impl CollusionDetector {
         let min = ab.min(ba);
         let max = ab.max(ba);
 
-        if max == 0.0 {
-            0.0
-        } else {
-            min / max
-        }
+        if max == 0.0 { 0.0 } else { min / max }
     }
 
     /// Find connected components in the interaction graph.
@@ -294,8 +306,8 @@ impl CollusionDetector {
             0.0
         };
 
-        let suspicion_score = (density_factor * 0.4 + symmetry_factor * 0.3 + external_factor * 0.3)
-            .clamp(0.0, 1.0);
+        let suspicion_score =
+            (density_factor * 0.4 + symmetry_factor * 0.3 + external_factor * 0.3).clamp(0.0, 1.0);
 
         // Only flag clusters with significant suspicion
         if suspicion_score < 0.3 {
