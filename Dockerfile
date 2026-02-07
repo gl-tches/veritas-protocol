@@ -33,6 +33,8 @@ ENV CARGO_BUILD_JOBS=2
 ENV CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
 # Use less memory-intensive linker settings
 ENV RUSTFLAGS="-C link-arg=-Wl,--no-keep-memory"
+# ML-DSA-65 operations require 16MB stack
+ENV RUST_MIN_STACK=16777216
 
 # Copy manifests first for better layer caching
 COPY --chown=builder:builder Cargo.toml Cargo.lock ./
@@ -121,6 +123,7 @@ ENV VERITAS_DATA_DIR=/var/lib/veritas \
     VERITAS_RELAY_MODE=true \
     VERITAS_VALIDATOR_MODE=false \
     VERITAS_MAX_CONNECTIONS=1000 \
+    RUST_MIN_STACK=16777216 \
     RUST_BACKTRACE=1
 
 # Expose ports

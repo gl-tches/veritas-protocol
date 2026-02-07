@@ -27,7 +27,7 @@ veritas-node [OPTIONS]
 -d, --data-dir <PATH>
     Path to data directory for blockchain, messages, and keys.
 
-    Default: /var/lib/veritas
+    Default: ~/.local/share/veritas
     Env: VERITAS_DATA_DIR
 
 -l, --listen-addr <MULTIADDR>
@@ -161,7 +161,7 @@ All options can be set via environment variables:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `VERITAS_DATA_DIR` | Data directory | `/var/lib/veritas` |
+| `VERITAS_DATA_DIR` | Data directory | `~/.local/share/veritas` |
 | `VERITAS_LISTEN_ADDR` | P2P listen address | `/ip4/0.0.0.0/tcp/9000` |
 | `VERITAS_WS_ADDR` | WebSocket address | None |
 | `VERITAS_BOOTSTRAP_NODES` | Bootstrap nodes | None |

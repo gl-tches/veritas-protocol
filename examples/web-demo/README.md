@@ -14,7 +14,7 @@ A browser-based demonstration of the VERITAS Protocol WASM bindings. This demo s
 
 ## Prerequisites
 
-1. **Rust toolchain** (1.70+)
+1. **Rust toolchain** (1.85+)
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    ```

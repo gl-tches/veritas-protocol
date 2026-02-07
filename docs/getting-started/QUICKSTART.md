@@ -66,7 +66,7 @@ curl http://localhost:8080/ready
 
 ```toml
 [dependencies]
-veritas-core = "0.3.0-beta"
+veritas-core = "0.4.0-beta"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -134,10 +134,11 @@ python3 -m http.server 8000
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VERITAS_DATA_DIR` | `/var/lib/veritas` | Data storage directory |
+| `VERITAS_DATA_DIR` | `~/.local/share/veritas` | Data storage directory |
 | `VERITAS_LISTEN_ADDR` | `/ip4/0.0.0.0/tcp/9000` | P2P listen address |
 | `VERITAS_LOG_LEVEL` | `info` | Log level (trace, debug, info, warn, error) |
 | `VERITAS_HEALTH_PORT` | `8080` | Health check HTTP port |
+| `RUST_MIN_STACK` | `16777216` | Minimum stack size (16MB, required for ML-DSA) |
 
 ## What's Next?
 
@@ -172,12 +173,10 @@ lsof -i :9000
 ### Permission Denied
 
 ```bash
-# Create data directory with proper permissions
-sudo mkdir -p /var/lib/veritas
-sudo chown $USER:$USER /var/lib/veritas
-
-# Or use a local directory
-./target/release/veritas-node --data-dir ./my-data
+# The default data directory is ~/.local/share/veritas (user-writable)
+# If using a custom directory, ensure proper permissions:
+mkdir -p /path/to/custom/data
+./target/release/veritas-node --data-dir /path/to/custom/data
 ```
 
 For more help, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

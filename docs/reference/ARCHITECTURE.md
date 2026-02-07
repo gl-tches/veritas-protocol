@@ -2,8 +2,8 @@
 
 System architecture, design decisions, and data flow for the VERITAS Protocol.
 
-**Version**: v0.3.0-beta
-**Last Updated**: 2026-02-01
+**Version**: v0.4.0-beta
+**Last Updated**: 2026-02-07
 **Edition**: Rust 2024
 **MSRV**: 1.85
 
@@ -89,6 +89,35 @@ Key security fixes include:
 - `veritas-net/src/subnet_limiter.rs` - DHT eclipse attack prevention
 - `veritas-reputation/src/proof.rs` - Interaction proofs
 - `veritas-core/src/time.rs` - Trusted time validation
+
+### v0.3.1-beta (2026-02-05)
+
+**Milestone 1: Critical Code Fixes** — ~60 bugs fixed across 12 crates (44 files changed).
+
+- 1 CRITICAL, 16 HIGH, ~23 MEDIUM, ~20 LOW severity fixes
+- Node binary now fully functional with P2P networking
+- Default data directory changed to `~/.local/share/veritas`
+- All 1,549 tests pass
+
+### v0.4.0-beta (2026-02-07)
+
+**Milestone 2: Wire Format v2 + ML-DSA Signing**
+
+- **ML-DSA-65 (FIPS 204)**: Real post-quantum signing replaces all placeholder HMAC-BLAKE3
+- **Wire Format v2**: MAX_ENVELOPE_SIZE 8192, padding buckets [1024,2048,4096,8192], protocol version and cipher suite fields
+- **Chain-as-Transport**: Messages are on-chain transactions — the blockchain IS the delivery mechanism
+- **Epoch Pruning**: 30-day epochs, bodies+signatures pruned, headers permanent
+- **Light Validator**: Header-only sync, 256MB RAM target
+- **Reputation Rebalance**: Starting score 100, asymmetric decay
+
+#### New Modules
+
+- `veritas-protocol/src/domain_separation.rs` - Structured domain separation
+- `veritas-protocol/src/transcript.rs` - Transcript binding for HKDF
+- `veritas-protocol/src/wire_error.rs` - Generic wire error codes
+- `veritas-chain/src/transaction.rs` - Message transactions
+- `veritas-chain/src/epoch.rs` - Epoch management and pruning
+- `veritas-chain/src/light_validator.rs` - Light validator sync + storage
 
 ---
 

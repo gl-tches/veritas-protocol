@@ -34,7 +34,7 @@ VERITAS supports three configuration methods (in order of precedence):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VERITAS_DATA_DIR` | `/var/lib/veritas` | Data storage directory |
+| `VERITAS_DATA_DIR` | `~/.local/share/veritas` | Data storage directory |
 | `VERITAS_CONFIG_FILE` | None | Path to configuration file |
 
 ### Network Settings
@@ -78,7 +78,7 @@ Options:
   -d, --data-dir <PATH>
           Path to data directory
           [env: VERITAS_DATA_DIR]
-          [default: /var/lib/veritas]
+          [default: ~/.local/share/veritas]
 
   -l, --listen-addr <MULTIADDR>
           Listen address for P2P connections
@@ -364,12 +364,12 @@ veritas-node --bootstrap-nodes "/dns4/bootstrap1.veritas.network/tcp/9000/p2p/12
 ### Data Directory Structure
 
 ```
-/var/lib/veritas/
-├── blockchain/         # Blockchain data
-├── messages/           # Message queue
-├── identities/         # Identity keyrings
-├── peers/              # Peer information
-└── node-identity.key   # Node identity (auto-generated)
+~/.local/share/veritas/      # Default on Linux/macOS
+├── blockchain/               # Blockchain data (headers, transactions, epochs)
+├── messages/                 # Message queue
+├── identities/               # Identity keyrings
+├── peers/                    # Peer information
+└── node-identity.key         # Node identity (auto-generated)
 ```
 
 ### Database Encryption
@@ -725,8 +725,8 @@ These constants define security boundaries for the VERITAS protocol. They are en
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `MAX_ENVELOPE_SIZE` | 2048 bytes | Maximum serialized envelope size |
-| `MAX_INNER_ENVELOPE_SIZE` | 1536 bytes | Maximum inner payload size |
+| `MAX_ENVELOPE_SIZE` | 8192 bytes | Maximum serialized envelope size |
+| `MAX_INNER_ENVELOPE_SIZE` | 1536 bytes | Maximum inner payload size (pre-padding) |
 | `MAX_REASSEMBLY_BUFFER` | 4096 bytes | Maximum chunk reassembly buffer |
 | `MAX_PENDING_REASSEMBLIES` | 1000 | Maximum concurrent reassembly sessions |
 | `REASSEMBLY_TIMEOUT_SECS` | 300 (5 min) | Timeout for incomplete reassembly |
@@ -737,9 +737,9 @@ These constants define security boundaries for the VERITAS protocol. They are en
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `PADDING_BUCKETS` | [256, 512, 1024] | Message padding sizes |
+| `PADDING_BUCKETS` | [1024, 2048, 4096, 8192] | Message padding sizes |
 | `MAX_JITTER_MS` | 3000 (3 sec) | Maximum timing jitter |
-| `EPOCH_DURATION_SECS` | 86400 (1 day) | Mailbox key rotation interval |
+| `EPOCH_DURATION_SECS` | 2592000 (30 days) | Epoch duration for pruning |
 
 ### Identity Limits
 
@@ -765,7 +765,7 @@ max_chunks_per_message = 3
 message_ttl_secs = 604800
 
 # DoS prevention
-max_envelope_size = 2048
+max_envelope_size = 8192
 max_inner_envelope_size = 1536
 
 # Identity limits
@@ -972,7 +972,7 @@ The reputation system tracks peer behavior and prevents gaming through rate limi
 
 | Threshold | Value | Description |
 |-----------|-------|-------------|
-| `REPUTATION_START` | 500 | Initial reputation for new identities |
+| `REPUTATION_START` | 100 | Initial reputation for new identities |
 | `REPUTATION_MAX` | 1000 | Maximum possible reputation |
 | `REPUTATION_QUARANTINE` | 200 | Below this, messages may be delayed |
 | `REPUTATION_BLACKLIST` | 50 | Below this, messages are rejected |

@@ -2,8 +2,8 @@
 
 Threat model, cryptographic design, security audit results, and best practices for the VERITAS Protocol.
 
-**Version**: v0.3.0-beta
-**Security Status**: All 90 vulnerabilities remediated
+**Version**: v0.4.0-beta
+**Security Status**: All 90 vulnerabilities remediated + ML-DSA-65 signing fully operational
 **Last Audit**: 2026-01-29 to 2026-01-31
 
 ## Table of Contents

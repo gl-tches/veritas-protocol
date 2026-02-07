@@ -1,6 +1,6 @@
 # VERITAS Protocol
 
-[![Version](https://img.shields.io/badge/version-0.3.0--beta-blue)]()
+[![Version](https://img.shields.io/badge/version-0.4.0--beta-blue)]()
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange)]()
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-green)]()
 [![Security Audit](https://img.shields.io/badge/security-audited-brightgreen)]()
@@ -107,74 +107,86 @@ This project follows security-first principles:
 ## Crate Structure
 
 ```
-veritas/
+veritas-protocol/
 ├── Cargo.toml                    # Workspace root
 ├── crates/
-│   ├── veritas-crypto/           # Cryptographic primitives
+│   ├── veritas-crypto/           # Cryptographic primitives (ML-KEM, ML-DSA, X25519, ChaCha20)
 │   ├── veritas-identity/         # DID and username system
-│   ├── veritas-protocol/         # Wire protocol and messages
-│   ├── veritas-chain/            # Blockchain layer
-│   ├── veritas-net/              # P2P networking
-│   ├── veritas-store/            # Local encrypted storage
-│   ├── veritas-reputation/       # Reputation scoring
+│   ├── veritas-protocol/         # Wire protocol v2 and messages
+│   ├── veritas-chain/            # Blockchain layer (transactions, epochs, light validators)
+│   ├── veritas-net/              # P2P networking (libp2p, gossip, DHT)
+│   ├── veritas-store/            # Local encrypted storage (sled)
+│   ├── veritas-reputation/       # Reputation scoring and collusion detection
 │   ├── veritas-core/             # High-level API
-│   ├── veritas-ffi/              # C bindings
-│   ├── veritas-wasm/             # WASM bindings
-│   └── veritas-py/               # Python bindings
+│   ├── veritas-ffi/              # C bindings (cbindgen)
+│   ├── veritas-wasm/             # WASM bindings (wasm-pack)
+│   ├── veritas-py/               # Python bindings (PyO3)
+│   └── veritas-node/             # Standalone node daemon
 ├── examples/
-└── tests/
+│   ├── cli-chat/                 # CLI chat example
+│   └── web-demo/                 # Browser WASM demo
+└── fuzz/                         # Fuzzing targets (8 harnesses)
 ```
 
 ## Protocol Limits
 
-|Parameter              |Value              |
-|-----------------------|-------------------|
-|Max message size       |300 characters     |
-|Max chunks per message |3 (900 chars total)|
-|Message TTL            |7 days             |
-|Key expiry             |30 days inactive   |
-|Max offline duration   |30 days            |
-|Username length        |3-32 characters    |
-|Username charset       |`[a-z0-9_]`        |
-|Max group size         |100 members        |
-|Max groups per identity|50                 |
-|Group key rotation     |7 days             |
+|Parameter              |Value                |
+|-----------------------|---------------------|
+|Max message size       |300 characters       |
+|Max chunks per message |3 (900 chars total)  |
+|Max envelope size      |8,192 bytes          |
+|Message TTL            |7 days               |
+|Epoch duration         |30 days              |
+|Key expiry             |30 days inactive     |
+|Username length        |3-32 characters      |
+|Username charset       |`[a-z0-9_]`          |
+|Padding buckets        |1024/2048/4096/8192  |
+|Max group size         |100 members          |
+|Max groups per identity|50                   |
+|Group key rotation     |7 days               |
+|ML-DSA-65 public key   |1,952 bytes          |
+|ML-DSA-65 signature    |3,309 bytes          |
+|Starting reputation    |100                  |
 
 ## Message Delivery
 
-VERITAS uses a hybrid Gossip + DHT delivery model with **network-first** transport selection:
+VERITAS uses a **chain-as-transport** model — every encrypted message is submitted as a transaction on the VERITAS blockchain. The chain provides ordering, integrity, delivery guarantees, and proof of communication.
 
-1. **Check Network** — Always attempt internet connectivity first
-1. **DHT Storage** — Store encrypted message in distributed hash table
-1. **Gossip** — Announce message availability to network
-1. **Local Relay** — If no internet, use WiFi/mDNS to find connected peers
-1. **Bluetooth Relay** — Last resort, find BLE peers to relay to network
-1. **Queue Locally** — No connectivity, store for later transmission
+### Message Flow
 
-### Transport Priority (Network First)
+1. **Submit to Trusted Validator** — Client submits message transaction to a trusted validator via internet
+2. **Fallback Validators** — If primary validators are unavailable, try trusted peers (3-line trust fallback)
+3. **Bluetooth Relay** — Last resort (future, v2.0): BLE mesh hops until a device with internet submits to a validator
+4. **Queue Locally** — No connectivity: queue locally, warn user to review validator list
+
+### Transport Priority
 
 ```
-┌─────────────────────────────────────────────────┐
-│ 1. Check Internet → Use libp2p/DHT              │
-│         ↓ (offline)                             │
-│ 2. Check Local WiFi → Relay via mDNS peer      │
-│         ↓ (no peers)                            │
-│ 3. Scan Bluetooth → Relay via BLE peer         │
-│         ↓ (no peers)                            │
-│ 4. Queue locally → Send when connected         │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│ 1. Trusted Validator → Submit transaction via TCP   │
+│         ↓ (unreachable)                             │
+│ 2. Fallback Validators → 3-line trust chain         │
+│         ↓ (all unreachable)                         │
+│ 3. Bluetooth Relay → BLE mesh to chain (future)     │
+│         ↓ (no peers)                                │
+│ 4. Queue locally → Send when connected              │
+└─────────────────────────────────────────────────────┘
 ```
 
-### Bluetooth as Pure Relay
+### Epoch-Based Pruning (30-Day Retention)
+
+Messages live on-chain for one epoch (30 days). After the epoch ends, message bodies and signatures are pruned — only headers remain permanently, verifiable via Merkle proofs against signed block headers. This is a deliberate privacy feature.
+
+### Bluetooth as Pure Relay (Future — v2.0)
 
 - **No PIN verification** — BLE is transport only, not a security boundary
 - **No pairing required** — Any VERITAS node can relay
 - **Security via E2E encryption** — Content protected regardless of transport
-- **Relay purpose** — Forward messages to network-connected nodes
+- **Relay purpose** — Get messages back onto the chain, not offline chat
 
 ### Contact Requirement
 
-**You must know someone’s identity hash to contact them.** There is no user discovery mechanism. This is intentional:
+**You must know someone's identity hash to contact them.** There is no user discovery mechanism. This is intentional:
 
 - Prevents spam/unsolicited messages
 - No directory to scrape
@@ -192,7 +204,7 @@ VERITAS is designed to leak **minimal identifiable metadata**:
 |Mailbox Key  |Derived pseudonym|❌ Rotates per epoch    |
 |Ephemeral Key|Single-use       |❌ New per message      |
 |Nonce        |Random           |❌ No information       |
-|Payload Size |Fixed buckets    |❌ Padded (256/512/1024)|
+|Payload Size |Fixed buckets    |❌ Padded (1024/2048/4096/8192)|
 
 ### What’s Hidden (Inside Encrypted Payload)
 
@@ -233,25 +245,34 @@ VERITAS is designed to leak **minimal identifiable metadata**:
 
 ## Blockchain
 
-VERITAS includes a purpose-built blockchain for message proofs:
+VERITAS uses a purpose-built blockchain as the **message transport layer** — every encrypted message is a transaction:
 
 - **Consensus**: Proof of Authority (PoA) with rotating validators
-- **Content**: Message hashes, delivery receipts, identity registrations (NOT message content)
+- **Content**: Encrypted message transactions, identity registrations, key rotations, reputation changes
 - **Proofs**: Merkle tree proofs for efficient verification
-- **Sync**: Offline nodes catch up via sync protocol
+- **Sync**: Header-only sync for light validators, full sync for validators
+- **Epoch Pruning**: After 30 days, message bodies + signatures are pruned; headers remain permanently
 
-### What’s Stored On-Chain
+### What's Stored On-Chain
 
-- Message hash + sender + recipient + timestamp (proof of existence)
-- Delivery receipt hashes (proof of delivery)
+- **Message transactions**: Encrypted body + ML-DSA signature + header (body/sig pruned after epoch)
+- **Permanent headers**: Mailbox key, timestamp bucket, body hash, block height
 - Identity registrations and state changes
 - Username claims and links
-- Group metadata (encrypted)
+- Key rotations and revocations
 - Reputation score updates
+- Image transfer proofs (hash + delivery receipt, not the image itself)
+
+### Two Validator Tiers
+
+| Tier | Stores | Purpose |
+|------|--------|---------|
+| **Full Validator** | Complete blocks (headers + bodies + signatures) | Consensus, block production |
+| **Light Validator** | Headers + signatures only (256MB RAM target) | Transaction validation during epoch |
 
 ## Reputation System
 
-Nodes earn reputation for good behavior:
+Nodes earn reputation for good behavior. **Starting score is 100** (Tier 1 / Basic).
 
 |Action                        |Score Change   |
 |------------------------------|---------------|
@@ -274,6 +295,11 @@ Nodes earn reputation for good behavior:
 |< 200|Quarantine                          |
 |< 50 |Blacklisted                         |
 
+### Asymmetric Decay
+
+- **Above 500**: Decays toward 500 (baseline)
+- **Below 500**: Decays toward 0 (bad actors lose reputation permanently)
+
 ### Anti-Gaming Measures
 
 VERITAS implements comprehensive anti-gaming protections:
@@ -292,7 +318,7 @@ VERITAS uses Proof-of-Stake style validator selection with strict SLA requiremen
 
 |Requirement           |Value               |
 |----------------------|--------------------|
-|Minimum stake         |700 reputation      |
+|Minimum reputation    |700 reputation      |
 |Stake lock period     |14 epochs (~2 weeks)|
 |Cooldown after leaving|7 epochs            |
 |Geographic diversity  |Max 5 per region    |
@@ -393,8 +419,8 @@ client.send_group_message(&group, "Hello everyone!").await?;
 
 ```bash
 # Clone repository
-git clone https://github.com/[user]/veritas.git
-cd veritas
+git clone https://github.com/gl-tches/veritas-protocol.git
+cd veritas-protocol
 
 # Install Rust (if needed)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -402,8 +428,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 # Build all crates
 cargo build --release
 
-# Run tests
-cargo test --all
+# Run tests (requires 16MB stack for ML-DSA operations)
+RUST_MIN_STACK=16777216 cargo test --all
 
 # Run clippy
 cargo clippy --all-targets --all-features
@@ -416,6 +442,8 @@ wasm-pack build --target web
 cd crates/veritas-py
 maturin develop
 ```
+
+**Note**: ML-DSA-65 signing operations require a 16MB minimum stack size. Set `RUST_MIN_STACK=16777216` when running tests or the node binary.
 
 ## Security Checklist for Implementation
 
