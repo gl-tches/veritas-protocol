@@ -53,6 +53,9 @@ COPY --chown=builder:builder crates/veritas-wasm/Cargo.toml crates/veritas-wasm/
 COPY --chown=builder:builder crates/veritas-py/Cargo.toml crates/veritas-py/
 COPY --chown=builder:builder crates/veritas-node/Cargo.toml crates/veritas-node/
 
+# Copy example workspace members (required for cargo workspace resolution)
+COPY --chown=builder:builder examples/cli-chat/Cargo.toml examples/cli-chat/
+
 # Create dummy source files for dependency caching
 RUN mkdir -p crates/veritas-crypto/src && echo "pub fn dummy() {}" > crates/veritas-crypto/src/lib.rs && \
     mkdir -p crates/veritas-identity/src && echo "pub fn dummy() {}" > crates/veritas-identity/src/lib.rs && \
@@ -65,16 +68,18 @@ RUN mkdir -p crates/veritas-crypto/src && echo "pub fn dummy() {}" > crates/veri
     mkdir -p crates/veritas-ffi/src && echo "pub fn dummy() {}" > crates/veritas-ffi/src/lib.rs && \
     mkdir -p crates/veritas-wasm/src && echo "pub fn dummy() {}" > crates/veritas-wasm/src/lib.rs && \
     mkdir -p crates/veritas-py/src && echo "pub fn dummy() {}" > crates/veritas-py/src/lib.rs && \
-    mkdir -p crates/veritas-node/src && echo "fn main() {}" > crates/veritas-node/src/main.rs
+    mkdir -p crates/veritas-node/src && echo "fn main() {}" > crates/veritas-node/src/main.rs && \
+    mkdir -p examples/cli-chat/src && echo "fn main() {}" > examples/cli-chat/src/main.rs
 
 # Build dependencies only (this layer is cached)
 RUN cargo build --release --package veritas-node 2>/dev/null || true
 
 # Remove dummy source files
-RUN find crates -name "*.rs" -type f -delete
+RUN find crates examples -name "*.rs" -type f -delete
 
 # Copy actual source code
 COPY --chown=builder:builder crates/ crates/
+COPY --chown=builder:builder examples/cli-chat/ examples/cli-chat/
 
 # Build the actual binary
 RUN cargo build --release --package veritas-node
