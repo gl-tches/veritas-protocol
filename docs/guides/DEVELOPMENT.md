@@ -2,7 +2,7 @@
 
 Guide for developers contributing to the VERITAS Protocol.
 
-**Version**: 0.3.0-beta
+**Version**: 0.4.0-beta
 **Edition**: Rust 2024
 **MSRV**: 1.85
 

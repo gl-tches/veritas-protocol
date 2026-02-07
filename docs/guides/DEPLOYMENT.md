@@ -430,6 +430,7 @@ Wants=network-online.target
 Type=simple
 User=veritas
 Group=veritas
+Environment=RUST_MIN_STACK=16777216
 ExecStart=/usr/local/bin/veritas-node \
     --data-dir /var/lib/veritas \
     --listen-addr /ip4/0.0.0.0/tcp/9000 \

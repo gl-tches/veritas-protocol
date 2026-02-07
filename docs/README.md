@@ -2,7 +2,7 @@
 
 Complete documentation for the VERITAS Protocol.
 
-**Version**: 0.3.0-beta | **Rust Edition**: 2024 | **MSRV**: 1.85 | **License**: MIT OR Apache-2.0
+**Version**: 0.4.0-beta | **Rust Edition**: 2024 | **MSRV**: 1.85 | **License**: MIT OR Apache-2.0
 
 ---
 
@@ -30,7 +30,7 @@ Complete documentation for the VERITAS Protocol.
 
 ## Additional Resources
 
-- [Security Audit Report](../SECURITY_AUDIT_REPORT.md) — Completed January 2026 (90/92 issues fixed)
+- [Security Audit Report](../SECURITY_AUDIT_REPORT.md) — Completed January 2026 (90 issues fixed)
 - [Version History](../VERSION_HISTORY.md) — Changelog
 - [README](../README.md) — Project overview
 - [CLAUDE.md](../CLAUDE.md) — Development instructions

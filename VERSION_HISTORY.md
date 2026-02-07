@@ -17,6 +17,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `cargo fmt --check` and `cargo clippy -- -D warnings` gates
   - Added `CARGO_BUILD_JOBS=2` to prevent runner OOM
 
+## [0.4.0-beta] - 2026-02-07
+
+### Summary
+
+Version 0.4.0-beta implements Milestone 2: Wire Format v2 with ML-DSA-65 signing. All placeholder HMAC-BLAKE3 signing has been replaced with real FIPS 204 lattice-based signatures. The blockchain now serves as the message transport layer with epoch-based pruning.
+
+### Highlights
+
+- **ML-DSA-65 Signing**: Real FIPS 204 implementation using `ml-dsa` crate v0.1.0-rc.7 — replaces all placeholder signing
+- **Wire Format v2**: MAX_ENVELOPE_SIZE 2048→8192, padding buckets updated, protocol version and cipher suite fields
+- **Chain-as-Transport**: Messages are on-chain transactions; the blockchain IS the message delivery mechanism
+- **Epoch Pruning**: 30-day epochs with deterministic body+signature pruning; headers remain permanently
+- **Light Validator Mode**: Header-only sync targeting 256MB RAM
+- **Reputation Rebalance**: Starting score 500→100, asymmetric decay
+
+### Breaking Changes
+
+- **MAX_ENVELOPE_SIZE**: Increased from 2,048 to 8,192 bytes to accommodate ML-DSA-65 signatures (3,309 bytes)
+- **Padding Buckets**: Changed from `[256, 512, 1024]` to `[1024, 2048, 4096, 8192]`
+- **Starting Reputation**: Changed from 500 to 100 (Tier 1 / Basic)
+- **Reputation Decay**: Now asymmetric — above 500 decays toward 500, below 500 decays toward 0
+- **Message Signing**: `SignatureVersion::HmacBlake3` replaced with `SignatureVersion::MlDsa65`
+- **Stack Requirement**: `RUST_MIN_STACK=16777216` (16MB) required for ML-DSA operations
+
+### New Features
+
+- **ML-DSA-65 (FIPS 204)**: Full key generation, signing, verification — PK=1952, SK seed=32, Sig=3309 bytes
+- **Domain Separation**: Structured format `"VERITAS-v1." || purpose || "." || context_length || context`
+- **Transcript Binding**: HKDF includes `sender_id || recipient_id || session_id || counter`
+- **Wire Error Codes**: Generic error codes for protocol-level errors
+- **Message Transactions**: `MessageTransaction` struct with header, body, and signature
+- **Epoch Management**: `EpochManager` with deterministic boundary calculation
+- **Light Validator**: Header-only sync and storage mode
+
+### New Files
+
+- `crates/veritas-protocol/src/domain_separation.rs` — Structured domain separation
+- `crates/veritas-protocol/src/transcript.rs` — Transcript binding for HKDF
+- `crates/veritas-protocol/src/wire_error.rs` — Generic wire error codes
+- `crates/veritas-chain/src/transaction.rs` — MessageTransaction, Transaction enum
+- `crates/veritas-chain/src/epoch.rs` — Epoch management, pruning logic
+- `crates/veritas-chain/src/light_validator.rs` — Light validator sync + storage
+
+### Changed
+
+- Wire format now includes protocol version field (v2) and cipher suite field
+- ML-DSA signature size corrected from 3,293 to 3,309 bytes per FIPS 204 spec
+- `MessageSignature` now uses ML-DSA-65 instead of HMAC-BLAKE3
+- `DeliveryReceipt` updated for ML-DSA signing
+- Gossip protocol size buckets updated for post-quantum envelope sizes
+- All 1,549 tests pass (0 failures)
+
+### Dependency Updates
+
+- `ml-dsa` crate added at v0.1.0-rc.7
+
+### Maturity Status
+
+- **Previous**: v0.3.1-beta (critical bug fixes)
+- **Current**: v0.4.0-beta (ML-DSA signing + wire format v2 + chain-as-transport)
+- **Next milestone**: M3 — BFT consensus + validator trust model
+
+## [0.3.1-beta] - 2026-02-05
+
+### Summary
+
+Milestone 1 critical code fixes — approximately 60 bugs fixed across 12 crates (44 files changed).
+
+### Highlights
+
+- **1 CRITICAL fix**: Collusion detection cluster index mapping (REP-FIX-1)
+- **16 HIGH fixes**: Identity keypair loss, FFI undefined behavior, WASM salt handling, ephemeral key validation, mailbox salt, receipt forgery, sync validation, nonce replay, signature verification skip, self-interaction bypass, gossip replay window, DHT unbounded deserialization, plaintext zeroization, node binary non-functional
+- **~23 MEDIUM fixes**: Zeroize/ZeroizeOnDrop on PQ keys, constant-time checks, chain state fixes, reputation fixes, rate limiter ordering, bounded collections, WASM mutex/lock fixes, Python/FFI fixes
+- **~20 LOW fixes**: Clone on secret types, error variants, timestamp validation, dead code removal, overflow fixes, shutdown handling, formatting fixes
+
+### Changed
+
+- All 1,549 tests pass (0 failures), build succeeds cleanly
+- Node binary is now fully functional with P2P networking
+- Default data directory changed from `/var/lib/veritas` to `~/.local/share/veritas`
+
 ## [0.3.0-beta] - 2026-02-01
 
 ### Summary
