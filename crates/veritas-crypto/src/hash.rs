@@ -103,10 +103,9 @@ impl Hash256 {
         let mut bytes = [0u8; 32];
         for (i, chunk) in s.as_bytes().chunks(2).enumerate() {
             // CRYPTO-FIX-5: Use InvalidHexFormat for parsing errors instead of InvalidHashLength
-            let hex_str =
-                std::str::from_utf8(chunk).map_err(|_| {
-                    crate::CryptoError::InvalidHexFormat("invalid UTF-8 in hex string".to_string())
-                })?;
+            let hex_str = std::str::from_utf8(chunk).map_err(|_| {
+                crate::CryptoError::InvalidHexFormat("invalid UTF-8 in hex string".to_string())
+            })?;
             bytes[i] = u8::from_str_radix(hex_str, 16).map_err(|_| {
                 crate::CryptoError::InvalidHexFormat(format!(
                     "invalid hex character at position {}",

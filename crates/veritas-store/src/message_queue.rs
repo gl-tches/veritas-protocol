@@ -18,8 +18,8 @@
 //! - Max 5 retries before permanent failure
 
 use chrono::Utc;
-use rand::rngs::OsRng;
 use rand::RngCore;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 
 use crate::encrypted_db::{EncryptedDb, EncryptedTree};
@@ -193,8 +193,7 @@ impl QueuedMessage {
 
     /// Check if this message is ready for retry now.
     fn is_ready_for_retry(&self, now: i64) -> bool {
-        matches!(self.status, MessageStatus::Pending)
-            && self.next_retry_at.is_none_or(|t| now >= t)
+        matches!(self.status, MessageStatus::Pending) && self.next_retry_at.is_none_or(|t| now >= t)
     }
 
     /// Check if this message has expired (older than MESSAGE_TTL_SECS).
@@ -1367,10 +1366,11 @@ mod tests {
         let db_path = dir.path();
 
         // Use a distinctive recipient pattern that would be visible if unencrypted
-        let distinctive_recipient = [0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE,
-                                     0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE,
-                                     0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE,
-                                     0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE];
+        let distinctive_recipient = [
+            0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE, 0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE,
+            0xBA, 0xBE, 0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE, 0xDE, 0xAD, 0xBE, 0xEF,
+            0xCA, 0xFE, 0xBA, 0xBE,
+        ];
 
         {
             let db = EncryptedDb::open(db_path, TEST_PASSWORD).unwrap();
@@ -1418,9 +1418,7 @@ mod tests {
             let queue = MessageQueue::new(&db).unwrap();
 
             let recipient = [1u8; 32];
-            queue
-                .queue_outgoing(&recipient, b"test".to_vec())
-                .unwrap();
+            queue.queue_outgoing(&recipient, b"test".to_vec()).unwrap();
 
             db.flush().unwrap();
         }

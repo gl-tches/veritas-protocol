@@ -49,5 +49,5 @@
 mod chunk;
 mod reassembly;
 
-pub use chunk::{split_into_chunks, ChunkInfo, MessageChunk};
+pub use chunk::{ChunkInfo, MessageChunk, split_into_chunks};
 pub use reassembly::ChunkReassembler;

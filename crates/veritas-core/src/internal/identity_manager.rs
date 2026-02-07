@@ -40,7 +40,7 @@ use serde::{Deserialize, Serialize};
 
 use veritas_identity::{
     HardwareAttestation, IdentityHash, IdentityKeyPair, IdentityLimiter, IdentityPublicKeys,
-    IdentitySlotInfo, KeyLifecycle, KeyState, OriginFingerprint, MAX_IDENTITIES_PER_ORIGIN,
+    IdentitySlotInfo, KeyLifecycle, KeyState, MAX_IDENTITIES_PER_ORIGIN, OriginFingerprint,
 };
 use veritas_store::{Keyring, KeyringEntry};
 
@@ -417,55 +417,54 @@ impl PersistentIdentityManager {
                 "Failed to get limiter: {}",
                 e
             )))
-        })? { Some(bytes) => {
-            bincode::deserialize(&bytes).map_err(|e| {
+        })? {
+            Some(bytes) => bincode::deserialize(&bytes).map_err(|e| {
                 CoreError::Store(veritas_store::StoreError::Serialization(format!(
                     "Failed to deserialize limiter: {}",
                     e
                 )))
-            })
-        } _ => {
-            // Create origin fingerprint from hardware attestation
-            let attestation = HardwareAttestation::collect().map_err(CoreError::Identity)?;
-            let origin = OriginFingerprint::from_hardware(&attestation).map_err(CoreError::Identity)?;
-            let limiter = IdentityLimiter::new(origin);
+            }),
+            _ => {
+                // Create origin fingerprint from hardware attestation
+                let attestation = HardwareAttestation::collect().map_err(CoreError::Identity)?;
+                let origin =
+                    OriginFingerprint::from_hardware(&attestation).map_err(CoreError::Identity)?;
+                let limiter = IdentityLimiter::new(origin);
 
-            let bytes = bincode::serialize(&limiter).map_err(|e| {
-                CoreError::Store(veritas_store::StoreError::Serialization(format!(
-                    "Failed to serialize limiter: {}",
-                    e
-                )))
-            })?;
+                let bytes = bincode::serialize(&limiter).map_err(|e| {
+                    CoreError::Store(veritas_store::StoreError::Serialization(format!(
+                        "Failed to serialize limiter: {}",
+                        e
+                    )))
+                })?;
 
-            limiter_tree.insert(key, bytes).map_err(|e| {
-                CoreError::Store(veritas_store::StoreError::Database(format!(
-                    "Failed to save limiter: {}",
-                    e
-                )))
-            })?;
+                limiter_tree.insert(key, bytes).map_err(|e| {
+                    CoreError::Store(veritas_store::StoreError::Database(format!(
+                        "Failed to save limiter: {}",
+                        e
+                    )))
+                })?;
 
-            limiter_tree.flush().map_err(|e| {
-                CoreError::Store(veritas_store::StoreError::Database(format!(
-                    "Failed to flush limiter: {}",
-                    e
-                )))
-            })?;
+                limiter_tree.flush().map_err(|e| {
+                    CoreError::Store(veritas_store::StoreError::Database(format!(
+                        "Failed to flush limiter: {}",
+                        e
+                    )))
+                })?;
 
-            Ok(limiter)
-        }}
+                Ok(limiter)
+            }
+        }
     }
 
     /// Save the identity limiter to the database.
     fn save_limiter(&self) -> Result<()> {
-        let limiter_tree = self
-            .db
-            .open_tree("veritas_identity_limiter")
-            .map_err(|e| {
-                CoreError::Store(veritas_store::StoreError::Database(format!(
-                    "Failed to open limiter tree: {}",
-                    e
-                )))
-            })?;
+        let limiter_tree = self.db.open_tree("veritas_identity_limiter").map_err(|e| {
+            CoreError::Store(veritas_store::StoreError::Database(format!(
+                "Failed to open limiter tree: {}",
+                e
+            )))
+        })?;
 
         let bytes = bincode::serialize(&self.limiter).map_err(|e| {
             CoreError::Store(veritas_store::StoreError::Serialization(format!(
@@ -519,8 +518,7 @@ impl PersistentIdentityManager {
             ))
         })?;
 
-        IdentityHash::from_bytes(&hash_bytes)
-            .map_err(CoreError::Identity)
+        IdentityHash::from_bytes(&hash_bytes).map_err(CoreError::Identity)
     }
 
     /// Create a new identity.
@@ -550,9 +548,9 @@ impl PersistentIdentityManager {
         if let Some(lifecycle) = self.limiter.get(hash) {
             lifecycle.can_use(current_time)?;
         } else {
-            return Err(CoreError::Identity(veritas_identity::IdentityError::NotFound(
-                hash.to_hex(),
-            )));
+            return Err(CoreError::Identity(
+                veritas_identity::IdentityError::NotFound(hash.to_hex()),
+            ));
         }
 
         if let Some(old_primary) = self.cached_primary.take() {
@@ -747,12 +745,14 @@ mod tests {
         let hash1 = manager.create_identity(Some("First")).unwrap();
         let hash2 = manager.create_identity(Some("Second")).unwrap();
 
-        assert!(manager
-            .list_identities()
-            .iter()
-            .find(|i| i.hash == hash1)
-            .unwrap()
-            .is_primary);
+        assert!(
+            manager
+                .list_identities()
+                .iter()
+                .find(|i| i.hash == hash1)
+                .unwrap()
+                .is_primary
+        );
 
         manager.set_primary_identity(&hash2).unwrap();
 
@@ -889,9 +889,7 @@ mod tests {
 
         // Verify the error is MaxIdentitiesReached
         match result.unwrap_err() {
-            CoreError::Identity(veritas_identity::IdentityError::MaxIdentitiesReached {
-                max,
-            }) => {
+            CoreError::Identity(veritas_identity::IdentityError::MaxIdentitiesReached { max }) => {
                 assert_eq!(max, 3);
             }
             other => panic!("Expected MaxIdentitiesReached, got: {:?}", other),

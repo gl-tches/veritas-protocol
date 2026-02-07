@@ -1144,35 +1144,45 @@ mod tests {
 
     #[test]
     fn test_sync_message_is_request_response() {
-        assert!(SyncMessage::GetHeaders {
-            start_height: 0,
-            max_count: 10,
-            request_id: 1
-        }
-        .is_request());
-        assert!(SyncMessage::GetBlocks {
-            hashes: vec![],
-            request_id: 1
-        }
-        .is_request());
+        assert!(
+            SyncMessage::GetHeaders {
+                start_height: 0,
+                max_count: 10,
+                request_id: 1
+            }
+            .is_request()
+        );
+        assert!(
+            SyncMessage::GetBlocks {
+                hashes: vec![],
+                request_id: 1
+            }
+            .is_request()
+        );
         assert!(SyncMessage::GetTip { request_id: 1 }.is_request());
 
-        assert!(SyncMessage::Headers {
-            headers: vec![],
-            request_id: 1
-        }
-        .is_response());
-        assert!(SyncMessage::Blocks {
-            blocks: vec![],
-            request_id: 1
-        }
-        .is_response());
-        assert!(SyncMessage::Tip {
-            height: 0,
-            hash: test_hash(0),
-            request_id: 1
-        }
-        .is_response());
+        assert!(
+            SyncMessage::Headers {
+                headers: vec![],
+                request_id: 1
+            }
+            .is_response()
+        );
+        assert!(
+            SyncMessage::Blocks {
+                blocks: vec![],
+                request_id: 1
+            }
+            .is_response()
+        );
+        assert!(
+            SyncMessage::Tip {
+                height: 0,
+                hash: test_hash(0),
+                request_id: 1
+            }
+            .is_response()
+        );
     }
 
     // ==================== SyncState Tests ====================
@@ -1180,26 +1190,32 @@ mod tests {
     #[test]
     fn test_sync_state_is_synced() {
         assert!(SyncState::Synced.is_synced());
-        assert!(!SyncState::SyncingHeaders {
-            target_height: 100,
-            current_height: 50
-        }
-        .is_synced());
+        assert!(
+            !SyncState::SyncingHeaders {
+                target_height: 100,
+                current_height: 50
+            }
+            .is_synced()
+        );
     }
 
     #[test]
     fn test_sync_state_is_syncing() {
-        assert!(SyncState::SyncingHeaders {
-            target_height: 100,
-            current_height: 50
-        }
-        .is_syncing());
-        assert!(SyncState::SyncingBlocks {
-            target_height: 100,
-            current_height: 50,
-            pending: 10
-        }
-        .is_syncing());
+        assert!(
+            SyncState::SyncingHeaders {
+                target_height: 100,
+                current_height: 50
+            }
+            .is_syncing()
+        );
+        assert!(
+            SyncState::SyncingBlocks {
+                target_height: 100,
+                current_height: 50,
+                pending: 10
+            }
+            .is_syncing()
+        );
         assert!(!SyncState::Synced.is_syncing());
         assert!(!SyncState::Paused { last_height: 50 }.is_syncing());
     }
@@ -1714,7 +1730,10 @@ mod tests {
 
         // Should reject due to broken parent hash linkage
         let action = manager.handle_headers(headers);
-        assert!(action.is_none(), "Headers with broken parent hash linkage should be rejected");
+        assert!(
+            action.is_none(),
+            "Headers with broken parent hash linkage should be rejected"
+        );
     }
 
     #[test]
@@ -1727,7 +1746,10 @@ mod tests {
 
         // Should accept and request more headers
         let action = manager.handle_headers(headers);
-        assert!(!action.is_none(), "Headers with correct parent hash linkage should be accepted");
+        assert!(
+            !action.is_none(),
+            "Headers with correct parent hash linkage should be accepted"
+        );
     }
 
     #[test]
@@ -1759,7 +1781,10 @@ mod tests {
         }
 
         let action = manager.handle_headers(headers_batch2);
-        assert!(!action.is_none(), "Second batch with correct parent linkage should be accepted");
+        assert!(
+            !action.is_none(),
+            "Second batch with correct parent linkage should be accepted"
+        );
     }
 
     #[test]
@@ -1776,7 +1801,10 @@ mod tests {
         // (doesn't link to the last header of batch 1)
         let headers_batch2 = chained_headers(4, 3); // starts from test_hash(0), not batch1's last hash
         let action = manager.handle_headers(headers_batch2);
-        assert!(action.is_none(), "Second batch with broken parent linkage should be rejected");
+        assert!(
+            action.is_none(),
+            "Second batch with broken parent linkage should be rejected"
+        );
     }
 
     #[test]
@@ -1789,7 +1817,10 @@ mod tests {
         let headers = chained_headers(1, MAX_PENDING_HEADERS as u64);
         let action = manager.handle_headers(headers);
         // Should be accepted (exactly at limit)
-        assert!(!action.is_none(), "Headers exactly at MAX_PENDING_HEADERS should be accepted");
+        assert!(
+            !action.is_none(),
+            "Headers exactly at MAX_PENDING_HEADERS should be accepted"
+        );
     }
 
     #[test]
@@ -1820,7 +1851,10 @@ mod tests {
             overflow_headers.push(header);
         }
         let action = manager.handle_headers(overflow_headers);
-        assert!(action.is_none(), "Headers exceeding MAX_PENDING_HEADERS should be rejected");
+        assert!(
+            action.is_none(),
+            "Headers exceeding MAX_PENDING_HEADERS should be rejected"
+        );
     }
 
     #[test]
@@ -1838,6 +1872,9 @@ mod tests {
             huge_blocks.push(test_block((i + 1) as u64, i as u8));
         }
         let action = manager.handle_blocks(huge_blocks);
-        assert!(action.is_none(), "Blocks exceeding MAX_RECEIVED_BLOCKS should be rejected");
+        assert!(
+            action.is_none(),
+            "Blocks exceeding MAX_RECEIVED_BLOCKS should be rejected"
+        );
     }
 }

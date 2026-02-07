@@ -10,11 +10,11 @@
 //! - NEVER reuse a nonce with the same key
 
 use chacha20poly1305::{
-    aead::{Aead, KeyInit},
     XChaCha20Poly1305, XNonce,
+    aead::{Aead, KeyInit},
 };
-use rand::rngs::OsRng;
 use rand::RngCore;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 

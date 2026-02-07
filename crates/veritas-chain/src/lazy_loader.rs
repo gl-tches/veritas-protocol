@@ -193,7 +193,9 @@ impl LazyBlockLoader {
                 let arc_block = Arc::new(block);
 
                 // Add to hot cache (ignore errors - block is still returned)
-                let _ = self.hot_cache.try_insert(hash.clone(), Arc::clone(&arc_block));
+                let _ = self
+                    .hot_cache
+                    .try_insert(hash.clone(), Arc::clone(&arc_block));
 
                 Ok(Some(arc_block))
             }
@@ -275,11 +277,7 @@ impl LazyBlockLoader {
             match self.storage.load_block(hash).await {
                 Ok(Some(block)) => {
                     let arc_block = Arc::new(block);
-                    if self
-                        .hot_cache
-                        .try_insert(hash.clone(), arc_block)
-                        .is_ok()
-                    {
+                    if self.hot_cache.try_insert(hash.clone(), arc_block).is_ok() {
                         prefetched += 1;
                         self.metrics.prefetched += 1;
                     }

@@ -19,8 +19,8 @@
 //! - **Forward Privacy**: Old epochs cannot be correlated with new ones
 //! - **Recipient Privacy**: Mailbox key reveals nothing about recipient identity
 
-use rand::rngs::OsRng;
 use rand::RngCore;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use veritas_crypto::Hash256;
 use veritas_identity::IdentityHash;

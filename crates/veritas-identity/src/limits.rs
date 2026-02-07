@@ -12,15 +12,15 @@
 //! See VERITAS-2026-0001 for vulnerability details.
 
 #[cfg(test)]
-use rand::rngs::OsRng;
-#[cfg(test)]
 use rand::RngCore;
+#[cfg(test)]
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use veritas_crypto::Hash256;
 
-use crate::hardware::HardwareAttestation;
-use crate::lifecycle::{KeyLifecycle, EXPIRY_GRACE_PERIOD_SECS, KEY_EXPIRY_SECS};
 use crate::IdentityHash;
+use crate::hardware::HardwareAttestation;
+use crate::lifecycle::{EXPIRY_GRACE_PERIOD_SECS, KEY_EXPIRY_SECS, KeyLifecycle};
 
 /// Maximum identities per device origin.
 pub const MAX_IDENTITIES_PER_ORIGIN: u32 = 3;
@@ -327,7 +327,9 @@ impl IdentityLimiter {
             .ok_or_else(|| crate::IdentityError::NotFound(old_identity.to_hex()))?;
 
         // Rotate the old identity (with PFS timestamp for VERITAS-2026-0091)
-        self.identities[old_idx].1.rotate(new_identity.clone(), current_time)?;
+        self.identities[old_idx]
+            .1
+            .rotate(new_identity.clone(), current_time)?;
 
         // Create new lifecycle linked to old
         let lifecycle = KeyLifecycle::new_from_rotation(current_time, old_identity.clone());

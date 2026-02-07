@@ -71,29 +71,28 @@ pub mod score;
 
 // Re-export main types
 pub use collusion::{
-    ClusterMember, CollusionDetector, InteractionRecord, SuspiciousCluster,
-    CLUSTER_SUSPICION_THRESHOLD,
+    CLUSTER_SUSPICION_THRESHOLD, ClusterMember, CollusionDetector, InteractionRecord,
+    SuspiciousCluster,
 };
-pub use decay::{apply_decay, DecayConfig, DecayState};
-pub use effects::{get_effects, get_tier, ReputationTier, TierEffects};
+pub use decay::{DecayConfig, DecayState, apply_decay};
+pub use effects::{ReputationTier, TierEffects, get_effects, get_tier};
 pub use error::{ReputationError, Result};
 pub use manager::{
-    ReputationManager, ReputationStats, DEFAULT_NONCE_EXPIRY_SECS, MAX_TRACKED_NONCES,
-    NONCE_BUCKET_DURATION_SECS,
+    DEFAULT_NONCE_EXPIRY_SECS, MAX_TRACKED_NONCES, NONCE_BUCKET_DURATION_SECS, ReputationManager,
+    ReputationStats,
 };
 pub use proof::{
-    generate_nonce, InteractionProof, InteractionType, PubkeyRegistry, Signature,
-    MAX_CLOCK_SKEW_SECS, MAX_PROOF_AGE_SECS, MAX_SIGNATURE_SIZE, NONCE_SIZE,
+    InteractionProof, InteractionType, MAX_CLOCK_SKEW_SECS, MAX_PROOF_AGE_SECS, MAX_SIGNATURE_SIZE,
+    NONCE_SIZE, PubkeyRegistry, Signature, generate_nonce,
 };
 pub use rate_limiter::{
-    PeerInteraction, RateLimitResult, ScoreRateLimiter, MAX_DAILY_GAIN_PER_PEER,
-    MAX_DAILY_GAIN_TOTAL, MIN_MESSAGE_INTERVAL_SECS,
+    MAX_DAILY_GAIN_PER_PEER, MAX_DAILY_GAIN_TOTAL, MIN_MESSAGE_INTERVAL_SECS, PeerInteraction,
+    RateLimitResult, ScoreRateLimiter,
 };
 pub use report::{
-    NegativeReport, ReportAggregator, ReportReason, MIN_REPORTER_REPUTATION,
-    NEGATIVE_REPORT_THRESHOLD,
+    MIN_REPORTER_REPUTATION, NEGATIVE_REPORT_THRESHOLD, NegativeReport, ReportAggregator,
+    ReportReason,
 };
 pub use score::{
-    ReputationScore, REPUTATION_BLACKLIST, REPUTATION_MAX, REPUTATION_QUARANTINE,
-    REPUTATION_START,
+    REPUTATION_BLACKLIST, REPUTATION_MAX, REPUTATION_QUARANTINE, REPUTATION_START, ReputationScore,
 };

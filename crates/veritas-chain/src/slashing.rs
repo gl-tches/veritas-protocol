@@ -400,7 +400,9 @@ impl SlashingManager {
 
             self.banned_validators.insert(
                 validator.clone(),
-                BannedValidator { banned_at: timestamp },
+                BannedValidator {
+                    banned_at: timestamp,
+                },
             );
         }
 
@@ -1176,11 +1178,7 @@ mod tests {
 
         // Add MAX_SLASH_HISTORY + 10 offenses
         for height in 0..(super::MAX_SLASH_HISTORY + 10) as u64 {
-            manager.process_offense(
-                &validator,
-                SlashingOffense::MissedBlock { height },
-                1000,
-            );
+            manager.process_offense(&validator, SlashingOffense::MissedBlock { height }, 1000);
         }
 
         // Slash history should be bounded at MAX_SLASH_HISTORY
@@ -1199,9 +1197,34 @@ mod tests {
                 ((i >> 8) & 0xFF) as u8,
                 ((i >> 16) & 0xFF) as u8,
                 ((i >> 24) & 0xFF) as u8,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
             ])
             .unwrap();
 
@@ -1230,9 +1253,36 @@ mod tests {
             let validator = IdentityHash::from_bytes(&[
                 (i & 0xFF) as u8,
                 ((i >> 8) & 0xFF) as u8,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
             ])
             .unwrap();
 
@@ -1249,8 +1299,8 @@ mod tests {
 
         // Ban one more recent validator
         let recent_validator = IdentityHash::from_bytes(&[
-            0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0,
         ])
         .unwrap();
 
@@ -1328,11 +1378,7 @@ mod tests {
 
         // Add signatures at heights 0-99
         for height in 0..100 {
-            manager.record_block_signature(
-                &validator,
-                height,
-                Hash256::hash(&[height as u8]),
-            );
+            manager.record_block_signature(&validator, height, Hash256::hash(&[height as u8]));
         }
 
         // Verify signatures exist at low heights

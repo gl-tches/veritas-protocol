@@ -8,8 +8,8 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
 use std::time::Duration;
-use tracing::{debug, error, info, warn, Level};
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing::{Level, debug, error, info, warn};
+use tracing_subscriber::{EnvFilter, fmt};
 
 use veritas_core::{ClientConfig, ClientConfigBuilder, VeritasClient};
 use veritas_net::{NodeConfig, NodeEvent, VeritasNode};
@@ -25,11 +25,21 @@ struct Args {
     ///
     /// NODE-FIX-5: Changed default from /var/lib/veritas (requires root) to a
     /// user-writable directory. Uses ~/.local/share/veritas on Linux/macOS.
-    #[arg(short, long, env = "VERITAS_DATA_DIR", default_value = "~/.local/share/veritas")]
+    #[arg(
+        short,
+        long,
+        env = "VERITAS_DATA_DIR",
+        default_value = "~/.local/share/veritas"
+    )]
     data_dir: PathBuf,
 
     /// Listen address for P2P connections
-    #[arg(short, long, env = "VERITAS_LISTEN_ADDR", default_value = "/ip4/0.0.0.0/tcp/9000")]
+    #[arg(
+        short,
+        long,
+        env = "VERITAS_LISTEN_ADDR",
+        default_value = "/ip4/0.0.0.0/tcp/9000"
+    )]
     listen_addr: String,
 
     /// WebSocket listen address (optional)
@@ -213,8 +223,7 @@ async fn main() -> Result<()> {
 
     // Ensure data directory exists
     if !data_dir.exists() {
-        std::fs::create_dir_all(&data_dir)
-            .context("Failed to create data directory")?;
+        std::fs::create_dir_all(&data_dir).context("Failed to create data directory")?;
         info!(path = %data_dir.display(), "Created data directory");
     }
 
@@ -234,7 +243,8 @@ async fn main() -> Result<()> {
 
     // Initialize the client
     info!("Initializing VERITAS client...");
-    let client = VeritasClient::new(config).await
+    let client = VeritasClient::new(config)
+        .await
         .context("Failed to initialize VERITAS client")?;
 
     info!("VERITAS node initialized successfully");
@@ -245,8 +255,7 @@ async fn main() -> Result<()> {
         .parse()
         .context("Failed to parse listen address as multiaddr")?;
 
-    let mut node_config = NodeConfig::new()
-        .with_listen_addresses(vec![listen_addr]);
+    let mut node_config = NodeConfig::new().with_listen_addresses(vec![listen_addr]);
 
     // Parse and add bootstrap peers
     if let Some(ref bootstrap_str) = args.bootstrap_nodes {
@@ -360,7 +369,10 @@ async fn main() -> Result<()> {
     info!("Shutting down VERITAS node...");
 
     // Graceful shutdown
-    client.shutdown().await.context("Failed to shut down client")?;
+    client
+        .shutdown()
+        .await
+        .context("Failed to shut down client")?;
 
     info!("VERITAS node stopped");
     Ok(())

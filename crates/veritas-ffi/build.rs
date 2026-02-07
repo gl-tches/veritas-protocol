@@ -32,7 +32,6 @@ fn target_dir() -> PathBuf {
     if let Ok(target) = env::var("CARGO_TARGET_DIR") {
         PathBuf::from(target)
     } else {
-        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
-            .join("target")
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("target")
     }
 }

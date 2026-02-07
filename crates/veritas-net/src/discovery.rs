@@ -4,7 +4,7 @@
 //! bootstrap servers. Uses libp2p's mDNS implementation to advertise and
 //! discover VERITAS peers on the same network segment.
 
-use libp2p::{mdns, multiaddr::Multiaddr, PeerId};
+use libp2p::{PeerId, mdns, multiaddr::Multiaddr};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, trace, warn};

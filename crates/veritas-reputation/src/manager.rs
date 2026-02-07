@@ -6,10 +6,10 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::collusion::CollusionDetector;
-use crate::decay::{apply_decay_for_time, DecayConfig, DecayState};
-use crate::effects::{get_effects_for_score, get_tier, ReputationTier, TierEffects};
+use crate::decay::{DecayConfig, DecayState, apply_decay_for_time};
+use crate::effects::{ReputationTier, TierEffects, get_effects_for_score, get_tier};
 use crate::error::{ReputationError, Result};
-use crate::proof::{InteractionProof, PubkeyRegistry, NONCE_SIZE};
+use crate::proof::{InteractionProof, NONCE_SIZE, PubkeyRegistry};
 use crate::rate_limiter::{RateLimitResult, ScoreRateLimiter};
 use crate::report::{NegativeReport, ReportAggregator, ReportReason};
 use crate::score::ReputationScore;
@@ -60,7 +60,6 @@ pub struct ReputationManager {
     decay_states: HashMap<IdentityHash, DecayState>,
 
     // === VERITAS-2026-0010: Interaction proof authentication ===
-
     /// Used nonces for replay protection.
     ///
     /// Each interaction proof contains a unique nonce that can only be used once.
@@ -174,8 +173,8 @@ impl ReputationManager {
     /// This ensures pruning is deterministic and time-based, not random,
     /// so recently-used nonces are never accidentally pruned.
     fn prune_old_nonce_buckets(&mut self, current_time: u64) {
-        let expiry_bucket = current_time.saturating_sub(self.nonce_expiry_secs)
-            / NONCE_BUCKET_DURATION_SECS;
+        let expiry_bucket =
+            current_time.saturating_sub(self.nonce_expiry_secs) / NONCE_BUCKET_DURATION_SECS;
 
         // Collect bucket keys that are expired
         let expired_keys: Vec<u64> = self
@@ -487,7 +486,8 @@ impl ReputationManager {
         let reporter_reputation = reporter_score.current();
 
         // Create and add the report
-        let report = NegativeReport::new(reporter, target, reporter_reputation, reason, evidence_hash)?;
+        let report =
+            NegativeReport::new(reporter, target, reporter_reputation, reason, evidence_hash)?;
         self.report_aggregator.add_report(report)?;
 
         Ok(())
@@ -543,7 +543,11 @@ impl ReputationManager {
 
         if let Some(state) = self.decay_states.get(identity) {
             if state.should_decay(now) {
-                let current = self.scores.get(identity).map(|s| s.current()).unwrap_or(crate::score::REPUTATION_START);
+                let current = self
+                    .scores
+                    .get(identity)
+                    .map(|s| s.current())
+                    .unwrap_or(crate::score::REPUTATION_START);
                 let new_score = apply_decay_for_time(current, state, now);
 
                 if let Some(score) = self.scores.get_mut(identity) {
@@ -564,14 +568,22 @@ impl ReputationManager {
     /// Get an identity's reputation tier.
     #[must_use]
     pub fn get_tier(&self, identity: &IdentityHash) -> ReputationTier {
-        let score = self.scores.get(identity).map(|s| s.current()).unwrap_or(crate::score::REPUTATION_START);
+        let score = self
+            .scores
+            .get(identity)
+            .map(|s| s.current())
+            .unwrap_or(crate::score::REPUTATION_START);
         get_tier(score)
     }
 
     /// Get an identity's tier effects.
     #[must_use]
     pub fn get_effects(&self, identity: &IdentityHash) -> TierEffects {
-        let score = self.scores.get(identity).map(|s| s.current()).unwrap_or(crate::score::REPUTATION_START);
+        let score = self
+            .scores
+            .get(identity)
+            .map(|s| s.current())
+            .unwrap_or(crate::score::REPUTATION_START);
         get_effects_for_score(score)
     }
 
@@ -588,7 +600,11 @@ impl ReputationManager {
 
     /// Check if an identity can file reports.
     pub fn can_file_report(&self, identity: &IdentityHash) -> Result<()> {
-        let score = self.scores.get(identity).map(|s| s.current()).unwrap_or(crate::score::REPUTATION_START);
+        let score = self
+            .scores
+            .get(identity)
+            .map(|s| s.current())
+            .unwrap_or(crate::score::REPUTATION_START);
         if score < crate::report::MIN_REPORTER_REPUTATION {
             return Err(ReputationError::InsufficientReputation {
                 required: crate::report::MIN_REPORTER_REPUTATION,
@@ -925,7 +941,9 @@ mod tests {
                 if i != j {
                     // Bypass rate limiting by using different "from" each time
                     for _ in 0..5 {
-                        manager.collusion_detector.record_interaction(ids[i], ids[j]);
+                        manager
+                            .collusion_detector
+                            .record_interaction(ids[i], ids[j]);
                     }
                 }
             }
@@ -938,7 +956,7 @@ mod tests {
 
     // === VERITAS-2026-0010: Security tests for proof-based interactions ===
 
-    use crate::proof::{generate_nonce, InteractionProof, InteractionType, Signature};
+    use crate::proof::{InteractionProof, InteractionType, Signature, generate_nonce};
 
     fn make_test_proof(
         from: IdentityHash,
@@ -955,8 +973,16 @@ mod tests {
             None
         };
 
-        InteractionProof::new(from, to, interaction_type, timestamp, nonce, from_sig, to_sig)
-            .unwrap()
+        InteractionProof::new(
+            from,
+            to,
+            interaction_type,
+            timestamp,
+            nonce,
+            from_sig,
+            to_sig,
+        )
+        .unwrap()
     }
 
     #[test]
@@ -970,7 +996,9 @@ mod tests {
         manager.get_score_mut(&to).set_score(500);
 
         let proof = make_test_proof(from, to, InteractionType::MessageDelivery);
-        let gained = manager.record_positive_interaction(from, to, &proof).unwrap();
+        let gained = manager
+            .record_positive_interaction(from, to, &proof)
+            .unwrap();
 
         // MessageDelivery has base_gain of 5
         assert_eq!(gained, 5);
@@ -1157,7 +1185,10 @@ mod tests {
         let result = manager.record_positive_interaction(from, to, &proof);
 
         assert!(
-            matches!(result, Err(ReputationError::SignatureVerificationUnavailable)),
+            matches!(
+                result,
+                Err(ReputationError::SignatureVerificationUnavailable)
+            ),
             "record_positive_interaction without a registry must return SignatureVerificationUnavailable"
         );
     }
@@ -1212,7 +1243,10 @@ mod tests {
 
         // Nonce should be in both used_nonces and nonce_buckets
         assert!(manager.is_nonce_used(proof.nonce()));
-        assert!(!manager.nonce_buckets.is_empty(), "Nonce bucket should be populated");
+        assert!(
+            !manager.nonce_buckets.is_empty(),
+            "Nonce bucket should be populated"
+        );
 
         // The bucket should contain the nonce
         let total_bucketed: usize = manager.nonce_buckets.values().map(|b| b.len()).sum();
@@ -1236,18 +1270,21 @@ mod tests {
         // Insert old nonces
         manager.used_nonces.insert(old_nonce_1);
         manager.used_nonces.insert(old_nonce_2);
-        manager.nonce_buckets
+        manager
+            .nonce_buckets
             .entry(old_bucket_key)
             .or_default()
             .insert(old_nonce_1);
-        manager.nonce_buckets
+        manager
+            .nonce_buckets
             .entry(old_bucket_key)
             .or_default()
             .insert(old_nonce_2);
 
         // Insert recent nonce
         manager.used_nonces.insert(recent_nonce);
-        manager.nonce_buckets
+        manager
+            .nonce_buckets
             .entry(recent_bucket_key)
             .or_default()
             .insert(recent_nonce);
@@ -1258,9 +1295,18 @@ mod tests {
         manager.prune_old_nonce_buckets(current_time);
 
         // Old nonces should be removed, recent should remain
-        assert!(!manager.is_nonce_used(&old_nonce_1), "Old nonce 1 should be pruned");
-        assert!(!manager.is_nonce_used(&old_nonce_2), "Old nonce 2 should be pruned");
-        assert!(manager.is_nonce_used(&recent_nonce), "Recent nonce should survive pruning");
+        assert!(
+            !manager.is_nonce_used(&old_nonce_1),
+            "Old nonce 1 should be pruned"
+        );
+        assert!(
+            !manager.is_nonce_used(&old_nonce_2),
+            "Old nonce 2 should be pruned"
+        );
+        assert!(
+            manager.is_nonce_used(&recent_nonce),
+            "Recent nonce should survive pruning"
+        );
         assert_eq!(manager.nonce_count(), 1);
     }
 
@@ -1279,11 +1325,13 @@ mod tests {
         let nonce2 = generate_nonce();
         manager.used_nonces.insert(nonce1);
         manager.used_nonces.insert(nonce2);
-        manager.nonce_buckets
+        manager
+            .nonce_buckets
             .entry(current_bucket)
             .or_default()
             .insert(nonce1);
-        manager.nonce_buckets
+        manager
+            .nonce_buckets
             .entry(current_bucket)
             .or_default()
             .insert(nonce2);
@@ -1291,7 +1339,13 @@ mod tests {
         // Prune should not remove current bucket nonces
         manager.prune_old_nonce_buckets(current_time);
 
-        assert!(manager.is_nonce_used(&nonce1), "Current bucket nonce should survive");
-        assert!(manager.is_nonce_used(&nonce2), "Current bucket nonce should survive");
+        assert!(
+            manager.is_nonce_used(&nonce1),
+            "Current bucket nonce should survive"
+        );
+        assert!(
+            manager.is_nonce_used(&nonce2),
+            "Current bucket nonce should survive"
+        );
     }
 }

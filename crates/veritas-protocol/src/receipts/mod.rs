@@ -34,5 +34,5 @@
 mod delivery;
 
 pub use delivery::{
-    DeliveryError, DeliveryReceipt, DeliveryReceiptData, ReceiptType, RECEIPT_DOMAIN_SEPARATOR,
+    DeliveryError, DeliveryReceipt, DeliveryReceiptData, RECEIPT_DOMAIN_SEPARATOR, ReceiptType,
 };

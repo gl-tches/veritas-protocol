@@ -27,11 +27,11 @@ use serde::{Deserialize, Serialize};
 use veritas_crypto::Hash256;
 use veritas_identity::IdentityHash;
 
+use crate::ProtocolError;
 use crate::groups::GroupMessageData;
 use crate::limits::MESSAGE_TTL_SECS;
 use crate::receipts::DeliveryReceiptData;
 use crate::signing::MessageSignature;
-use crate::ProtocolError;
 
 // === Time Validation Constants (VERITAS-2026-0009) ===
 

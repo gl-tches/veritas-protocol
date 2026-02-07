@@ -28,9 +28,9 @@ use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context, Result};
-use crossterm::style::{Color, ResetColor, SetForegroundColor};
+use anyhow::{Context, Result, anyhow};
 use crossterm::ExecutableCommand;
+use crossterm::style::{Color, ResetColor, SetForegroundColor};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::info;
@@ -112,10 +112,8 @@ impl ContactStore {
         let path = data_dir.join("contacts.json");
 
         let contacts = if path.exists() {
-            let content = std::fs::read_to_string(&path)
-                .context("Failed to read contacts file")?;
-            serde_json::from_str(&content)
-                .context("Failed to parse contacts file")?
+            let content = std::fs::read_to_string(&path).context("Failed to read contacts file")?;
+            serde_json::from_str(&content).context("Failed to parse contacts file")?
         } else {
             HashMap::new()
         };
@@ -127,14 +125,12 @@ impl ContactStore {
     pub fn save(&self) -> Result<()> {
         // Ensure parent directory exists
         if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent)
-                .context("Failed to create data directory")?;
+            std::fs::create_dir_all(parent).context("Failed to create data directory")?;
         }
 
-        let content = serde_json::to_string_pretty(&self.contacts)
-            .context("Failed to serialize contacts")?;
-        std::fs::write(&self.path, content)
-            .context("Failed to write contacts file")?;
+        let content =
+            serde_json::to_string_pretty(&self.contacts).context("Failed to serialize contacts")?;
+        std::fs::write(&self.path, content).context("Failed to write contacts file")?;
 
         Ok(())
     }
@@ -193,7 +189,8 @@ impl ContactStore {
 
     /// Mark a contact as verified.
     pub fn mark_verified(&mut self, name: &str) -> Result<()> {
-        let contact = self.get_mut(name)
+        let contact = self
+            .get_mut(name)
             .ok_or_else(|| anyhow!("Contact '{}' not found", name))?;
         contact.verified = true;
         self.save()
@@ -316,8 +313,7 @@ impl ChatApp {
             .context("Failed to create VERITAS client")?;
 
         // Load contacts
-        let contacts = ContactStore::load(&data_dir)
-            .context("Failed to load contacts")?;
+        let contacts = ContactStore::load(&data_dir).context("Failed to load contacts")?;
 
         Ok(Self {
             client,
@@ -361,7 +357,8 @@ impl ChatApp {
             }
             Err(_) => {
                 print_info("Creating new identity...");
-                let hash = self.client
+                let hash = self
+                    .client
                     .create_identity(Some("Primary"))
                     .await
                     .context("Failed to create identity")?;
@@ -496,7 +493,10 @@ impl ChatApp {
                 if !input.starts_with('/') {
                     print_warning("Use /msg <name> <message> to send a message");
                 } else {
-                    return Err(anyhow!("Unknown command: {}. Type /help for available commands.", command));
+                    return Err(anyhow!(
+                        "Unknown command: {}. Type /help for available commands.",
+                        command
+                    ));
                 }
             }
         }
@@ -514,7 +514,10 @@ impl ChatApp {
         print_section("Your Identity");
         println!("  Hash:       {}", hash);
         println!("  Short:      {}", hash.short());
-        println!("  Exchange:   {} bytes", public_keys.exchange.as_bytes().len());
+        println!(
+            "  Exchange:   {} bytes",
+            public_keys.exchange.as_bytes().len()
+        );
         println!();
         print_section("Identity Slots");
         println!("  Used:       {}/{}", slots.used, slots.max);
@@ -654,7 +657,9 @@ impl ChatApp {
             .ok_or_else(|| anyhow!("Contact '{}' not found", name))?;
 
         // Get our identity keypair
-        let our_keypair = self.identity_keypair.as_ref()
+        let our_keypair = self
+            .identity_keypair
+            .as_ref()
             .ok_or_else(|| anyhow!("Identity not initialized"))?;
 
         // Generate a simulated keypair for the contact
@@ -662,10 +667,8 @@ impl ChatApp {
         let contact_keypair = IdentityKeyPair::generate();
 
         // Compute safety number
-        let safety_number = SafetyNumber::compute(
-            our_keypair.public_keys(),
-            contact_keypair.public_keys(),
-        );
+        let safety_number =
+            SafetyNumber::compute(our_keypair.public_keys(), contact_keypair.public_keys());
 
         println!();
         print_section(&format!("Safety Number for '{}'", contact.name));
@@ -753,14 +756,16 @@ fn print_header() {
     let mut stdout = io::stdout();
     println!();
     let _ = stdout.execute(SetForegroundColor(Color::Cyan));
-    println!(r#"
+    println!(
+        r#"
  __     _______ ____  ___ _____  _    ____
  \ \   / / ____|  _ \|_ _|_   _|/ \  / ___|
   \ \ / /|  _| | |_) || |  | | / _ \ \___ \
    \ V / | |___|  _ < | |  | |/ ___ \ ___) |
     \_/  |_____|_| \_\___| |_/_/   \_\____/
 
-"#);
+"#
+    );
     let _ = stdout.execute(ResetColor);
     println!("  VERITAS CLI Chat - Post-Quantum Secure Messaging");
     println!("  Version 0.1.0");
@@ -783,7 +788,10 @@ fn print_help() {
         ("/add <hash> <name>", "Add a new contact by identity hash"),
         ("/remove <name>", "Remove a contact"),
         ("/msg <name> <message>", "Send a message to a contact"),
-        ("/safety <name>", "Show safety number for contact verification"),
+        (
+            "/safety <name>",
+            "Show safety number for contact verification",
+        ),
         ("/verify <name>", "Mark a contact as verified"),
         ("/status", "Show application status"),
         ("/help, /h", "Show this help message"),

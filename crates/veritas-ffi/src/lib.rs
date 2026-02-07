@@ -316,12 +316,8 @@ mod tests {
 
             // Convert to QR format
             let mut qr = [0u8; 65];
-            let result = veritas_safety_number_to_qr(
-                raw.as_ptr(),
-                raw.len(),
-                qr.as_mut_ptr(),
-                qr.len(),
-            );
+            let result =
+                veritas_safety_number_to_qr(raw.as_ptr(), raw.len(), qr.as_mut_ptr(), qr.len());
             assert_eq!(result, ErrorCode::Success);
 
             // Verify QR format

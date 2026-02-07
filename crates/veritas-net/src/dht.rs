@@ -29,8 +29,8 @@
 //! - Expiry time
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use libp2p::kad::{Record, RecordKey};
@@ -41,7 +41,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use veritas_crypto::Hash256;
-use veritas_protocol::{MailboxKey, MinimalEnvelope, MESSAGE_TTL_SECS};
+use veritas_protocol::{MESSAGE_TTL_SECS, MailboxKey, MinimalEnvelope};
 
 use crate::error::{NetError, Result};
 

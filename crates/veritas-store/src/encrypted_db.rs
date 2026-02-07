@@ -28,11 +28,11 @@ use std::path::Path;
 use std::sync::Arc;
 
 use argon2::{Algorithm, Argon2, Params, Version};
-use rand::rngs::OsRng;
 use rand::RngCore;
+use rand::rngs::OsRng;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use veritas_crypto::symmetric::{decrypt, encrypt, EncryptedData, SymmetricKey};
+use veritas_crypto::symmetric::{EncryptedData, SymmetricKey, decrypt, encrypt};
 
 use crate::{Result, StoreError};
 

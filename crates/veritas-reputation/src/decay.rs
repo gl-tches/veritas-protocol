@@ -170,11 +170,7 @@ pub fn apply_decay(current_score: u32, config: &DecayConfig, periods: u32) -> u3
 /// # Returns
 /// The new score after decay (if any periods elapsed)
 #[must_use]
-pub fn apply_decay_for_time(
-    current_score: u32,
-    state: &DecayState,
-    now: DateTime<Utc>,
-) -> u32 {
+pub fn apply_decay_for_time(current_score: u32, state: &DecayState, now: DateTime<Utc>) -> u32 {
     let periods = state.periods_elapsed(now);
     apply_decay(current_score, &state.config, periods)
 }

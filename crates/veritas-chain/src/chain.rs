@@ -252,9 +252,7 @@ impl BlockValidation {
             // Not a hard failure yet - the body's method is authoritative.
             // This will be unified when body.compute_merkle_root uses MerkleTree.
             #[cfg(debug_assertions)]
-            eprintln!(
-                "CHAIN-FIX-8: merkle root mismatch between MerkleTree and body computation"
-            );
+            eprintln!("CHAIN-FIX-8: merkle root mismatch between MerkleTree and body computation");
         }
 
         Ok(())
@@ -865,8 +863,8 @@ impl Blockchain {
         use veritas_identity::Username;
 
         // Validate username format and check reserved names
-        let validated = Username::new(username)
-            .map_err(|e| ChainError::InvalidUsername(e.to_string()))?;
+        let validated =
+            Username::new(username).map_err(|e| ChainError::InvalidUsername(e.to_string()))?;
 
         let normalized = validated.normalized();
 
@@ -1939,8 +1937,8 @@ mod tests {
 
             // Attempt 4: Valid-looking but wrong sizes
             let mut block4 = block1.clone();
-            block4.header.validator_pubkey = vec![0u8; 32];  // Wrong size for ML-DSA
-            block4.header.signature = vec![0u8; 64];         // Wrong size for ML-DSA
+            block4.header.validator_pubkey = vec![0u8; 32]; // Wrong size for ML-DSA
+            block4.header.signature = vec![0u8; 64]; // Wrong size for ML-DSA
             assert!(BlockValidation::validate_producer(&block4, &validators).is_err());
         }
     }

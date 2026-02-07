@@ -39,7 +39,7 @@ pub use hash::Hash256;
 pub use mldsa::{MlDsaKeyPair, MlDsaPrivateKey, MlDsaPublicKey, MlDsaSignature};
 pub use mlkem::{MlKemCiphertext, MlKemKeyPair, MlKemPrivateKey, MlKemPublicKey};
 pub use symmetric::{
-    decrypt, decrypt_with_aad, encrypt, encrypt_with_aad, EncryptedData, Nonce, SymmetricKey,
-    KEY_SIZE, NONCE_SIZE, TAG_SIZE,
+    EncryptedData, KEY_SIZE, NONCE_SIZE, Nonce, SymmetricKey, TAG_SIZE, decrypt, decrypt_with_aad,
+    encrypt, encrypt_with_aad,
 };
 pub use x25519::{SharedSecret, X25519EphemeralKeyPair, X25519PublicKey, X25519StaticPrivateKey};

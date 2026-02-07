@@ -95,13 +95,13 @@ pub mod padding;
 // Re-export main types for convenience
 pub use inner::{InnerPayload, MessageContent};
 pub use mailbox::{
-    current_epoch, derive_mailbox_key, epoch_from_timestamp, generate_mailbox_salt, MailboxKey,
-    MailboxKeyParams, MAILBOX_KEY_SIZE, MAILBOX_SALT_SIZE,
+    MAILBOX_KEY_SIZE, MAILBOX_SALT_SIZE, MailboxKey, MailboxKeyParams, current_epoch,
+    derive_mailbox_key, epoch_from_timestamp, generate_mailbox_salt,
 };
 pub use minimal::{
-    MinimalEnvelope, MinimalEnvelopeBuilder, ENVELOPE_NONCE_SIZE, MIN_CIPHERTEXT_SIZE,
+    ENVELOPE_NONCE_SIZE, MIN_CIPHERTEXT_SIZE, MinimalEnvelope, MinimalEnvelopeBuilder,
 };
 pub use padding::{
-    bucket_for_size, is_valid_padded, max_bucket_size, max_data_size, pad_to_bucket, unpad,
-    PaddingError, LENGTH_PREFIX_SIZE, PADDING_MARKER,
+    LENGTH_PREFIX_SIZE, PADDING_MARKER, PaddingError, bucket_for_size, is_valid_padded,
+    max_bucket_size, max_data_size, pad_to_bucket, unpad,
 };

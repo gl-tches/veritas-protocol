@@ -594,7 +594,8 @@ mod tests {
         let signature = vec![0u8; 64];
 
         let reg =
-            UsernameRegistration::new(username.clone(), identity.clone(), timestamp, signature).unwrap();
+            UsernameRegistration::new(username.clone(), identity.clone(), timestamp, signature)
+                .unwrap();
 
         assert_eq!(reg.username, username);
         assert_eq!(reg.identity_hash, identity);
@@ -656,7 +657,8 @@ mod tests {
             UsernameRegistration::compute_signing_payload(&username, &identity, timestamp);
         let mock_signature = Hash256::hash(&payload).to_bytes().to_vec();
 
-        let reg = UsernameRegistration::new(username, identity, timestamp, mock_signature.clone()).unwrap();
+        let reg = UsernameRegistration::new(username, identity, timestamp, mock_signature.clone())
+            .unwrap();
 
         // Verify with a mock verifier that checks hash matches
         let result = reg.verify(|message, signature| {

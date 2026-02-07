@@ -9,8 +9,8 @@
 //! - Random padding bytes prevent pattern analysis
 //! - Length prefix ensures reliable unpadding
 
-use rand::rngs::OsRng;
 use rand::RngCore;
+use rand::rngs::OsRng;
 use thiserror::Error;
 
 use crate::limits::PADDING_BUCKETS;
@@ -266,7 +266,7 @@ mod tests {
         let padded = pad_to_bucket(data).unwrap();
 
         assert_eq!(padded.len(), 1024); // Smallest bucket
-                                        // First 4 bytes should be zero length
+        // First 4 bytes should be zero length
         assert_eq!(&padded[..4], &[0, 0, 0, 0]);
 
         let unpadded = unpad(&padded).unwrap();

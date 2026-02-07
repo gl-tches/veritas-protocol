@@ -383,7 +383,8 @@ impl RateLimiter {
         self.last_cleanup = Instant::now();
 
         // Remove expired bans
-        self.banned_peers.retain(|_, ban_info| !ban_info.is_expired());
+        self.banned_peers
+            .retain(|_, ban_info| !ban_info.is_expired());
 
         // Remove stale peer buckets (inactive for > 5 minutes)
         let stale_threshold = Duration::from_secs(300);
@@ -402,7 +403,8 @@ impl RateLimiter {
     #[cfg(test)]
     pub fn reset(&mut self) {
         self.peer_buckets.clear();
-        self.global_bucket = TokenBucket::new(self.config.global_rate, self.config.burst_multiplier);
+        self.global_bucket =
+            TokenBucket::new(self.config.global_rate, self.config.burst_multiplier);
         self.violation_counts.clear();
         self.banned_peers.clear();
     }
@@ -506,7 +508,11 @@ mod tests {
 
         // Should have ~10 tokens now
         let tokens = bucket.token_count();
-        assert!((8.0..=12.0).contains(&tokens), "Expected ~10 tokens, got {}", tokens);
+        assert!(
+            (8.0..=12.0).contains(&tokens),
+            "Expected ~10 tokens, got {}",
+            tokens
+        );
     }
 
     #[test]
@@ -558,7 +564,7 @@ mod tests {
         // Record violations
         assert!(!limiter.record_violation(&peer)); // 1
         assert!(!limiter.record_violation(&peer)); // 2
-        assert!(limiter.record_violation(&peer));  // 3 - banned
+        assert!(limiter.record_violation(&peer)); // 3 - banned
 
         // Peer should be banned
         assert!(limiter.is_banned(&peer));
@@ -601,7 +607,10 @@ mod tests {
         assert_eq!(limiter.check_detailed(&peer), RateLimitResult::Allowed);
 
         // Third should exceed per-peer limit
-        assert_eq!(limiter.check_detailed(&peer), RateLimitResult::PeerLimitExceeded);
+        assert_eq!(
+            limiter.check_detailed(&peer),
+            RateLimitResult::PeerLimitExceeded
+        );
 
         // Ban the peer
         limiter.ban_peer(&peer);

@@ -9,7 +9,7 @@
 
 use proptest::prelude::*;
 
-use crate::{IdentityHash, IdentityKeyPair, Username, MAX_USERNAME_LEN, MIN_USERNAME_LEN};
+use crate::{IdentityHash, IdentityKeyPair, MAX_USERNAME_LEN, MIN_USERNAME_LEN, Username};
 use veritas_crypto::SymmetricKey;
 
 // ==================== Username Validation Property Tests ====================

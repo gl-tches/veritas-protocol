@@ -11,9 +11,8 @@
 use proptest::prelude::*;
 
 use crate::{
-    decrypt, decrypt_with_aad, encrypt, encrypt_with_aad, EncryptedData, Hash256, Nonce,
-    SymmetricKey, X25519EphemeralKeyPair, X25519PublicKey, X25519StaticPrivateKey,
-    NONCE_SIZE, KEY_SIZE,
+    EncryptedData, Hash256, KEY_SIZE, NONCE_SIZE, Nonce, SymmetricKey, X25519EphemeralKeyPair,
+    X25519PublicKey, X25519StaticPrivateKey, decrypt, decrypt_with_aad, encrypt, encrypt_with_aad,
 };
 
 // ==================== Symmetric Encryption Property Tests ====================

@@ -35,17 +35,17 @@ use std::time::Duration;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use veritas_crypto::{
-    decrypt, encrypt, EncryptedData, Hash256, Nonce, SymmetricKey, X25519EphemeralKeyPair,
+    EncryptedData, Hash256, Nonce, SymmetricKey, X25519EphemeralKeyPair, decrypt, encrypt,
 };
 use veritas_identity::{IdentityHash, IdentityKeyPair, IdentityPublicKeys};
 
 use crate::envelope::{
-    generate_mailbox_salt, pad_to_bucket, unpad, InnerPayload, MailboxKeyParams, MessageContent,
-    MinimalEnvelope, ENVELOPE_NONCE_SIZE, MAILBOX_SALT_SIZE,
+    ENVELOPE_NONCE_SIZE, InnerPayload, MAILBOX_SALT_SIZE, MailboxKeyParams, MessageContent,
+    MinimalEnvelope, generate_mailbox_salt, pad_to_bucket, unpad,
 };
 use crate::error::{ProtocolError, Result};
 use crate::limits::MAX_JITTER_MS;
-use crate::signing::{sign_message, verify_signature, SigningData};
+use crate::signing::{SigningData, sign_message, verify_signature};
 
 /// Domain separator for message encryption key derivation.
 ///

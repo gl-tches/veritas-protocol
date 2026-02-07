@@ -16,7 +16,6 @@ pub enum WireErrorCode {
     Ok = 0,
 
     // === 1xxx: Client errors ===
-
     /// Malformed request (bad encoding, missing fields).
     BadRequest = 1000,
     /// Authentication failed (invalid signature, expired key).
@@ -33,7 +32,6 @@ pub enum WireErrorCode {
     UnsupportedCipherSuite = 1006,
 
     // === 2xxx: Server/validator errors ===
-
     /// Internal validator error (details not disclosed).
     InternalError = 2000,
     /// Validator is not accepting transactions (syncing, shutting down).
@@ -42,7 +40,6 @@ pub enum WireErrorCode {
     ConsensusRejected = 2002,
 
     // === 3xxx: Chain errors ===
-
     /// Block not found.
     BlockNotFound = 3000,
     /// Transaction not found.
@@ -51,7 +48,6 @@ pub enum WireErrorCode {
     InvalidBlockRange = 3002,
 
     // === 4xxx: Identity errors ===
-
     /// Identity not found.
     IdentityNotFound = 4000,
     /// Identity already registered.
@@ -60,7 +56,6 @@ pub enum WireErrorCode {
     UsernameTaken = 4002,
 
     // === 5xxx: Network errors ===
-
     /// Peer not found.
     PeerNotFound = 5000,
     /// Connection refused.

@@ -496,7 +496,8 @@ impl MemoryBudget {
 
         // Resize the LRU cache capacity
         let new_capacity = new_max_bytes / 2048;
-        self.cache.resize(NonZeroUsize::new(new_capacity.max(100)).unwrap());
+        self.cache
+            .resize(NonZeroUsize::new(new_capacity.max(100)).unwrap());
     }
 }
 
@@ -634,7 +635,9 @@ mod tests {
         for i in 1..=100 {
             let block = create_test_block(i);
             hashes.push(block.hash().clone());
-            budget.try_insert(block.hash().clone(), Arc::new(block)).unwrap();
+            budget
+                .try_insert(block.hash().clone(), Arc::new(block))
+                .unwrap();
         }
 
         // All blocks should fit in 64MB
@@ -648,7 +651,9 @@ mod tests {
         // Insert some blocks
         for i in 1..=100 {
             let block = create_test_block(i);
-            budget.try_insert(block.hash().clone(), Arc::new(block)).unwrap();
+            budget
+                .try_insert(block.hash().clone(), Arc::new(block))
+                .unwrap();
         }
 
         let initial_bytes = budget.current_bytes();
@@ -690,7 +695,9 @@ mod tests {
 
         for i in 1..=100 {
             let block = create_test_block(i);
-            budget.try_insert(block.hash().clone(), Arc::new(block)).unwrap();
+            budget
+                .try_insert(block.hash().clone(), Arc::new(block))
+                .unwrap();
         }
 
         let metrics = budget.snapshot_metrics();
@@ -720,7 +727,9 @@ mod tests {
         let block = create_test_block(1);
         let hash = block.hash().clone();
 
-        budget.try_insert(hash.clone(), Arc::new(block.clone())).unwrap();
+        budget
+            .try_insert(hash.clone(), Arc::new(block.clone()))
+            .unwrap();
         let bytes_after_first = budget.current_bytes();
 
         // Insert again
@@ -768,7 +777,9 @@ mod tests {
         // Insert many blocks to ensure we have enough data to trigger eviction
         for i in 1..=200 {
             let block = create_test_block(i);
-            budget.try_insert(block.hash().clone(), Arc::new(block)).unwrap();
+            budget
+                .try_insert(block.hash().clone(), Arc::new(block))
+                .unwrap();
         }
 
         let bytes_before = budget.current_bytes();

@@ -30,9 +30,9 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use veritas_crypto::Hash256;
 
-use crate::config::{PruningMode, PRUNING_SAFETY_MARGIN};
-use crate::storage::StorageBackend;
 use crate::Result;
+use crate::config::{PRUNING_SAFETY_MARGIN, PruningMode};
+use crate::storage::StorageBackend;
 
 /// Statistics from a pruning operation.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -390,9 +390,9 @@ impl ChainPruner {
     /// Returns the recommended number of blocks between pruning runs.
     pub fn recommended_interval(&self) -> u64 {
         match &self.mode {
-            PruningMode::Archive => u64::MAX, // Never
+            PruningMode::Archive => u64::MAX,                          // Never
             PruningMode::Standard { keep_blocks } => keep_blocks / 10, // Every 10% of retention
-            PruningMode::Aggressive { .. } => 100, // Frequent pruning
+            PruningMode::Aggressive { .. } => 100,                     // Frequent pruning
         }
     }
 }
@@ -400,9 +400,9 @@ impl ChainPruner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Block;
     use crate::config::{DEFAULT_KEEP_BLOCKS, PRUNING_SAFETY_MARGIN};
     use crate::storage::InMemoryBackend;
-    use crate::Block;
     use veritas_identity::IdentityHash;
 
     fn test_identity(seed: u8) -> IdentityHash {
@@ -524,8 +524,14 @@ mod tests {
         // keep_height = 499 - 50 = 449
         // threshold = min(449, 399) = 399
         // Blocks 1-398 should be pruned (genesis 0 is protected)
-        assert!(stats.blocks_deleted > 0, "Expected some blocks to be deleted");
-        assert!(storage.count_blocks() < 500, "Expected fewer blocks after pruning");
+        assert!(
+            stats.blocks_deleted > 0,
+            "Expected some blocks to be deleted"
+        );
+        assert!(
+            storage.count_blocks() < 500,
+            "Expected fewer blocks after pruning"
+        );
     }
 
     #[tokio::test]
@@ -541,10 +547,7 @@ mod tests {
 
         let initial_count = storage.count_blocks();
 
-        let stats = pruner
-            .prune(&storage, 49, |_| Some(0))
-            .await
-            .unwrap();
+        let stats = pruner.prune(&storage, 49, |_| Some(0)).await.unwrap();
 
         assert_eq!(stats.blocks_deleted, 0);
         assert_eq!(storage.count_blocks(), initial_count);
@@ -580,7 +583,12 @@ mod tests {
             .unwrap();
 
         // Protected block should still exist
-        assert!(storage.block_exists(&blocks[5].hash().clone()).await.unwrap());
+        assert!(
+            storage
+                .block_exists(&blocks[5].hash().clone())
+                .await
+                .unwrap()
+        );
     }
 
     // ==================== Statistics Tests ====================

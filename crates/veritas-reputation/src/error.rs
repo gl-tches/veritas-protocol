@@ -35,7 +35,6 @@ pub enum ReputationError {
     InvalidReport(String),
 
     // === VERITAS-2026-0010: New error types for interaction proof authentication ===
-
     /// Self-interaction is not allowed.
     ///
     /// Reputation cannot be gained from interactions with oneself.

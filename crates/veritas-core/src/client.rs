@@ -72,7 +72,9 @@ use veritas_identity::{IdentityHash, IdentityPublicKeys, IdentitySlotInfo};
 use crate::config::ClientConfig;
 use crate::error::{CoreError, Result};
 use crate::groups::{GroupId, GroupInfo, GroupMessage, GroupRole};
-use crate::internal::{ChainService, IdentityInfo, IdentityManager, MessageService, ReputationService};
+use crate::internal::{
+    ChainService, IdentityInfo, IdentityManager, MessageService, ReputationService,
+};
 use crate::messaging::{MessageHash, MessageStatus, ReceivedMessage, SendOptions};
 use crate::verification::{MessageProof, SyncStatus};
 
@@ -272,9 +274,7 @@ impl VeritasClient {
     /// let client = VeritasClient::with_data_dir("/custom/path").await?;
     /// ```
     pub async fn with_data_dir(path: impl Into<PathBuf>) -> Result<Self> {
-        let config = ClientConfig::builder()
-            .with_data_dir(path.into())
-            .build();
+        let config = ClientConfig::builder().with_data_dir(path.into()).build();
 
         Self::new(config).await
     }
@@ -1018,9 +1018,7 @@ mod tests {
     #[tokio::test]
     async fn test_with_data_dir() {
         let dir = tempfile::tempdir().unwrap();
-        let client: VeritasClient = VeritasClient::with_data_dir(dir.path())
-            .await
-            .unwrap();
+        let client: VeritasClient = VeritasClient::with_data_dir(dir.path()).await.unwrap();
         assert_eq!(client.state().await, ClientState::Created);
     }
 
@@ -1102,14 +1100,32 @@ mod tests {
 
         // First is primary
         let identities = client.list_identities().await.unwrap();
-        assert!(identities.iter().find(|i| i.hash == hash1).unwrap().is_primary);
+        assert!(
+            identities
+                .iter()
+                .find(|i| i.hash == hash1)
+                .unwrap()
+                .is_primary
+        );
 
         // Set second as primary
         client.set_primary_identity(&hash2).await.unwrap();
 
         let identities = client.list_identities().await.unwrap();
-        assert!(!identities.iter().find(|i| i.hash == hash1).unwrap().is_primary);
-        assert!(identities.iter().find(|i| i.hash == hash2).unwrap().is_primary);
+        assert!(
+            !identities
+                .iter()
+                .find(|i| i.hash == hash1)
+                .unwrap()
+                .is_primary
+        );
+        assert!(
+            identities
+                .iter()
+                .find(|i| i.hash == hash2)
+                .unwrap()
+                .is_primary
+        );
     }
 
     #[tokio::test]
@@ -1144,7 +1160,9 @@ mod tests {
 
         let recipient = IdentityHash::from_public_key(b"recipient");
         assert!(matches!(
-            client.send_message(&recipient, "Hello", SendOptions::default()).await,
+            client
+                .send_message(&recipient, "Hello", SendOptions::default())
+                .await,
             Err(CoreError::NotInitialized)
         ));
 
@@ -1161,7 +1179,9 @@ mod tests {
 
         let recipient = IdentityHash::from_public_key(b"recipient");
         assert!(matches!(
-            client.send_message(&recipient, "Hello", SendOptions::default()).await,
+            client
+                .send_message(&recipient, "Hello", SendOptions::default())
+                .await,
             Err(CoreError::NotImplemented(_))
         ));
 

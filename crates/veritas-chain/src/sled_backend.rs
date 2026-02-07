@@ -30,7 +30,7 @@ use veritas_identity::IdentityHash;
 
 use crate::block::Block;
 use crate::compression::BlockCompressor;
-use crate::storage::{StorageBackend, MAX_STORED_BLOCK_SIZE};
+use crate::storage::{MAX_STORED_BLOCK_SIZE, StorageBackend};
 use crate::{ChainError, Result};
 
 /// Tree name for block storage.
@@ -121,11 +121,7 @@ impl SledBackend {
     /// # Errors
     ///
     /// Returns an error if the database cannot be opened or created.
-    pub fn open(
-        path: &Path,
-        cache_mb: usize,
-        compressor: Option<BlockCompressor>,
-    ) -> Result<Self> {
+    pub fn open(path: &Path, cache_mb: usize, compressor: Option<BlockCompressor>) -> Result<Self> {
         let config = sled::Config::new()
             .path(path)
             .cache_capacity((cache_mb * 1024 * 1024) as u64)
@@ -311,8 +307,9 @@ impl SledBackend {
             .get(normalized.as_bytes())
             .map_err(|e| ChainError::Storage(format!("username check: {}", e)))?
         {
-            let existing = IdentityHash::from_bytes(&existing_bytes)
-                .map_err(|_| ChainError::Storage("corrupt identity in username index".to_string()))?;
+            let existing = IdentityHash::from_bytes(&existing_bytes).map_err(|_| {
+                ChainError::Storage("corrupt identity in username index".to_string())
+            })?;
             if existing != *identity {
                 return Err(ChainError::UsernameTaken {
                     username: username.to_string(),
@@ -352,8 +349,9 @@ impl SledBackend {
             .map_err(|e| ChainError::Storage(format!("load username meta: {}", e)))?
         {
             Some(bytes) => {
-                let meta: UsernameIndexMeta = bincode::deserialize(&bytes)
-                    .map_err(|e| ChainError::Storage(format!("deserialize username meta: {}", e)))?;
+                let meta: UsernameIndexMeta = bincode::deserialize(&bytes).map_err(|e| {
+                    ChainError::Storage(format!("deserialize username meta: {}", e))
+                })?;
                 Ok(Some(meta))
             }
             None => Ok(None),
@@ -750,10 +748,7 @@ mod tests {
             backend.store_block(&block).await.unwrap();
         }
 
-        let heights: Vec<u64> = backend
-            .iter_heights()
-            .map(|r| r.unwrap().0)
-            .collect();
+        let heights: Vec<u64> = backend.iter_heights().map(|r| r.unwrap().0).collect();
 
         assert_eq!(heights, vec![1, 2, 3, 4, 5]);
     }
@@ -771,10 +766,7 @@ mod tests {
         let pruned = backend.prune_height_index_below(5).unwrap();
         assert_eq!(pruned, 4); // Heights 1, 2, 3, 4
 
-        let heights: Vec<u64> = backend
-            .iter_heights()
-            .map(|r| r.unwrap().0)
-            .collect();
+        let heights: Vec<u64> = backend.iter_heights().map(|r| r.unwrap().0).collect();
 
         assert_eq!(heights, vec![5, 6, 7, 8, 9, 10]);
     }

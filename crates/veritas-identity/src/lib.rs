@@ -92,12 +92,12 @@ pub mod username;
 
 pub use error::{IdentityError, Result};
 pub use hardware::{
-    AttestationPlatform, HardwareAttestation, HardwareFingerprint, ATTESTATION_MAX_AGE_SECS,
+    ATTESTATION_MAX_AGE_SECS, AttestationPlatform, HardwareAttestation, HardwareFingerprint,
 };
 pub use identity_hash::IdentityHash;
 pub use keypair::{EncryptedIdentityKeyPair, IdentityKeyPair, IdentityPublicKeys};
 pub use lifecycle::{
-    KeyLifecycle, KeyState, EXPIRY_GRACE_PERIOD_SECS, KEY_EXPIRY_SECS, KEY_WARNING_SECS,
+    EXPIRY_GRACE_PERIOD_SECS, KEY_EXPIRY_SECS, KEY_WARNING_SECS, KeyLifecycle, KeyState,
 };
-pub use limits::{IdentityLimiter, IdentitySlotInfo, OriginFingerprint, MAX_IDENTITIES_PER_ORIGIN};
-pub use username::{Username, UsernameRegistration, MAX_USERNAME_LEN, MIN_USERNAME_LEN};
+pub use limits::{IdentityLimiter, IdentitySlotInfo, MAX_IDENTITIES_PER_ORIGIN, OriginFingerprint};
+pub use username::{MAX_USERNAME_LEN, MIN_USERNAME_LEN, Username, UsernameRegistration};

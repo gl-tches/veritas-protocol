@@ -30,8 +30,8 @@
 //! 15% of validators are rotated each epoch, with worst performers
 //! being replaced first to ensure network quality improves over time.
 
-use rand::seq::SliceRandom;
 use rand::SeedableRng;
+use rand::seq::SliceRandom;
 use rand_chacha::ChaCha20Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

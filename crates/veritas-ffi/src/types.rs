@@ -39,7 +39,10 @@ impl ClientHandle {
     /// The runtime is stored alongside the client so that all FFI calls
     /// can reuse the same thread pool instead of creating a new one each time.
     #[allow(clippy::new_ret_no_self)]
-    pub(crate) fn new(client: VeritasClient, runtime: tokio::runtime::Runtime) -> *mut VeritasHandle {
+    pub(crate) fn new(
+        client: VeritasClient,
+        runtime: tokio::runtime::Runtime,
+    ) -> *mut VeritasHandle {
         let handle = Box::new(ClientHandle {
             client: Arc::new(client),
             runtime,
@@ -57,24 +60,28 @@ impl ClientHandle {
     /// # Safety
     ///
     /// The pointer must be a valid handle created by `new()` and not yet freed.
-    pub(crate) unsafe fn from_ptr<'a>(ptr: *mut VeritasHandle) -> Option<&'a ClientHandle> { unsafe {
-        if ptr.is_null() {
-            None
-        } else {
-            Some(&*(ptr as *mut ClientHandle))
+    pub(crate) unsafe fn from_ptr<'a>(ptr: *mut VeritasHandle) -> Option<&'a ClientHandle> {
+        unsafe {
+            if ptr.is_null() {
+                None
+            } else {
+                Some(&*(ptr as *mut ClientHandle))
+            }
         }
-    }}
+    }
 
     /// Consume the handle and free memory.
     ///
     /// # Safety
     ///
     /// The pointer must be a valid handle created by `new()` and not yet freed.
-    pub(crate) unsafe fn free(ptr: *mut VeritasHandle) { unsafe {
-        if !ptr.is_null() {
-            let _ = Box::from_raw(ptr as *mut ClientHandle);
+    pub(crate) unsafe fn free(ptr: *mut VeritasHandle) {
+        unsafe {
+            if !ptr.is_null() {
+                let _ = Box::from_raw(ptr as *mut ClientHandle);
+            }
         }
-    }}
+    }
 }
 
 // ============================================================================

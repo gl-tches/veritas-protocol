@@ -51,9 +51,9 @@ pub mod transport_manager;
 
 pub use bluetooth::{BlePeer, BluetoothConfig, BluetoothRelay, BluetoothStats};
 pub use dht::{
-    compute_message_id, derive_dht_key, DhtConfig, DhtKey, DhtRecord, DhtRecordSet, DhtStorage,
-    DhtStorageStats, DhtStorageStatsSnapshot, MessageId, DEFAULT_MAX_RECORD_SIZE,
-    DEFAULT_QUERY_TIMEOUT_SECS, DEFAULT_REPLICATION_FACTOR,
+    DEFAULT_MAX_RECORD_SIZE, DEFAULT_QUERY_TIMEOUT_SECS, DEFAULT_REPLICATION_FACTOR, DhtConfig,
+    DhtKey, DhtRecord, DhtRecordSet, DhtStorage, DhtStorageStats, DhtStorageStatsSnapshot,
+    MessageId, compute_message_id, derive_dht_key,
 };
 pub use discovery::{DiscoveredPeer, DiscoveryConfig, DiscoveryEvent, LocalDiscovery};
 pub use error::{NetError, Result};
@@ -61,20 +61,20 @@ pub use gossip::{
     BlockAnnouncement, GossipAnnouncement, GossipConfig, GossipManager, MessageAnnouncement,
     ReceiptAnnouncement, TOPIC_BLOCKS, TOPIC_MESSAGES, TOPIC_RECEIPTS,
 };
-pub use rate_limiter::{
-    RateLimitConfig, RateLimitResult, RateLimiter, DEFAULT_BAN_DURATION_SECS,
-    DEFAULT_BURST_MULTIPLIER, DEFAULT_GLOBAL_RATE, DEFAULT_PER_PEER_RATE,
-    DEFAULT_VIOLATIONS_BEFORE_BAN,
-};
-pub use subnet_limiter::{
-    PeerAcceptResult, SubnetKey, SubnetLimiter, SubnetLimiterConfig, SubnetLimiterStats,
-    SubnetLimiterStatsSnapshot, MAX_PEERS_PER_SUBNET, SUBNET_MASK_V4, SUBNET_MASK_V6,
-};
 pub use node::{
-    peer_id_from_multiaddr, NodeBehaviour, NodeConfig, NodeEvent, VeritasNode,
-    VERITAS_GOSSIPSUB_PREFIX, VERITAS_KAD_PROTOCOL,
+    NodeBehaviour, NodeConfig, NodeEvent, VERITAS_GOSSIPSUB_PREFIX, VERITAS_KAD_PROTOCOL,
+    VeritasNode, peer_id_from_multiaddr,
+};
+pub use rate_limiter::{
+    DEFAULT_BAN_DURATION_SECS, DEFAULT_BURST_MULTIPLIER, DEFAULT_GLOBAL_RATE,
+    DEFAULT_PER_PEER_RATE, DEFAULT_VIOLATIONS_BEFORE_BAN, RateLimitConfig, RateLimitResult,
+    RateLimiter,
 };
 pub use relay::{RelayConfig, RelayManager, RelayStats, RelayedMessage};
+pub use subnet_limiter::{
+    MAX_PEERS_PER_SUBNET, PeerAcceptResult, SUBNET_MASK_V4, SUBNET_MASK_V6, SubnetKey,
+    SubnetLimiter, SubnetLimiterConfig, SubnetLimiterStats, SubnetLimiterStatsSnapshot,
+};
 pub use transport::{
     NetworkAddress, PeerInfo, SelectionReason, Transport, TransportCapabilities, TransportConfig,
     TransportSelection, TransportSelector, TransportState,
