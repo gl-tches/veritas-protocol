@@ -34,6 +34,7 @@
 #![warn(missing_docs)]
 
 pub mod chunking;
+pub mod domain_separation;
 pub mod encryption;
 pub mod envelope;
 pub mod error;
@@ -43,6 +44,8 @@ pub mod limits;
 mod proptests;
 pub mod receipts;
 pub mod signing;
+pub mod transcript;
+pub mod wire_error;
 
 pub use chunking::{split_into_chunks, ChunkInfo, ChunkReassembler, MessageChunk};
 pub use encryption::{
@@ -68,3 +71,4 @@ pub use signing::{
     sign_message, verify_signature, MessageSignature, SignatureVersion, SigningData,
     DOMAIN_SEPARATOR, SIGNATURE_SIZE,
 };
+pub use wire_error::{WireError, WireErrorCode};

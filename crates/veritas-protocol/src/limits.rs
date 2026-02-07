@@ -20,15 +20,15 @@ pub const MESSAGE_TTL_SECS: u64 = 7 * 24 * 60 * 60;
 
 /// Maximum size of a serialized MinimalEnvelope in bytes.
 /// SECURITY: Check this BEFORE deserialization to prevent OOM attacks (VERITAS-2026-0003).
-pub const MAX_ENVELOPE_SIZE: usize = 2048;
+pub const MAX_ENVELOPE_SIZE: usize = 8192;
 
 /// Maximum size of a serialized InnerPayload in bytes.
 /// SECURITY: Check this BEFORE deserialization to prevent OOM attacks (VERITAS-2026-0003).
-pub const MAX_INNER_ENVELOPE_SIZE: usize = 1536;
+pub const MAX_INNER_ENVELOPE_SIZE: usize = 6144;
 
 /// Maximum total buffer size for chunk reassembly per session.
 /// SECURITY: Prevents memory exhaustion from incomplete chunk streams.
-pub const MAX_REASSEMBLY_BUFFER: usize = 4096;
+pub const MAX_REASSEMBLY_BUFFER: usize = 16384;
 
 /// Maximum number of concurrent pending reassembly sessions.
 /// SECURITY: Prevents memory exhaustion from many incomplete messages.
@@ -41,13 +41,13 @@ pub const REASSEMBLY_TIMEOUT_SECS: u64 = 300;
 // === Privacy ===
 
 /// Padding bucket sizes for hiding message length.
-pub const PADDING_BUCKETS: &[usize] = &[256, 512, 1024];
+pub const PADDING_BUCKETS: &[usize] = &[1024, 2048, 4096, 8192];
 
 /// Maximum timing jitter in milliseconds (0-3 seconds).
 pub const MAX_JITTER_MS: u64 = 3000;
 
-/// Epoch duration for mailbox key rotation (1 day).
-pub const EPOCH_DURATION_SECS: u64 = 24 * 60 * 60;
+/// Epoch duration for mailbox key rotation (30 days).
+pub const EPOCH_DURATION_SECS: u64 = 30 * 24 * 60 * 60;
 
 // === Identity ===
 
@@ -85,7 +85,7 @@ pub const GROUP_KEY_ROTATION_SECS: u64 = 7 * 24 * 60 * 60;
 // === Reputation ===
 
 /// Starting reputation score.
-pub const REPUTATION_START: u32 = 500;
+pub const REPUTATION_START: u32 = 100;
 
 /// Maximum reputation score.
 pub const REPUTATION_MAX: u32 = 1000;
@@ -133,6 +133,27 @@ pub const MAX_VALIDATORS_PER_REGION: usize = 5;
 /// Epochs stake is locked after becoming validator.
 pub const STAKE_LOCK_EPOCHS: u32 = 14;
 
+// === Wire Protocol ===
+
+/// Current wire protocol version.
+pub const PROTOCOL_VERSION: u8 = 2;
+
+// === ML-DSA-65 (FIPS 204) ===
+
+/// ML-DSA-65 public key size (FIPS 204).
+pub const ML_DSA_65_PK_SIZE: usize = 1952;
+
+/// ML-DSA-65 signature size (FIPS 204).
+pub const ML_DSA_65_SIG_SIZE: usize = 3309;
+
+/// ML-DSA-65 private key size (FIPS 204).
+pub const ML_DSA_65_SK_SIZE: usize = 4032;
+
+// === Chain Epoch ===
+
+/// Epoch duration for chain-level pruning (30 days).
+pub const CHAIN_EPOCH_DURATION_SECS: u64 = 30 * 24 * 60 * 60;
+
 // === Validator SLA ===
 
 /// Minimum required uptime percentage.
@@ -161,9 +182,9 @@ mod tests {
 
     // Compile-time assertions for constant relationships
     const _: () = {
-        assert!(REPUTATION_BLACKLIST < REPUTATION_QUARANTINE);
-        assert!(REPUTATION_QUARANTINE < REPUTATION_START);
-        assert!(REPUTATION_START < REPUTATION_MAX);
+        assert!(REPUTATION_BLACKLIST < REPUTATION_START);
+        assert!(REPUTATION_START < REPUTATION_QUARANTINE);
+        assert!(REPUTATION_QUARANTINE < REPUTATION_MAX);
         assert!(MIN_VALIDATOR_STAKE > REPUTATION_QUARANTINE);
         // DoS prevention constants must be reasonable
         assert!(MAX_INNER_ENVELOPE_SIZE < MAX_ENVELOPE_SIZE);
@@ -180,7 +201,7 @@ mod tests {
         let quarantine = REPUTATION_QUARANTINE;
         let start = REPUTATION_START;
         let max = REPUTATION_MAX;
-        assert!(blacklist < quarantine && quarantine < start && start < max);
+        assert!(blacklist < start && start < quarantine && quarantine < max);
     }
 
     #[test]

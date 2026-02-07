@@ -108,18 +108,12 @@ impl WasmSafetyNumber {
 
         // Build inputs for hashing
         let first_exchange = first_keys.exchange.as_bytes();
-        let first_signing: &[u8] = first_keys
-            .signing
-            .as_ref()
-            .map(|k| k.as_bytes())
-            .unwrap_or(&[]);
+        let first_signing_bytes = first_keys.signing.as_ref().map(|k| k.as_bytes());
+        let first_signing: &[u8] = first_signing_bytes.as_deref().unwrap_or(&[]);
 
         let second_exchange = second_keys.exchange.as_bytes();
-        let second_signing: &[u8] = second_keys
-            .signing
-            .as_ref()
-            .map(|k| k.as_bytes())
-            .unwrap_or(&[]);
+        let second_signing_bytes = second_keys.signing.as_ref().map(|k| k.as_bytes());
+        let second_signing: &[u8] = second_signing_bytes.as_deref().unwrap_or(&[]);
 
         // Hash all components with domain separation
         let hash = Hash256::hash_many(&[

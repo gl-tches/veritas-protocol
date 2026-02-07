@@ -42,7 +42,7 @@ pub const MAX_PROOF_AGE_SECS: u64 = 86400;
 
 /// Size of signature in bytes.
 /// Using a reasonable size that works for both classical (Ed25519: 64 bytes)
-/// and post-quantum signatures (ML-DSA-65: 3293 bytes).
+/// and post-quantum signatures (ML-DSA-65: 3309 bytes, FIPS 204).
 /// We use a max size and pad/truncate as needed.
 pub const MAX_SIGNATURE_SIZE: usize = 4096;
 

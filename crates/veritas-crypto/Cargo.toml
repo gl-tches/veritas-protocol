@@ -10,9 +10,10 @@ keywords = ["cryptography", "post-quantum", "ml-kem", "ml-dsa", "blake3"]
 categories = ["cryptography"]
 
 [dependencies]
-# Post-quantum cryptography (to be added once crates stabilize)
-# ml-kem.workspace = true
-# ml-dsa.workspace = true
+# Post-quantum cryptography
+# ml-kem.workspace = true  # TODO: integrate once stable
+ml-dsa.workspace = true
+hybrid-array.workspace = true
 
 # Classical cryptography
 x25519-dalek.workspace = true

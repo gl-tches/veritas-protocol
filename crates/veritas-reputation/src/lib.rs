@@ -13,7 +13,7 @@
 //!
 //! The reputation system tracks identity trustworthiness through scoring:
 //!
-//! - New identities start with 500 points
+//! - New identities start with 100 points
 //! - Maximum score is 1000 points
 //! - Quarantine threshold: 200 points
 //! - Blacklist threshold: 50 points
@@ -41,7 +41,7 @@
 //!
 //! // Create a new reputation score
 //! let mut score = ReputationScore::new();
-//! assert_eq!(score.current(), 500);
+//! assert_eq!(score.current(), 100);
 //!
 //! // Create a rate limiter
 //! let mut limiter = ScoreRateLimiter::new();
@@ -53,7 +53,7 @@
 //!     score.gain(amount);
 //! }
 //!
-//! assert_eq!(score.current(), 505);
+//! assert_eq!(score.current(), 105);
 //! ```
 
 #![deny(unsafe_code)]

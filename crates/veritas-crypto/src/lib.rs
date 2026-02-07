@@ -17,9 +17,10 @@
 //!
 //! ## Post-Quantum Status
 //!
-//! The ML-KEM and ML-DSA modules are currently placeholder implementations
-//! pending stabilization of the underlying crates. The X25519 module provides
-//! classical key exchange that will be combined with ML-KEM in hybrid mode.
+//! - **ML-DSA-65**: Fully implemented using the `ml-dsa` crate (FIPS 204).
+//!   Provides post-quantum digital signatures at NIST security level 3.
+//! - **ML-KEM**: Placeholder pending crate stabilization.
+//! - **X25519**: Classical key exchange, to be combined with ML-KEM in hybrid mode.
 
 #![deny(unsafe_code)]
 #![warn(missing_docs)]

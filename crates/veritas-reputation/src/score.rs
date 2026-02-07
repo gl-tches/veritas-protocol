@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// Reputation score limits and thresholds.
 pub mod limits {
     /// Default starting reputation score.
-    pub const REPUTATION_START: u32 = 500;
+    pub const REPUTATION_START: u32 = 100;
 
     /// Maximum reputation score.
     pub const REPUTATION_MAX: u32 = 1000;
@@ -19,6 +19,20 @@ pub mod limits {
 
     /// Blacklist threshold - below this, user cannot participate.
     pub const REPUTATION_BLACKLIST: u32 = 50;
+}
+
+/// Reputation tier thresholds.
+pub mod tiers {
+    /// Tier 1: Basic (starting tier at 100).
+    pub const TIER_1_BASIC: u32 = 100;
+    /// Tier 2: Established (can file reports).
+    pub const TIER_2_ESTABLISHED: u32 = 300;
+    /// Tier 3: Trusted (enhanced rate limits).
+    pub const TIER_3_TRUSTED: u32 = 500;
+    /// Tier 4: Veteran (can be validator candidate).
+    pub const TIER_4_VETERAN: u32 = 700;
+    /// Tier 5: Priority (full validator eligible).
+    pub const TIER_5_PRIORITY: u32 = 800;
 }
 
 // Re-export limits at module level for backwards compatibility
@@ -40,7 +54,7 @@ pub struct ReputationScore {
 }
 
 impl ReputationScore {
-    /// Create a new reputation score with the default starting value (500).
+    /// Create a new reputation score with the default starting value (100).
     #[must_use]
     pub fn new() -> Self {
         let now = Utc::now();
@@ -155,16 +169,33 @@ impl ReputationScore {
         self.current_score >= 800
     }
 
-    /// Check if this identity can file reports (needs >= 400 reputation).
+    /// Check if this identity can file reports (needs >= 300 reputation).
     #[must_use]
     pub fn can_file_reports(&self) -> bool {
-        self.current_score >= 400
+        self.current_score >= tiers::TIER_2_ESTABLISHED
     }
 
     /// Check if this identity can become a validator (needs >= 700 reputation).
     #[must_use]
     pub fn can_be_validator(&self) -> bool {
         self.current_score >= 700
+    }
+
+    /// Get the current reputation tier.
+    pub fn tier(&self) -> u32 {
+        if self.current_score >= tiers::TIER_5_PRIORITY {
+            5
+        } else if self.current_score >= tiers::TIER_4_VETERAN {
+            4
+        } else if self.current_score >= tiers::TIER_3_TRUSTED {
+            3
+        } else if self.current_score >= tiers::TIER_2_ESTABLISHED {
+            2
+        } else if self.current_score >= tiers::TIER_1_BASIC {
+            1
+        } else {
+            0
+        }
     }
 }
 
@@ -199,9 +230,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_new_score_starts_at_500() {
+    fn test_new_score_starts_at_100() {
         let score = ReputationScore::new();
         assert_eq!(score.current(), REPUTATION_START);
+        assert_eq!(score.current(), 100);
         assert_eq!(score.total_gained(), 0);
         assert_eq!(score.total_lost(), 0);
     }
@@ -211,7 +243,7 @@ mod tests {
         let mut score = ReputationScore::new();
         let gained = score.gain(50);
         assert_eq!(gained, 50);
-        assert_eq!(score.current(), 550);
+        assert_eq!(score.current(), 150);
         assert_eq!(score.total_gained(), 50);
     }
 
@@ -227,10 +259,10 @@ mod tests {
     #[test]
     fn test_lose_removes_points() {
         let mut score = ReputationScore::new();
-        let lost = score.lose(100);
-        assert_eq!(lost, 100);
-        assert_eq!(score.current(), 400);
-        assert_eq!(score.total_lost(), 100);
+        let lost = score.lose(50);
+        assert_eq!(lost, 50);
+        assert_eq!(score.current(), 50);
+        assert_eq!(score.total_lost(), 50);
     }
 
     #[test]
@@ -247,7 +279,7 @@ mod tests {
         let mut score = ReputationScore::new();
         let gained = score.gain_with_multiplier(100, 0.5);
         assert_eq!(gained, 50);
-        assert_eq!(score.current(), 550);
+        assert_eq!(score.current(), 150);
     }
 
     #[test]
@@ -276,9 +308,9 @@ mod tests {
 
     #[test]
     fn test_can_file_reports() {
-        let score = ReputationScore::with_score(450);
+        let score = ReputationScore::with_score(350);
         assert!(score.can_file_reports());
-        let score2 = ReputationScore::with_score(350);
+        let score2 = ReputationScore::with_score(250);
         assert!(!score2.can_file_reports());
     }
 
@@ -309,5 +341,17 @@ mod tests {
         let low = ReputationScore::with_score(300);
         let high = ReputationScore::with_score(700);
         assert!(low < high);
+    }
+
+    #[test]
+    fn test_tier() {
+        assert_eq!(ReputationScore::with_score(50).tier(), 0);
+        assert_eq!(ReputationScore::with_score(100).tier(), 1);
+        assert_eq!(ReputationScore::with_score(299).tier(), 1);
+        assert_eq!(ReputationScore::with_score(300).tier(), 2);
+        assert_eq!(ReputationScore::with_score(500).tier(), 3);
+        assert_eq!(ReputationScore::with_score(700).tier(), 4);
+        assert_eq!(ReputationScore::with_score(800).tier(), 5);
+        assert_eq!(ReputationScore::with_score(1000).tier(), 5);
     }
 }

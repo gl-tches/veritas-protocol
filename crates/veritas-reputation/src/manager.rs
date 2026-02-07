@@ -543,7 +543,7 @@ impl ReputationManager {
 
         if let Some(state) = self.decay_states.get(identity) {
             if state.should_decay(now) {
-                let current = self.scores.get(identity).map(|s| s.current()).unwrap_or(500);
+                let current = self.scores.get(identity).map(|s| s.current()).unwrap_or(crate::score::REPUTATION_START);
                 let new_score = apply_decay_for_time(current, state, now);
 
                 if let Some(score) = self.scores.get_mut(identity) {
@@ -564,14 +564,14 @@ impl ReputationManager {
     /// Get an identity's reputation tier.
     #[must_use]
     pub fn get_tier(&self, identity: &IdentityHash) -> ReputationTier {
-        let score = self.scores.get(identity).map(|s| s.current()).unwrap_or(500);
+        let score = self.scores.get(identity).map(|s| s.current()).unwrap_or(crate::score::REPUTATION_START);
         get_tier(score)
     }
 
     /// Get an identity's tier effects.
     #[must_use]
     pub fn get_effects(&self, identity: &IdentityHash) -> TierEffects {
-        let score = self.scores.get(identity).map(|s| s.current()).unwrap_or(500);
+        let score = self.scores.get(identity).map(|s| s.current()).unwrap_or(crate::score::REPUTATION_START);
         get_effects_for_score(score)
     }
 
@@ -588,7 +588,7 @@ impl ReputationManager {
 
     /// Check if an identity can file reports.
     pub fn can_file_report(&self, identity: &IdentityHash) -> Result<()> {
-        let score = self.scores.get(identity).map(|s| s.current()).unwrap_or(500);
+        let score = self.scores.get(identity).map(|s| s.current()).unwrap_or(crate::score::REPUTATION_START);
         if score < crate::report::MIN_REPORTER_REPUTATION {
             return Err(ReputationError::InsufficientReputation {
                 required: crate::report::MIN_REPORTER_REPUTATION,
@@ -637,16 +637,16 @@ impl ReputationManager {
     pub fn stats(&self) -> ReputationStats {
         let mut blacklisted = 0;
         let mut quarantined = 0;
-        let mut deprioritized = 0;
         let mut normal = 0;
+        let mut trusted = 0;
         let mut priority = 0;
 
         for score in self.scores.values() {
             match get_tier(score.current()) {
                 ReputationTier::Blacklisted => blacklisted += 1,
                 ReputationTier::Quarantined => quarantined += 1,
-                ReputationTier::Deprioritized => deprioritized += 1,
                 ReputationTier::Normal => normal += 1,
+                ReputationTier::Trusted => trusted += 1,
                 ReputationTier::Priority => priority += 1,
             }
         }
@@ -655,8 +655,8 @@ impl ReputationManager {
             total_identities: self.scores.len(),
             blacklisted,
             quarantined,
-            deprioritized,
             normal,
+            trusted,
             priority,
             suspicious_clusters: self.collusion_detector.get_suspicious_clusters().len(),
         }
@@ -715,10 +715,10 @@ pub struct ReputationStats {
     pub blacklisted: usize,
     /// Number of quarantined identities.
     pub quarantined: usize,
-    /// Number of deprioritized identities.
-    pub deprioritized: usize,
     /// Number of normal identities.
     pub normal: usize,
+    /// Number of trusted identities.
+    pub trusted: usize,
     /// Number of priority identities.
     pub priority: usize,
     /// Number of suspicious clusters detected.
@@ -772,7 +772,7 @@ mod tests {
         let id = make_identity(1);
 
         let score = manager.get_score(&id);
-        assert_eq!(score.current(), 500);
+        assert_eq!(score.current(), 100);
         assert_eq!(manager.identity_count(), 1);
     }
 
@@ -782,13 +782,17 @@ mod tests {
         let from = make_identity(1);
         let to = make_identity(2);
 
+        // Set recipient above quarantine threshold so interaction succeeds
+        manager.ensure_identity_exists(&to);
+        manager.get_score_mut(&to).set_score(300);
+
         let gained = manager
             .record_positive_interaction_unchecked(from, to, 10)
             .unwrap();
         assert_eq!(gained, 10);
 
         let score = manager.get_score(&to);
-        assert_eq!(score.current(), 510);
+        assert_eq!(score.current(), 310);
     }
 
     #[test]
@@ -796,6 +800,10 @@ mod tests {
         let mut manager = ReputationManager::new();
         let from = make_identity(1);
         let to = make_identity(2);
+
+        // Set recipient above quarantine threshold
+        manager.ensure_identity_exists(&to);
+        manager.get_score_mut(&to).set_score(300);
 
         // First interaction succeeds
         manager
@@ -814,7 +822,7 @@ mod tests {
         let target = make_identity(2);
 
         // Set reporter reputation high enough
-        manager.get_score_mut(&reporter).gain(100); // Now at 600
+        manager.get_score_mut(&reporter).gain(400); // Now at 500
 
         let result = manager.file_report(reporter, target, ReportReason::Spam, None);
         assert!(result.is_ok());
@@ -828,8 +836,8 @@ mod tests {
         let reporter = make_identity(1);
         let target = make_identity(2);
 
-        // Reporter has default 500, but we need to test with low rep
-        manager.get_score_mut(&reporter).lose(200); // Now at 300
+        // Reporter has default 100, which is below MIN_REPORTER_REPUTATION (400)
+        // No need to lower further, but verify it's indeed too low
 
         let result = manager.file_report(reporter, target, ReportReason::Spam, None);
         assert!(matches!(
@@ -846,9 +854,9 @@ mod tests {
         // File 3 reports from different reporters
         for i in 1..=3 {
             let reporter = make_identity(i);
-            // Ensure reporter has enough reputation
+            // Ensure reporter has enough reputation (need >= 400)
             manager.ensure_identity_exists(&reporter);
-            manager.get_score_mut(&reporter).gain(100);
+            manager.get_score_mut(&reporter).gain(400);
 
             manager
                 .file_report(reporter, target, ReportReason::Spam, None)
@@ -861,7 +869,7 @@ mod tests {
 
         // Target should have lost reputation
         let target_score = manager.get_score(&target);
-        assert!(target_score.current() < 500);
+        assert!(target_score.current() < 100);
     }
 
     #[test]
@@ -869,10 +877,11 @@ mod tests {
         let mut manager = ReputationManager::new();
         let id = make_identity(1);
 
+        // Starting score 100 is below quarantine threshold (200)
         manager.ensure_identity_exists(&id);
-        assert_eq!(manager.get_tier(&id), ReputationTier::Normal);
+        assert_eq!(manager.get_tier(&id), ReputationTier::Quarantined);
 
-        manager.get_score_mut(&id).gain(400);
+        manager.get_score_mut(&id).gain(700);
         assert_eq!(manager.get_tier(&id), ReputationTier::Priority);
     }
 
@@ -882,7 +891,7 @@ mod tests {
         let id = make_identity(1);
 
         manager.ensure_identity_exists(&id);
-        manager.get_score_mut(&id).lose(480); // Now at 20
+        manager.get_score_mut(&id).lose(80); // Now at 20
 
         let result = manager.can_interact(&id);
         assert!(matches!(result, Err(ReputationError::Blacklisted)));
@@ -900,7 +909,7 @@ mod tests {
 
         let stats = manager.stats();
         assert_eq!(stats.total_identities, 5);
-        assert_eq!(stats.normal, 5); // All start at normal (500)
+        assert_eq!(stats.quarantined, 5); // All start at quarantined (100 < 200)
     }
 
     #[test]
@@ -956,6 +965,10 @@ mod tests {
         let from = make_identity(1);
         let to = make_identity(2);
 
+        // Set recipient above quarantine threshold
+        manager.ensure_identity_exists(&to);
+        manager.get_score_mut(&to).set_score(500);
+
         let proof = make_test_proof(from, to, InteractionType::MessageDelivery);
         let gained = manager.record_positive_interaction(from, to, &proof).unwrap();
 
@@ -1006,6 +1019,10 @@ mod tests {
         let from = make_identity(1);
         let to = make_identity(2);
 
+        // Set recipient above quarantine threshold
+        manager.ensure_identity_exists(&to);
+        manager.get_score_mut(&to).set_score(500);
+
         let proof = make_test_proof(from, to, InteractionType::BlockValidation);
 
         // First use succeeds
@@ -1023,6 +1040,10 @@ mod tests {
         let mut manager = make_manager_with_registry();
         let from = make_identity(1);
         let to = make_identity(2);
+
+        // Set recipient above quarantine threshold
+        manager.ensure_identity_exists(&to);
+        manager.get_score_mut(&to).set_score(500);
 
         let proof = make_test_proof(from, to, InteractionType::BlockValidation);
         let nonce = *proof.nonce();
@@ -1047,6 +1068,8 @@ mod tests {
         // Test MessageRelay (base_gain = 3)
         let from1 = make_identity(1);
         let to1 = make_identity(2);
+        manager.ensure_identity_exists(&to1);
+        manager.get_score_mut(&to1).set_score(500);
         let proof1 = make_test_proof(from1, to1, InteractionType::MessageRelay);
         let gained1 = manager
             .record_positive_interaction(from1, to1, &proof1)
@@ -1056,6 +1079,8 @@ mod tests {
         // Test BlockValidation (base_gain = 10)
         let from2 = make_identity(3);
         let to2 = make_identity(4);
+        manager.ensure_identity_exists(&to2);
+        manager.get_score_mut(&to2).set_score(500);
         let proof2 = make_test_proof(from2, to2, InteractionType::BlockValidation);
         let gained2 = manager
             .record_positive_interaction(from2, to2, &proof2)
@@ -1065,6 +1090,8 @@ mod tests {
         // Test DhtParticipation (base_gain = 2)
         let from3 = make_identity(5);
         let to3 = make_identity(6);
+        manager.ensure_identity_exists(&to3);
+        manager.get_score_mut(&to3).set_score(500);
         let proof3 = make_test_proof(from3, to3, InteractionType::DhtParticipation);
         let gained3 = manager
             .record_positive_interaction(from3, to3, &proof3)
@@ -1080,7 +1107,7 @@ mod tests {
 
         // Blacklist the recipient
         manager.ensure_identity_exists(&to);
-        manager.get_score_mut(&to).lose(480); // Now at 20
+        manager.get_score_mut(&to).lose(80); // Now at 20
 
         let proof = make_test_proof(from, to, InteractionType::MessageDelivery);
         let result = manager.record_positive_interaction(from, to, &proof);
@@ -1093,6 +1120,10 @@ mod tests {
         let mut manager = make_manager_with_registry();
         let from = make_identity(1);
         let to = make_identity(2);
+
+        // Set recipient above quarantine threshold
+        manager.ensure_identity_exists(&to);
+        manager.get_score_mut(&to).set_score(500);
 
         // Create multiple proofs (different nonces)
         let proof1 = make_test_proof(from, to, InteractionType::BlockValidation);
@@ -1169,6 +1200,10 @@ mod tests {
         let mut manager = make_manager_with_registry();
         let from = make_identity(1);
         let to = make_identity(2);
+
+        // Set recipient above quarantine threshold
+        manager.ensure_identity_exists(&to);
+        manager.get_score_mut(&to).set_score(500);
 
         let proof = make_test_proof(from, to, InteractionType::BlockValidation);
         manager

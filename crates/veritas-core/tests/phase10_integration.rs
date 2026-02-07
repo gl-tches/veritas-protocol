@@ -772,11 +772,11 @@ mod gossip {
         let message_hash = Hash256::hash(b"test-message");
 
         let announcement =
-            MessageAnnouncement::new_now(mailbox_key.clone(), message_hash.clone(), 256).unwrap();
+            MessageAnnouncement::new_now(mailbox_key.clone(), message_hash.clone(), 1024).unwrap();
 
         assert_eq!(announcement.mailbox_key, mailbox_key);
         assert_eq!(announcement.message_hash, message_hash);
-        assert_eq!(announcement.size_bucket, 256);
+        assert_eq!(announcement.size_bucket, 1024);
     }
 
     /// Test announcement serialization.
@@ -786,14 +786,14 @@ mod gossip {
         let message_hash = Hash256::hash(b"serialize-me");
 
         let announcement =
-            MessageAnnouncement::new_now(mailbox_key.clone(), message_hash.clone(), 512).unwrap();
+            MessageAnnouncement::new_now(mailbox_key.clone(), message_hash.clone(), 2048).unwrap();
 
         let bytes = announcement.to_bytes().unwrap();
         let restored = MessageAnnouncement::from_bytes(&bytes).unwrap();
 
         assert_eq!(restored.mailbox_key, mailbox_key);
         assert_eq!(restored.message_hash, message_hash);
-        assert_eq!(restored.size_bucket, 512);
+        assert_eq!(restored.size_bucket, 2048);
     }
 
     /// Test block announcement.
@@ -841,9 +841,9 @@ mod gossip {
         let ts1 = 3600 * 10 + 100; // 10th hour + 100 seconds
         let ts2 = 3600 * 10 + 3500; // 10th hour + 3500 seconds
 
-        let ann1 = MessageAnnouncement::new(mailbox_key.clone(), message_hash.clone(), ts1, 256)
+        let ann1 = MessageAnnouncement::new(mailbox_key.clone(), message_hash.clone(), ts1, 1024)
             .unwrap();
-        let ann2 = MessageAnnouncement::new(mailbox_key.clone(), message_hash.clone(), ts2, 256)
+        let ann2 = MessageAnnouncement::new(mailbox_key.clone(), message_hash.clone(), ts2, 1024)
             .unwrap();
 
         // Should be in same bucket
@@ -857,7 +857,7 @@ mod gossip {
         let mailbox_key = MailboxKey::from_bytes([4u8; 32]);
         let message_hash = Hash256::hash(b"invalid-size");
 
-        // 300 is not a valid padding bucket (valid: 256, 512, 1024)
+        // 300 is not a valid padding bucket (valid: 1024, 2048, 4096, 8192)
         let result = MessageAnnouncement::new_now(mailbox_key, message_hash, 300);
         assert!(result.is_err());
     }

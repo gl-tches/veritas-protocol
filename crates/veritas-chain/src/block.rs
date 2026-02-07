@@ -362,7 +362,7 @@ impl BlockHeader {
         // SECURITY: Verify the public key derives to the claimed validator identity
         // This prevents an attacker from using their own key to sign a block
         // while claiming to be a different validator.
-        let derived_id = IdentityHash::from(Hash256::hash(pubkey.as_bytes()));
+        let derived_id = IdentityHash::from(Hash256::hash(&pubkey.as_bytes()));
         if derived_id != self.validator {
             return Err(ChainError::ValidatorKeyMismatch {
                 claimed: self.validator.to_string(),

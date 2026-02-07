@@ -1,21 +1,18 @@
 //! Message signing and verification for the VERITAS protocol.
 //!
-//! This module provides cryptographic signatures for message authentication:
+//! This module provides ML-DSA-65 (FIPS 204) post-quantum digital signatures
+//! for message authentication:
 //! - Domain-separated signing data computation
 //! - Message signature creation and verification
-//! - Support for multiple signature versions (placeholder HMAC-BLAKE3, future ML-DSA)
+//! - Post-quantum security at NIST security level 3
 //!
-//! ## Security Note
+//! ## Security
 //!
-//! **IMPORTANT**: The current implementation uses HMAC-BLAKE3 as a PLACEHOLDER
-//! until the ML-DSA post-quantum signature crate stabilizes. The placeholder
-//! scheme is NOT cryptographically secure for production use - it exists only
-//! to establish the API surface and allow development to proceed.
-//!
-//! Once ML-DSA is available, signatures will provide:
+//! All signatures use ML-DSA-65 which provides:
 //! - Post-quantum security against signature forgery
 //! - Non-repudiation (sender cannot deny signing)
 //! - Proper public-key verification
+//! - 3,309-byte signatures per FIPS 204 specification
 //!
 //! ## Usage
 //!
@@ -34,10 +31,10 @@
 //!     &content_hash,
 //! );
 //!
-//! // Sign the message
+//! // Sign the message with ML-DSA-65
 //! let signature = sign_message(&sender, &signing_data)?;
 //!
-//! // Verify the signature (placeholder - see security note)
+//! // Verify the signature
 //! verify_signature(sender.public_keys(), &signing_data, &signature)?;
 //! ```
 
