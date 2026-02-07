@@ -518,9 +518,7 @@ impl BlockchainConfig {
     /// Uses saturating arithmetic to prevent integer overflow.
     pub fn sled_cache_bytes(&self) -> usize {
         // SECURITY: Use saturating multiplication to prevent integer overflow
-        self.sled_cache_mb
-            .saturating_mul(1024)
-            .saturating_mul(1024)
+        self.sled_cache_mb.saturating_mul(1024).saturating_mul(1024)
     }
 }
 
@@ -558,7 +556,9 @@ mod tests {
         assert_eq!(config.sled_cache_mb, 32);
         assert!(matches!(
             config.pruning_mode,
-            PruningMode::Aggressive { keep_headers_only: true }
+            PruningMode::Aggressive {
+                keep_headers_only: true
+            }
         ));
         assert!(config.validate().is_ok());
     }
@@ -571,7 +571,9 @@ mod tests {
         assert_eq!(config.sled_cache_mb, 64);
         assert!(matches!(
             config.pruning_mode,
-            PruningMode::Standard { keep_blocks: 10_000 }
+            PruningMode::Standard {
+                keep_blocks: 10_000
+            }
         ));
         assert!(config.validate().is_ok());
     }
@@ -584,7 +586,9 @@ mod tests {
         assert_eq!(config.sled_cache_mb, 128);
         assert!(matches!(
             config.pruning_mode,
-            PruningMode::Standard { keep_blocks: 50_000 }
+            PruningMode::Standard {
+                keep_blocks: 50_000
+            }
         ));
         assert!(config.validate().is_ok());
     }
@@ -597,7 +601,9 @@ mod tests {
         assert_eq!(config.sled_cache_mb, 128);
         assert!(matches!(
             config.pruning_mode,
-            PruningMode::Standard { keep_blocks: 100_000 }
+            PruningMode::Standard {
+                keep_blocks: 100_000
+            }
         ));
         assert!(config.validate().is_ok());
     }
@@ -724,8 +730,8 @@ mod tests {
             sled_cache_mb: usize::MAX / 1024, // Would overflow with naive multiplication
         };
         // Should saturate at usize::MAX rather than panic or wrap
-        assert!(config.memory_budget_bytes() <= usize::MAX);
-        assert!(config.sled_cache_bytes() <= usize::MAX);
+        let _ = config.memory_budget_bytes();
+        let _ = config.sled_cache_bytes();
     }
 
     // ==================== NodeRole Tests ====================
@@ -755,7 +761,11 @@ mod tests {
             NodeRole::Archive,
         ] {
             let config = role.default_config();
-            assert!(config.validate().is_ok(), "Config for {:?} should validate", role);
+            assert!(
+                config.validate().is_ok(),
+                "Config for {:?} should validate",
+                role
+            );
         }
     }
 
@@ -791,16 +801,15 @@ mod tests {
         let config = BlockchainConfig::relay();
         assert!(matches!(
             config.pruning_mode,
-            PruningMode::Aggressive { keep_headers_only: true }
+            PruningMode::Aggressive {
+                keep_headers_only: true
+            }
         ));
     }
 
     #[test]
     fn test_full_node_uses_standard_pruning() {
         let config = BlockchainConfig::full_node();
-        assert!(matches!(
-            config.pruning_mode,
-            PruningMode::Standard { .. }
-        ));
+        assert!(matches!(config.pruning_mode, PruningMode::Standard { .. }));
     }
 }

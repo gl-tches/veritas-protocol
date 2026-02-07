@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use argon2::{
-    password_hash::{PasswordHasher, SaltString},
     Argon2,
+    password_hash::{PasswordHasher, SaltString},
 };
 use wasm_bindgen::prelude::*;
 
@@ -147,8 +147,10 @@ impl WasmClient {
     pub fn list_identities(&self) -> Result<JsValue, JsValue> {
         self.list_identities_internal()
             // WASM-FIX-6: Replace .unwrap() with proper error handling
-            .and_then(|v| serde_wasm_bindgen::to_value(&v)
-                .map_err(|e| WasmError::new(&format!("Serialization failed: {}", e))))
+            .and_then(|v| {
+                serde_wasm_bindgen::to_value(&v)
+                    .map_err(|e| WasmError::new(format!("Serialization failed: {}", e)))
+            })
             .map_err(|e| e.into())
     }
 
@@ -159,8 +161,10 @@ impl WasmClient {
     pub fn identity_slots(&self) -> Result<JsValue, JsValue> {
         self.identity_slots_internal()
             // WASM-FIX-6: Replace .unwrap() with proper error handling
-            .and_then(|v| serde_wasm_bindgen::to_value(&v)
-                .map_err(|e| WasmError::new(&format!("Serialization failed: {}", e))))
+            .and_then(|v| {
+                serde_wasm_bindgen::to_value(&v)
+                    .map_err(|e| WasmError::new(format!("Serialization failed: {}", e)))
+            })
             .map_err(|e| e.into())
     }
 
@@ -188,8 +192,7 @@ impl WasmClient {
         // rainbow table attacks that the previous hardcoded salt allowed.
         let mut salt_bytes = [0u8; 16];
         getrandom::getrandom(&mut salt_bytes).expect("getrandom failed");
-        let salt = SaltString::encode_b64(&salt_bytes)
-            .expect("Failed to encode Argon2 salt");
+        let salt = SaltString::encode_b64(&salt_bytes).expect("Failed to encode Argon2 salt");
 
         Self {
             store: Arc::new(Mutex::new(IdentityStore::new(origin))),
