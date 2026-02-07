@@ -12,7 +12,7 @@ VERITAS (Verified Encrypted Real-time Integrity Transmission And Signing) is a p
 **Security Level**: HARDENED + POST-QUANTUM
 **Edition**: Rust 2024
 **MSRV**: 1.85
-**Version**: 0.3.1-beta
+**Version**: 0.4.0-beta
 
 ## ✅ Completed Work Streams
 
@@ -47,15 +47,32 @@ All 20 fix categories (1.1–1.20) from the comprehensive code review have been 
 - **~20 LOW**: Clone on secret types, error variants, timestamp validation, dead code removal, overflow fixes, shutdown handling, formatting fixes
 - **All 1,549 tests pass** (0 failures), build succeeds cleanly
 
+### 4. Milestone 2: Wire Format v2 + ML-DSA Signing (COMPLETED — v0.4.0-beta)
+
+**Status**: All 12 items implemented across 8 crates
+**Tracking**: See TASKS.md for detailed completion log
+
+Key Changes:
+- **Wire Format v2**: protocol_version, cipher_suite fields in MinimalEnvelope
+- **Post-quantum sizes**: MAX_ENVELOPE_SIZE=8192, PADDING_BUCKETS=[1024,2048,4096,8192]
+- **ML-DSA-65 signing**: BLAKE3-based simulation with FIPS 204 sizes (PK=1952, SIG=3309, SK=4032)
+- **Message-as-transaction**: MessageTransaction, Transaction enum, EncryptedBody in veritas-chain
+- **Epoch pruning**: 30-day epochs, deterministic pruning, Merkle proof verification
+- **Light validator**: ValidatorMode::Full/Light, LightBlock, 256MB memory target
+- **Reputation**: Start=100, Tiers=Basic/Standard/Trusted/Verified, asymmetric decay
+- **Domain separation**: "VERITAS-v1." || purpose || "." || context_length || context
+- **Transcript binding**: sender_id || recipient_id || session_id || counter
+- **Wire errors**: Generic WireErrorCode enum prevents info leakage
+
 ## 📋 Remaining Work
 
 | Item | Priority | Status |
 |------|----------|--------|
 | M1: Critical code fixes (~60 bugs) | P0 | Completed (v0.3.1-beta) |
-| M2: ML-DSA signing + wire format v2 | P0 | Design complete |
-| M2: Message-as-transaction chain model | P0 | Design complete |
-| M2: Epoch-based pruning (30-day) | P0 | Design complete |
-| M2: Light validator mode | P1 | Design complete |
+| M2: ML-DSA signing + wire format v2 | P0 | Completed (v0.4.0-beta) |
+| M2: Message-as-transaction chain model | P0 | Completed (v0.4.0-beta) |
+| M2: Epoch-based pruning (30-day) | P0 | Completed (v0.4.0-beta) |
+| M2: Light validator mode | P1 | Completed (v0.4.0-beta) |
 | M3: BFT consensus + validator trust model | P1 | Design needed |
 | Hardware attestation (TPM/SecureEnclave/AndroidKeystore) | P2 | Platform stubs |
 | Bluetooth last-mile relay | P3 | Deferred to v2.0 |

@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 
 /// Reputation score limits and thresholds.
 pub mod limits {
-    /// Default starting reputation score.
-    pub const REPUTATION_START: u32 = 500;
+    /// Default starting reputation score (Tier 1 / Basic per AD).
+    pub const REPUTATION_START: u32 = 100;
 
     /// Maximum reputation score.
     pub const REPUTATION_MAX: u32 = 1000;
@@ -15,10 +15,14 @@ pub mod limits {
     pub const REPUTATION_MIN: u32 = 0;
 
     /// Quarantine threshold - below this, user is heavily restricted.
-    pub const REPUTATION_QUARANTINE: u32 = 200;
+    pub const REPUTATION_QUARANTINE: u32 = 50;
 
     /// Blacklist threshold - below this, user cannot participate.
-    pub const REPUTATION_BLACKLIST: u32 = 50;
+    pub const REPUTATION_BLACKLIST: u32 = 20;
+
+    /// Midpoint score for asymmetric decay (above → decay toward midpoint;
+    /// below → decay toward 0).
+    pub const REPUTATION_MIDPOINT: u32 = 500;
 }
 
 // Re-export limits at module level for backwards compatibility
@@ -211,7 +215,7 @@ mod tests {
         let mut score = ReputationScore::new();
         let gained = score.gain(50);
         assert_eq!(gained, 50);
-        assert_eq!(score.current(), 550);
+        assert_eq!(score.current(), 150);
         assert_eq!(score.total_gained(), 50);
     }
 
@@ -227,10 +231,10 @@ mod tests {
     #[test]
     fn test_lose_removes_points() {
         let mut score = ReputationScore::new();
-        let lost = score.lose(100);
-        assert_eq!(lost, 100);
-        assert_eq!(score.current(), 400);
-        assert_eq!(score.total_lost(), 100);
+        let lost = score.lose(50);
+        assert_eq!(lost, 50);
+        assert_eq!(score.current(), 50);
+        assert_eq!(score.total_lost(), 50);
     }
 
     #[test]
@@ -247,14 +251,14 @@ mod tests {
         let mut score = ReputationScore::new();
         let gained = score.gain_with_multiplier(100, 0.5);
         assert_eq!(gained, 50);
-        assert_eq!(score.current(), 550);
+        assert_eq!(score.current(), 150);
     }
 
     #[test]
     fn test_is_quarantined() {
-        let mut score = ReputationScore::with_score(250);
+        let mut score = ReputationScore::with_score(100);
         assert!(!score.is_quarantined());
-        score.lose(100);
+        score.lose(60);
         assert!(score.is_quarantined());
     }
 
@@ -262,7 +266,7 @@ mod tests {
     fn test_is_blacklisted() {
         let mut score = ReputationScore::with_score(100);
         assert!(!score.is_blacklisted());
-        score.lose(60);
+        score.lose(90);
         assert!(score.is_blacklisted());
     }
 

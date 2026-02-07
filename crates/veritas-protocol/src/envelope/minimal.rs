@@ -4,18 +4,22 @@
 //! to relays and intermediaries. All sensitive metadata (sender, timestamp,
 //! content) is encrypted inside the payload.
 //!
-//! ## Envelope Structure
+//! ## Envelope Structure (Wire Format v2)
 //!
 //! ```text
-//! +-----------------+
-//! | mailbox_key     | 32 bytes - Derived, NOT recipient ID
-//! +-----------------+
-//! | ephemeral_public| 32 bytes - Single-use X25519 public key
-//! +-----------------+
-//! | nonce           | 24 bytes - XChaCha20 nonce
-//! +-----------------+
-//! | ciphertext      | Variable - Padded encrypted payload
-//! +-----------------+
+//! +------------------+
+//! | protocol_version | 1 byte  - Wire format version (currently 2)
+//! +------------------+
+//! | cipher_suite     | 1 byte  - Crypto suite identifier (0 = X25519+ChaCha20)
+//! +------------------+
+//! | mailbox_key      | 32 bytes - Derived, NOT recipient ID
+//! +------------------+
+//! | ephemeral_public | 32 bytes - Single-use X25519 public key
+//! +------------------+
+//! | nonce            | 24 bytes - XChaCha20 nonce
+//! +------------------+
+//! | ciphertext       | Variable - Padded encrypted payload
+//! +------------------+
 //! ```
 //!
 //! ## Security Properties
@@ -30,7 +34,7 @@
 //!
 //! - Mailbox key (but cannot link to recipient identity)
 //! - Ephemeral public key (but cannot link to sender identity)
-//! - Approximate message size (bucket: 256, 512, or 1024 bytes)
+//! - Approximate message size (bucket: 1024, 2048, 4096, or 8192 bytes)
 //!
 //! ## What Relays CANNOT See
 //!
@@ -50,8 +54,8 @@ use super::mailbox::{MailboxKey, MAILBOX_KEY_SIZE};
 /// Size of the envelope nonce in bytes (XChaCha20).
 pub const ENVELOPE_NONCE_SIZE: usize = 24;
 
-/// Minimum ciphertext size (smallest bucket + overhead).
-pub const MIN_CIPHERTEXT_SIZE: usize = 256;
+/// Minimum ciphertext size (smallest bucket).
+pub const MIN_CIPHERTEXT_SIZE: usize = 1024;
 
 /// Domain separator for envelope hashing.
 const ENVELOPE_HASH_DOMAIN: &[u8] = b"VERITAS-ENVELOPE-HASH-v1";
@@ -180,7 +184,7 @@ pub struct MinimalEnvelope {
     /// Encrypted and padded payload.
     ///
     /// Contains the `InnerPayload` with all sensitive metadata.
-    /// Padded to a fixed bucket size (256, 512, or 1024 bytes).
+    /// Padded to a fixed bucket size (1024, 2048, 4096, or 8192 bytes).
     ciphertext: Vec<u8>,
 }
 
@@ -613,7 +617,7 @@ mod tests {
             test_mailbox_key(),
             ephemeral.public_key().clone(),
             test_nonce(),
-            vec![0u8; 256],
+            vec![0u8; 1024],
         );
         assert!(envelope1.is_padded_size());
 

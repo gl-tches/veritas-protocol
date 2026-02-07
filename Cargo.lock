@@ -3789,7 +3789,7 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "veritas-chain"
-version = "0.3.1-beta"
+version = "0.4.0-beta"
 dependencies = [
  "async-trait",
  "bincode",
@@ -3831,7 +3831,7 @@ dependencies = [
 
 [[package]]
 name = "veritas-core"
-version = "0.3.1-beta"
+version = "0.4.0-beta"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3858,7 +3858,7 @@ dependencies = [
 
 [[package]]
 name = "veritas-crypto"
-version = "0.3.1-beta"
+version = "0.4.0-beta"
 dependencies = [
  "argon2",
  "bincode",
@@ -3876,7 +3876,7 @@ dependencies = [
 
 [[package]]
 name = "veritas-ffi"
-version = "0.3.1-beta"
+version = "0.4.0-beta"
 dependencies = [
  "cbindgen",
  "libc",
@@ -3888,7 +3888,7 @@ dependencies = [
 
 [[package]]
 name = "veritas-identity"
-version = "0.3.1-beta"
+version = "0.4.0-beta"
 dependencies = [
  "bincode",
  "chrono",
@@ -3904,7 +3904,7 @@ dependencies = [
 
 [[package]]
 name = "veritas-net"
-version = "0.3.1-beta"
+version = "0.4.0-beta"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3926,7 +3926,7 @@ dependencies = [
 
 [[package]]
 name = "veritas-node"
-version = "0.3.1-beta"
+version = "0.4.0-beta"
 dependencies = [
  "anyhow",
  "clap",
@@ -3941,7 +3941,7 @@ dependencies = [
 
 [[package]]
 name = "veritas-protocol"
-version = "0.3.1-beta"
+version = "0.4.0-beta"
 dependencies = [
  "bincode",
  "chrono",
@@ -3957,7 +3957,7 @@ dependencies = [
 
 [[package]]
 name = "veritas-py"
-version = "0.3.1-beta"
+version = "0.4.0-beta"
 dependencies = [
  "pyo3",
  "thiserror 1.0.69",
@@ -3968,7 +3968,7 @@ dependencies = [
 
 [[package]]
 name = "veritas-reputation"
-version = "0.3.1-beta"
+version = "0.4.0-beta"
 dependencies = [
  "bincode",
  "chrono",
@@ -3983,7 +3983,7 @@ dependencies = [
 
 [[package]]
 name = "veritas-store"
-version = "0.3.1-beta"
+version = "0.4.0-beta"
 dependencies = [
  "argon2",
  "bincode",
@@ -4005,7 +4005,7 @@ dependencies = [
 
 [[package]]
 name = "veritas-wasm"
-version = "0.3.1-beta"
+version = "0.4.0-beta"
 dependencies = [
  "argon2",
  "console_error_panic_hook",

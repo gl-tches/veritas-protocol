@@ -637,17 +637,19 @@ impl ReputationManager {
     pub fn stats(&self) -> ReputationStats {
         let mut blacklisted = 0;
         let mut quarantined = 0;
-        let mut deprioritized = 0;
-        let mut normal = 0;
-        let mut priority = 0;
+        let mut basic = 0;
+        let mut standard = 0;
+        let mut trusted = 0;
+        let mut verified = 0;
 
         for score in self.scores.values() {
             match get_tier(score.current()) {
                 ReputationTier::Blacklisted => blacklisted += 1,
                 ReputationTier::Quarantined => quarantined += 1,
-                ReputationTier::Deprioritized => deprioritized += 1,
-                ReputationTier::Normal => normal += 1,
-                ReputationTier::Priority => priority += 1,
+                ReputationTier::Basic => basic += 1,
+                ReputationTier::Standard => standard += 1,
+                ReputationTier::Trusted => trusted += 1,
+                ReputationTier::Verified => verified += 1,
             }
         }
 
@@ -655,9 +657,10 @@ impl ReputationManager {
             total_identities: self.scores.len(),
             blacklisted,
             quarantined,
-            deprioritized,
-            normal,
-            priority,
+            basic,
+            standard,
+            trusted,
+            verified,
             suspicious_clusters: self.collusion_detector.get_suspicious_clusters().len(),
         }
     }
@@ -715,12 +718,14 @@ pub struct ReputationStats {
     pub blacklisted: usize,
     /// Number of quarantined identities.
     pub quarantined: usize,
-    /// Number of deprioritized identities.
-    pub deprioritized: usize,
-    /// Number of normal identities.
-    pub normal: usize,
-    /// Number of priority identities.
-    pub priority: usize,
+    /// Number of basic tier identities.
+    pub basic: usize,
+    /// Number of standard tier identities.
+    pub standard: usize,
+    /// Number of trusted tier identities.
+    pub trusted: usize,
+    /// Number of verified tier identities.
+    pub verified: usize,
     /// Number of suspicious clusters detected.
     pub suspicious_clusters: usize,
 }
@@ -772,7 +777,7 @@ mod tests {
         let id = make_identity(1);
 
         let score = manager.get_score(&id);
-        assert_eq!(score.current(), 500);
+        assert_eq!(score.current(), 100);
         assert_eq!(manager.identity_count(), 1);
     }
 
@@ -788,7 +793,7 @@ mod tests {
         assert_eq!(gained, 10);
 
         let score = manager.get_score(&to);
-        assert_eq!(score.current(), 510);
+        assert_eq!(score.current(), 110);
     }
 
     #[test]
@@ -814,7 +819,7 @@ mod tests {
         let target = make_identity(2);
 
         // Set reporter reputation high enough
-        manager.get_score_mut(&reporter).gain(100); // Now at 600
+        manager.get_score_mut(&reporter).gain(300); // Now at 400
 
         let result = manager.file_report(reporter, target, ReportReason::Spam, None);
         assert!(result.is_ok());
@@ -848,7 +853,7 @@ mod tests {
             let reporter = make_identity(i);
             // Ensure reporter has enough reputation
             manager.ensure_identity_exists(&reporter);
-            manager.get_score_mut(&reporter).gain(100);
+            manager.get_score_mut(&reporter).gain(400);
 
             manager
                 .file_report(reporter, target, ReportReason::Spam, None)
@@ -861,7 +866,7 @@ mod tests {
 
         // Target should have lost reputation
         let target_score = manager.get_score(&target);
-        assert!(target_score.current() < 500);
+        assert!(target_score.current() < 100);
     }
 
     #[test]
@@ -870,10 +875,12 @@ mod tests {
         let id = make_identity(1);
 
         manager.ensure_identity_exists(&id);
-        assert_eq!(manager.get_tier(&id), ReputationTier::Normal);
+        // Starting score is 100 → Basic tier
+        assert_eq!(manager.get_tier(&id), ReputationTier::Basic);
 
-        manager.get_score_mut(&id).gain(400);
-        assert_eq!(manager.get_tier(&id), ReputationTier::Priority);
+        // Gain 600 → 700 → Verified tier
+        manager.get_score_mut(&id).gain(600);
+        assert_eq!(manager.get_tier(&id), ReputationTier::Verified);
     }
 
     #[test]
@@ -900,7 +907,7 @@ mod tests {
 
         let stats = manager.stats();
         assert_eq!(stats.total_identities, 5);
-        assert_eq!(stats.normal, 5); // All start at normal (500)
+        assert_eq!(stats.basic, 5); // All start at basic (100)
     }
 
     #[test]
@@ -963,7 +970,7 @@ mod tests {
         assert_eq!(gained, 5);
 
         let score = manager.get_score(&to);
-        assert_eq!(score.current(), 505);
+        assert_eq!(score.current(), 105);
     }
 
     #[test]

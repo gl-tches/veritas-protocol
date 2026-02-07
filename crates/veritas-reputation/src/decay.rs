@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::score::{REPUTATION_MAX, REPUTATION_START};
+use crate::score::{REPUTATION_MAX, REPUTATION_START, REPUTATION_MIDPOINT};
 
 /// Default weekly decay rate (1%).
 pub const DEFAULT_DECAY_RATE: f32 = 0.01;
@@ -94,11 +94,13 @@ impl Default for DecayState {
     }
 }
 
-/// Apply decay to a reputation score.
+/// Apply asymmetric decay to a reputation score.
 ///
-/// Decays toward the target score (default 500):
-/// - If score > target: decrease by decay_rate toward target
-/// - If score < target: increase by decay_rate toward target
+/// Decay is asymmetric around the midpoint (500):
+/// - Above 500: decay slowly toward 500 (scores drift down to midpoint)
+/// - Below 500: decay toward 0 (low scores degrade further)
+///
+/// This rewards consistently good actors and penalizes bad ones.
 ///
 /// # Arguments
 /// * `current_score` - The current reputation score
@@ -113,13 +115,21 @@ pub fn apply_decay(current_score: u32, config: &DecayConfig, periods: u32) -> u3
         return current_score;
     }
 
-    let target = config.target_score as f32;
+    let midpoint = REPUTATION_MIDPOINT as f32;
     let mut score = current_score as f32;
 
     for _ in 0..periods {
-        let diff = score - target;
-        let adjustment = diff * config.decay_rate;
-        score -= adjustment;
+        if score > midpoint {
+            // Above midpoint: decay toward midpoint
+            let diff = score - midpoint;
+            let adjustment = diff * config.decay_rate;
+            score -= adjustment;
+        } else if score < midpoint {
+            // Below midpoint: decay toward 0
+            let adjustment = score * config.decay_rate;
+            score -= adjustment;
+        }
+        // At midpoint: no decay
     }
 
     // Clamp to valid range
@@ -182,30 +192,29 @@ mod tests {
     }
 
     #[test]
-    fn test_decay_above_target() {
+    fn test_decay_above_midpoint() {
         let config = DecayConfig::default();
 
-        // 800 -> should decay toward 500
+        // 800 -> should decay toward 500 (midpoint)
         let new_score = apply_decay(800, &config, 1);
         assert!(new_score < 800);
         assert!(new_score > 500);
     }
 
     #[test]
-    fn test_decay_below_target() {
+    fn test_decay_below_midpoint() {
         let config = DecayConfig::default();
 
-        // 300 -> should increase toward 500
+        // 300 -> should decay toward 0 (asymmetric: below midpoint decays down)
         let new_score = apply_decay(300, &config, 1);
-        assert!(new_score > 300);
-        assert!(new_score < 500);
+        assert!(new_score < 300);
     }
 
     #[test]
-    fn test_no_decay_at_target() {
+    fn test_no_decay_at_midpoint() {
         let config = DecayConfig::default();
 
-        // 500 -> should stay at 500
+        // 500 (midpoint) -> should stay at 500
         let new_score = apply_decay(500, &config, 1);
         assert_eq!(new_score, 500);
     }
@@ -214,7 +223,7 @@ mod tests {
     fn test_decay_multiple_periods() {
         let config = DecayConfig::default();
 
-        // Multiple periods should compound
+        // Multiple periods should compound (above midpoint)
         let score1 = apply_decay(800, &config, 1);
         let score2 = apply_decay(800, &config, 2);
         let score3 = apply_decay(800, &config, 3);
@@ -232,7 +241,7 @@ mod tests {
 
     #[test]
     fn test_decay_state_periods_elapsed() {
-        let config = DecayConfig::new(0.01, 60, 500); // 60 second interval
+        let config = DecayConfig::new(0.01, 60, 100); // 60 second interval
         let mut state = DecayState::new(config);
 
         // Set last decay to 3 minutes ago
@@ -244,7 +253,7 @@ mod tests {
 
     #[test]
     fn test_decay_state_should_decay() {
-        let config = DecayConfig::new(0.01, 60, 500);
+        let config = DecayConfig::new(0.01, 60, 100);
         let mut state = DecayState::new(config);
 
         // Just created, should not decay
@@ -256,51 +265,50 @@ mod tests {
     }
 
     #[test]
-    fn test_project_decay() {
+    fn test_project_decay_above_midpoint() {
         let config = DecayConfig::default();
 
-        // Project 52 weeks (1 year)
+        // Project 52 weeks (1 year) from above midpoint
         let final_score = project_decay(900, &config, 52);
         assert!(final_score < 900);
-        assert!(final_score > 500); // Still above target after 1 year
+        assert!(final_score >= 500); // Converges to midpoint, not below
     }
 
     #[test]
     fn test_periods_to_target() {
         let config = DecayConfig::default();
 
-        // At target should be 0
-        assert_eq!(periods_to_target(500, &config), 0);
+        // At target (100) should be 0
+        assert_eq!(periods_to_target(100, &config), 0);
 
-        // Above target should take some periods
+        // Above target should take some periods (may hit cap due to asymmetric decay)
         let periods = periods_to_target(600, &config);
-        assert!(periods > 0);
-
-        // Below target should take some periods
-        let periods = periods_to_target(400, &config);
         assert!(periods > 0);
     }
 
     #[test]
-    fn test_decay_converges_toward_target() {
+    fn test_asymmetric_decay_above_midpoint_converges() {
         let config = DecayConfig::default();
 
-        // Very high score should decay toward target
+        // High score decays toward 500
         let mut score = 1000;
-        for _ in 0..100 {
+        for _ in 0..200 {
             score = apply_decay(score, &config, 1);
         }
-        // Should be closer to 500 than we started
         assert!(score < 1000);
-        assert!(score > 500);
+        assert!(score >= 500);
+    }
 
-        // Very low score should increase toward target
-        score = 100;
-        for _ in 0..100 {
+    #[test]
+    fn test_asymmetric_decay_below_midpoint_degrades() {
+        let config = DecayConfig::default();
+
+        // Low score decays toward 0 (not toward 500)
+        let mut score: u32 = 200;
+        for _ in 0..200 {
             score = apply_decay(score, &config, 1);
         }
-        // Should be closer to 500 than we started
-        assert!(score > 100);
-        assert!(score < 500);
+        // Should have decreased (decaying toward 0)
+        assert!(score < 200);
     }
 }

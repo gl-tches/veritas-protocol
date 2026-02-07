@@ -8,7 +8,7 @@
 //!
 //! - **Mailbox Keys**: Announcements use derived mailbox keys, not recipient identities
 //! - **Timestamp Buckets**: Hourly buckets instead of exact timestamps
-//! - **Size Buckets**: Fixed padding bucket sizes (256/512/1024) hide true message size
+//! - **Size Buckets**: Fixed padding bucket sizes (1024/2048/4096/8192) hide true message size
 //! - **No Content**: Only hashes and routing info are announced
 //!
 //! ## Topics
@@ -238,7 +238,7 @@ pub struct MessageAnnouncement {
     pub timestamp_bucket: u64,
 
     /// Size bucket indicating padded message size.
-    /// One of: 256, 512, or 1024 bytes.
+    /// One of: 1024, 2048, 4096, or 8192 bytes.
     pub size_bucket: u16,
 }
 
@@ -1292,12 +1292,12 @@ mod tests {
         let message_hash = Hash256::hash(b"test message");
 
         let announcement =
-            MessageAnnouncement::new(mailbox_key.clone(), message_hash.clone(), 1704067200, 256)
+            MessageAnnouncement::new(mailbox_key.clone(), message_hash.clone(), 1704067200, 1024)
                 .unwrap();
 
         assert_eq!(announcement.mailbox_key, mailbox_key);
         assert_eq!(announcement.message_hash, message_hash);
-        assert_eq!(announcement.size_bucket, 256);
+        assert_eq!(announcement.size_bucket, 1024);
         // 1704067200 / 3600 = 473352
         assert_eq!(announcement.timestamp_bucket, 473352);
     }
@@ -1307,7 +1307,7 @@ mod tests {
         let mailbox_key = MailboxKey::from_bytes([1u8; 32]);
         let message_hash = Hash256::hash(b"test message");
 
-        // 100 is not a valid padding bucket (should be 256, 512, or 1024)
+        // 100 is not a valid padding bucket (should be 1024, 2048, 4096, or 8192)
         let result = MessageAnnouncement::new(mailbox_key, message_hash, 1704067200, 100);
 
         assert!(result.is_err());
@@ -1318,7 +1318,7 @@ mod tests {
         let mailbox_key = MailboxKey::from_bytes([2u8; 32]);
         let message_hash = Hash256::hash(b"test");
 
-        let original = MessageAnnouncement::new(mailbox_key, message_hash, 1704067200, 512).unwrap();
+        let original = MessageAnnouncement::new(mailbox_key, message_hash, 1704067200, 2048).unwrap();
 
         let bytes = original.to_bytes().unwrap();
         let deserialized = MessageAnnouncement::from_bytes(&bytes).unwrap();
@@ -1382,17 +1382,18 @@ mod tests {
 
     #[test]
     fn test_validate_size_bucket_valid() {
-        assert!(validate_size_bucket(256).is_ok());
-        assert!(validate_size_bucket(512).is_ok());
         assert!(validate_size_bucket(1024).is_ok());
+        assert!(validate_size_bucket(2048).is_ok());
+        assert!(validate_size_bucket(4096).is_ok());
+        assert!(validate_size_bucket(8192).is_ok());
     }
 
     #[test]
     fn test_validate_size_bucket_invalid() {
         assert!(validate_size_bucket(0).is_err());
-        assert!(validate_size_bucket(100).is_err());
+        assert!(validate_size_bucket(256).is_err());
+        assert!(validate_size_bucket(512).is_err());
         assert!(validate_size_bucket(300).is_err());
-        assert!(validate_size_bucket(2048).is_err());
     }
 
     // ========================================================================
@@ -1644,7 +1645,7 @@ mod tests {
         let mailbox_key = MailboxKey::from_bytes([1u8; 32]);
         let message_hash = Hash256::hash(b"test message");
         let announcement =
-            MessageAnnouncement::new(mailbox_key, message_hash, 1704067200, 256).unwrap();
+            MessageAnnouncement::new(mailbox_key, message_hash, 1704067200, 1024).unwrap();
 
         let bytes = announcement.to_bytes().unwrap();
         assert!(

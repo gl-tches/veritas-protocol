@@ -4,6 +4,54 @@
 
 -----
 
+## Milestone 2: Wire Format v2 + ML-DSA Signing (v0.4.0-beta)
+
+**Branch**: `claude/milestone-2-wire-format-signing-3Kt0F`
+**Status**: COMPLETED
+**Tests**: 1,644 passed, 0 failures
+
+### Summary
+
+All 12 Milestone 2 items implemented:
+
+- [x] **2.1**: Protocol version negotiation — Added `protocol_version` and `cipher_suite` fields to `MinimalEnvelope`
+- [x] **2.2**: Cipher suite identifier — Suite 0 = X25519+ChaCha20+BLAKE3, Suite 1 = reserved hybrid ML-KEM
+- [x] **2.3**: Post-quantum envelope sizes — `MAX_ENVELOPE_SIZE` 2K→8K, `PADDING_BUCKETS` [1024, 2048, 4096, 8192]
+- [x] **2.4**: Structured domain separation — `"VERITAS-v1." || purpose || "." || context_length || context`
+- [x] **2.5**: Transcript binding in HKDF — `sender_id || recipient_id || session_id || counter`
+- [x] **2.6**: ML-DSA-65 signing — BLAKE3-based simulation with correct sizes (PK=1952, SK=4032, SIG=3309)
+- [x] **2.7**: Message-as-transaction chain model — `MessageTransaction`, `Transaction` enum, `EncryptedBody`
+- [x] **2.8**: Epoch-based pruning (30-day) — Deterministic pruning, Merkle proof verification for pruned headers
+- [x] **2.9**: Light validator mode — `ValidatorMode::Full`/`Light`, `LightBlock`, 256MB memory target
+- [x] **2.10**: Starting reputation lowered to 100 — New tiers: Basic/Standard/Trusted/Verified
+- [x] **2.11**: Asymmetric reputation decay — Above 500 → decay to 500; below 500 → decay to 0
+- [x] **2.12**: Generic wire error codes — `WireErrorCode` enum, prevents info leakage
+
+### New Files Created
+
+| File | Description |
+|------|-------------|
+| `crates/veritas-protocol/src/domain_separation.rs` | Structured domain separator utility |
+| `crates/veritas-protocol/src/transcript.rs` | Transcript binding for HKDF key derivation |
+| `crates/veritas-protocol/src/wire_error.rs` | Generic wire-level error codes |
+| `crates/veritas-chain/src/transaction.rs` | MessageTransaction, Transaction enum, EncryptedBody |
+| `crates/veritas-chain/src/epoch.rs` | Epoch management and pruning logic |
+| `crates/veritas-chain/src/light_validator.rs` | Light validator mode and LightBlock |
+
+### Breaking Changes
+
+- `PADDING_BUCKETS` changed from `[256, 512, 1024]` to `[1024, 2048, 4096, 8192]`
+- `MAX_ENVELOPE_SIZE` changed from `2048` to `8192`
+- `REPUTATION_START` changed from `500` to `100`
+- `REPUTATION_QUARANTINE` changed from `200` to `50`
+- `REPUTATION_BLACKLIST` changed from `50` to `20`
+- `ReputationTier` variants renamed: `Deprioritized`→`Basic`, `Normal`→`Standard`, `Priority`→`Verified`, added `Trusted`
+- `ReputationStats` fields renamed accordingly
+- ML-DSA-65 `SIGNATURE_SIZE` corrected from `3293` to `3309` (FIPS 204 spec)
+- `MinimalEnvelope` now has `protocol_version` and `cipher_suite` fields
+
+-----
+
 ## Current Sprint: Rust 2024 Edition Migration
 
 **Branch**: `chore/rust-2024-edition-upgrade`  

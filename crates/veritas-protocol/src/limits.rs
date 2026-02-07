@@ -20,15 +20,18 @@ pub const MESSAGE_TTL_SECS: u64 = 7 * 24 * 60 * 60;
 
 /// Maximum size of a serialized MinimalEnvelope in bytes.
 /// SECURITY: Check this BEFORE deserialization to prevent OOM attacks (VERITAS-2026-0003).
-pub const MAX_ENVELOPE_SIZE: usize = 2048;
+/// Updated for wire format v2 with ML-DSA-65 signatures (3,309 bytes).
+pub const MAX_ENVELOPE_SIZE: usize = 8192;
 
 /// Maximum size of a serialized InnerPayload in bytes.
 /// SECURITY: Check this BEFORE deserialization to prevent OOM attacks (VERITAS-2026-0003).
-pub const MAX_INNER_ENVELOPE_SIZE: usize = 1536;
+/// Updated for wire format v2 with larger post-quantum payloads.
+pub const MAX_INNER_ENVELOPE_SIZE: usize = 6144;
 
 /// Maximum total buffer size for chunk reassembly per session.
 /// SECURITY: Prevents memory exhaustion from incomplete chunk streams.
-pub const MAX_REASSEMBLY_BUFFER: usize = 4096;
+/// Updated for wire format v2 (must be >= MAX_ENVELOPE_SIZE * MAX_CHUNKS_PER_MESSAGE).
+pub const MAX_REASSEMBLY_BUFFER: usize = 16384;
 
 /// Maximum number of concurrent pending reassembly sessions.
 /// SECURITY: Prevents memory exhaustion from many incomplete messages.
@@ -41,13 +44,14 @@ pub const REASSEMBLY_TIMEOUT_SECS: u64 = 300;
 // === Privacy ===
 
 /// Padding bucket sizes for hiding message length.
-pub const PADDING_BUCKETS: &[usize] = &[256, 512, 1024];
+/// Updated for wire format v2 with post-quantum envelope sizes.
+pub const PADDING_BUCKETS: &[usize] = &[1024, 2048, 4096, 8192];
 
 /// Maximum timing jitter in milliseconds (0-3 seconds).
 pub const MAX_JITTER_MS: u64 = 3000;
 
-/// Epoch duration for mailbox key rotation (1 day).
-pub const EPOCH_DURATION_SECS: u64 = 24 * 60 * 60;
+/// Epoch duration for mailbox key rotation and chain pruning (30 days per AD-2).
+pub const EPOCH_DURATION_SECS: u64 = 30 * 24 * 60 * 60;
 
 // === Identity ===
 
@@ -84,17 +88,17 @@ pub const GROUP_KEY_ROTATION_SECS: u64 = 7 * 24 * 60 * 60;
 
 // === Reputation ===
 
-/// Starting reputation score.
-pub const REPUTATION_START: u32 = 500;
+/// Starting reputation score (Tier 1 / Basic per AD).
+pub const REPUTATION_START: u32 = 100;
 
 /// Maximum reputation score.
 pub const REPUTATION_MAX: u32 = 1000;
 
 /// Quarantine threshold.
-pub const REPUTATION_QUARANTINE: u32 = 200;
+pub const REPUTATION_QUARANTINE: u32 = 50;
 
 /// Blacklist threshold.
-pub const REPUTATION_BLACKLIST: u32 = 50;
+pub const REPUTATION_BLACKLIST: u32 = 20;
 
 // === Anti-Gaming ===
 
@@ -146,6 +150,38 @@ pub const MAX_RESPONSE_LATENCY_MS: u64 = 5000;
 
 /// Minimum blocks to produce per epoch when scheduled.
 pub const MIN_BLOCKS_PER_EPOCH: u32 = 10;
+
+// === ML-DSA-65 Sizes (FIPS 204) ===
+
+/// ML-DSA-65 public key size in bytes.
+pub const ML_DSA_65_PK_SIZE: usize = 1952;
+
+/// ML-DSA-65 signature size in bytes.
+pub const ML_DSA_65_SIG_SIZE: usize = 3309;
+
+/// ML-DSA-65 secret key size in bytes.
+pub const ML_DSA_65_SK_SIZE: usize = 4032;
+
+// === Protocol Version ===
+
+/// Current wire protocol version (v2 adds protocol_version and cipher_suite fields).
+pub const CURRENT_PROTOCOL_VERSION: u8 = 2;
+
+/// Minimum supported wire protocol version.
+pub const MIN_SUPPORTED_PROTOCOL_VERSION: u8 = 2;
+
+// === Cipher Suites ===
+
+/// Cipher suite 0: X25519 + ChaCha20-Poly1305 + BLAKE3 (current default).
+pub const CIPHER_SUITE_X25519_CHACHA20: u8 = 0;
+
+/// Cipher suite 1: Reserved for hybrid X25519 + ML-KEM (post-quantum).
+pub const CIPHER_SUITE_HYBRID_MLKEM: u8 = 1;
+
+// === Validator Trust ===
+
+/// Depth of transitive trust for validator discovery (3-line trust fallback).
+pub const VALIDATOR_TRUST_DEPTH: usize = 3;
 
 #[cfg(test)]
 mod tests {
