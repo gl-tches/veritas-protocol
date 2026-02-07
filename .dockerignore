@@ -50,6 +50,9 @@ tests/
 benches/
 fuzz/
 examples/
+# Keep examples/cli-chat — it's a workspace member required for cargo workspace resolution
+!examples/cli-chat/
+!examples/cli-chat/**
 
 # Test databases and artifacts
 *.db
