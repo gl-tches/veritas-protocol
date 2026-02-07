@@ -124,8 +124,43 @@ pub const MIN_VALIDATOR_STAKE: u32 = 700;
 /// Maximum active validators.
 pub const MAX_VALIDATORS: usize = 21;
 
-/// Percentage of validators to rotate per epoch.
+/// Percentage of validators to rotate per epoch (15% = 15_000 / 100_000).
+/// Fixed-point representation: multiply by FIXED_POINT_SCALE to get integer.
 pub const VALIDATOR_ROTATION_PERCENT: f32 = 0.15;
+
+/// Fixed-point scale for validator scoring (6 decimal places).
+/// All validator weight calculations use u64 * FIXED_POINT_SCALE to avoid f32 non-determinism.
+pub const FIXED_POINT_SCALE: u64 = 1_000_000;
+
+/// Fixed-point rotation percent (15% = 150_000 out of 1_000_000).
+pub const VALIDATOR_ROTATION_FIXED: u64 = 150_000;
+
+/// BFT quorum threshold: 2f+1 out of 3f+1 validators.
+/// For a set of n validators, quorum = (2 * n + 2) / 3 (ceiling division).
+pub const BFT_QUORUM_NUMERATOR: u64 = 2;
+/// BFT quorum denominator for the 2/3 threshold.
+pub const BFT_QUORUM_DENOMINATOR: u64 = 3;
+
+/// Maximum consensus rounds before view change.
+pub const MAX_CONSENSUS_ROUNDS: u64 = 10;
+
+/// Consensus round timeout in milliseconds.
+pub const CONSENSUS_ROUND_TIMEOUT_MS: u64 = 5000;
+
+/// Maximum blocks in flight (proposed but not finalized).
+pub const MAX_INFLIGHT_BLOCKS: usize = 10;
+
+/// Validator trust depth (3 lines of trust fallback).
+pub const VALIDATOR_TRUST_DEPTH: usize = 3;
+
+/// Maximum trusted validators per user configuration.
+pub const MAX_TRUSTED_VALIDATORS: usize = 10;
+
+/// Validator heartbeat interval in seconds.
+pub const VALIDATOR_HEARTBEAT_SECS: u64 = 30;
+
+/// Validator offline threshold (missed heartbeats before considered offline).
+pub const VALIDATOR_OFFLINE_THRESHOLD: u64 = 5;
 
 /// Maximum validators per geographic region.
 pub const MAX_VALIDATORS_PER_REGION: usize = 5;
@@ -158,6 +193,9 @@ pub const CHAIN_EPOCH_DURATION_SECS: u64 = 30 * 24 * 60 * 60;
 
 /// Minimum required uptime percentage.
 pub const MIN_UPTIME_PERCENT: f32 = 99.0;
+
+/// Minimum required uptime in fixed-point (99.0% = 990_000 out of 1_000_000).
+pub const MIN_UPTIME_FIXED: u64 = 990_000;
 
 /// Maximum missed blocks per epoch.
 pub const MAX_MISSED_BLOCKS_PER_EPOCH: u32 = 3;

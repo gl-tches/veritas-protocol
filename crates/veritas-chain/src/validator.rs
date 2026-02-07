@@ -117,6 +117,11 @@ impl ValidatorStake {
     /// # Arguments
     ///
     /// * `sla_compliant` - Whether the validator met SLA requirements last epoch
+    ///
+    /// # Deprecated
+    ///
+    /// This method uses f32 arithmetic which is non-deterministic across platforms.
+    /// Use [`calculate_weight_fixed`] instead for consensus-critical calculations.
     pub fn calculate_weight(&self, sla_compliant: bool) -> f32 {
         let stake_weight = self.stake as f32;
 
@@ -131,6 +136,27 @@ impl ValidatorStake {
         };
 
         stake_weight * perf_multiplier * sla_bonus
+    }
+
+    /// Calculate the selection weight using fixed-point u64 arithmetic.
+    ///
+    /// This is the deterministic, consensus-safe replacement for
+    /// [`calculate_weight`]. All consensus-critical code MUST use this method.
+    ///
+    /// # Arguments
+    ///
+    /// * `sla_compliant` - Whether the validator met SLA requirements last epoch
+    ///
+    /// # Returns
+    ///
+    /// Fixed-point weight scaled by `FIXED_POINT_SCALE` (1,000,000).
+    pub fn calculate_weight_fixed(&self, sla_compliant: bool) -> u64 {
+        crate::vrf::calculate_weight_fixed(
+            self.stake,
+            self.performance_score,
+            self.sla_streak,
+            sla_compliant,
+        )
     }
 
     /// Update performance score based on epoch metrics.

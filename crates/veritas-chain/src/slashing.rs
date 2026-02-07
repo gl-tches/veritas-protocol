@@ -76,6 +76,11 @@ use veritas_identity::IdentityHash;
 ///
 /// Each offense type has an associated penalty percentage that is applied
 /// to the validator's current stake.
+///
+/// Penalties are stored both as f32 (for backward compatibility) and as
+/// fixed-point u64 values (for consensus-critical calculations).
+///
+/// Fixed-point scale: 1_000_000 = 100%.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlashingConfig {
     /// Penalty percentage for missing a block (0.1% = 0.001).
@@ -89,6 +94,21 @@ pub struct SlashingConfig {
 
     /// Penalty percentage for double signing (100% = 1.0).
     pub double_sign_percent: f32,
+
+    /// Fixed-point penalty for missed blocks (1_000 = 0.1%).
+    pub missed_block_fixed: u64,
+
+    /// Fixed-point penalty for SLA violations (10_000 = 1%).
+    pub sla_violation_fixed: u64,
+
+    /// Fixed-point penalty for invalid blocks (50_000 = 5%).
+    pub invalid_block_fixed: u64,
+
+    /// Fixed-point penalty for double signing (1_000_000 = 100%).
+    pub double_sign_fixed: u64,
+
+    /// Fixed-point penalty for equivocation in consensus (1_000_000 = 100%).
+    pub equivocation_fixed: u64,
 }
 
 impl Default for SlashingConfig {
@@ -98,6 +118,11 @@ impl Default for SlashingConfig {
             sla_violation_percent: 0.01, // 1%
             invalid_block_percent: 0.05, // 5%
             double_sign_percent: 1.0,    // 100%
+            missed_block_fixed: 1_000,     // 0.1%
+            sla_violation_fixed: 10_000,   // 1%
+            invalid_block_fixed: 50_000,   // 5%
+            double_sign_fixed: 1_000_000,  // 100%
+            equivocation_fixed: 1_000_000, // 100%
         }
     }
 }
@@ -122,6 +147,11 @@ impl SlashingConfig {
             sla_violation_percent: sla_violation_percent.clamp(0.0, 1.0),
             invalid_block_percent: invalid_block_percent.clamp(0.0, 1.0),
             double_sign_percent: double_sign_percent.clamp(0.0, 1.0),
+            missed_block_fixed: (missed_block_percent.clamp(0.0, 1.0) * 1_000_000.0) as u64,
+            sla_violation_fixed: (sla_violation_percent.clamp(0.0, 1.0) * 1_000_000.0) as u64,
+            invalid_block_fixed: (invalid_block_percent.clamp(0.0, 1.0) * 1_000_000.0) as u64,
+            double_sign_fixed: (double_sign_percent.clamp(0.0, 1.0) * 1_000_000.0) as u64,
+            equivocation_fixed: 1_000_000, // Always 100% for equivocation
         }
     }
 }
@@ -218,6 +248,19 @@ pub enum SlashingOffense {
         /// Hash of the second block signed.
         block_hash_2: Hash256,
     },
+
+    /// Validator voted for conflicting proposals in BFT consensus.
+    /// This is equivalent to double-signing in the consensus context.
+    Equivocation {
+        /// Consensus round in which equivocation occurred.
+        round: u64,
+        /// Height at which equivocation occurred.
+        height: u64,
+        /// Hash of the first block voted for.
+        block_hash_1: Hash256,
+        /// Hash of the second block voted for.
+        block_hash_2: Hash256,
+    },
 }
 
 impl std::fmt::Display for SlashingOffense {
@@ -234,6 +277,13 @@ impl std::fmt::Display for SlashingOffense {
             }
             SlashingOffense::DoubleSign { height, .. } => {
                 write!(f, "Double signing at height {}", height)
+            }
+            SlashingOffense::Equivocation { round, height, .. } => {
+                write!(
+                    f,
+                    "Equivocation at height {} round {}",
+                    height, round
+                )
             }
         }
     }
@@ -389,9 +439,12 @@ impl SlashingManager {
         offense: SlashingOffense,
         current_stake: u32,
     ) -> SlashResult {
-        let penalty = self.calculate_penalty(&offense, current_stake);
+        let penalty = self.calculate_penalty_fixed(&offense, current_stake);
         let remaining = current_stake.saturating_sub(penalty);
-        let banned = matches!(offense, SlashingOffense::DoubleSign { .. });
+        let banned = matches!(
+            offense,
+            SlashingOffense::DoubleSign { .. } | SlashingOffense::Equivocation { .. }
+        );
         let timestamp = current_timestamp();
 
         if banned {
@@ -465,6 +518,7 @@ impl SlashingManager {
             SlashingOffense::SlaViolation { .. } => self.config.sla_violation_percent,
             SlashingOffense::InvalidBlock { .. } => self.config.invalid_block_percent,
             SlashingOffense::DoubleSign { .. } => self.config.double_sign_percent,
+            SlashingOffense::Equivocation { .. } => self.config.double_sign_percent, // Same as double-sign
         };
 
         // Calculate penalty, rounding up to ensure at least 1 point is slashed
@@ -480,15 +534,42 @@ impl SlashingManager {
         penalty.min(stake)
     }
 
+    /// Calculate the penalty using fixed-point u64 arithmetic.
+    ///
+    /// This is the deterministic, consensus-safe penalty calculation.
+    /// Fixed-point scale: 1_000_000 = 100%.
+    pub fn calculate_penalty_fixed(&self, offense: &SlashingOffense, stake: u32) -> u32 {
+        if stake == 0 {
+            return 0;
+        }
+
+        let fixed_percent = match offense {
+            SlashingOffense::MissedBlock { .. } => self.config.missed_block_fixed,
+            SlashingOffense::SlaViolation { .. } => self.config.sla_violation_fixed,
+            SlashingOffense::InvalidBlock { .. } => self.config.invalid_block_fixed,
+            SlashingOffense::DoubleSign { .. } => self.config.double_sign_fixed,
+            SlashingOffense::Equivocation { .. } => self.config.equivocation_fixed,
+        };
+
+        // penalty = stake * fixed_percent / 1_000_000, rounded up
+        let numerator = (stake as u64) * fixed_percent;
+        let penalty = numerator.div_ceil(1_000_000) as u32;
+
+        penalty.min(stake)
+    }
+
     /// Check if an offense is critical (warrants immediate attention).
     ///
     /// Critical offenses include:
     /// - Double signing (security threat)
+    /// - Equivocation in consensus (security threat)
     /// - Invalid block with certain reasons
     pub fn is_critical(offense: &SlashingOffense) -> bool {
         matches!(
             offense,
-            SlashingOffense::DoubleSign { .. } | SlashingOffense::InvalidBlock { .. }
+            SlashingOffense::DoubleSign { .. }
+                | SlashingOffense::Equivocation { .. }
+                | SlashingOffense::InvalidBlock { .. }
         )
     }
 
@@ -502,7 +583,7 @@ impl SlashingManager {
     ///
     /// # Returns
     ///
-    /// `Some(SlashingOffense::DoubleSign)` if double signing is detected,
+    /// `Some(SlashingOffense::Equivocation)` if equivocation is detected,
     /// `None` otherwise.
     ///
     /// ## Memory Safety (VERITAS-2026-0030)
@@ -518,9 +599,10 @@ impl SlashingManager {
         let key = (height, validator.clone());
 
         if let Some(existing) = self.block_signatures.get(&key) {
-            // Check if the hashes are different (double sign)
+            // Check if the hashes are different (equivocation)
             if existing.block_hash != block_hash {
-                return Some(SlashingOffense::DoubleSign {
+                return Some(SlashingOffense::Equivocation {
+                    round: 0, // Round info not available at this layer
                     height,
                     block_hash_1: existing.block_hash.clone(),
                     block_hash_2: block_hash,
@@ -724,7 +806,7 @@ mod tests {
 
         // Second different signature at same height - double sign!
         let result2 = manager.record_block_signature(&validator, 100, test_block_hash_2());
-        assert!(matches!(result2, Some(SlashingOffense::DoubleSign { .. })));
+        assert!(matches!(result2, Some(SlashingOffense::Equivocation { .. })));
 
         // Process the double sign offense
         if let Some(offense) = result2 {

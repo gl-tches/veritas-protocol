@@ -60,6 +60,21 @@ ML-DSA-65 signing fully operational — replaces all placeholder HMAC-BLAKE3 sig
 - **New modules**: domain_separation.rs, transcript.rs, wire_error.rs, transaction.rs, epoch.rs, light_validator.rs
 - **Stack requirement**: RUST_MIN_STACK=16777216 (16MB) for ML-DSA operations
 
+### 5. Milestone 3: BFT Consensus + Validator Trust Model (COMPLETED — v0.5.0-beta)
+
+**Status**: All 5 tasks (3.1–3.5) implemented
+**Tracking**: See VERITAS_TODO_V2.md sections 3.1–3.5, TASKS.md for summary
+
+BFT consensus fully operational — replaces longest-chain rule with Streamlet BFT:
+- **Streamlet BFT**: ConsensusEngine with Propose/Vote/Notarize phases, 2/3+1 quorum, 3-consecutive-notarized finality rule
+- **Equivocation slashing**: New `SlashingOffense::Equivocation` variant, 100% slash + permanent ban
+- **Fixed-point arithmetic**: All validator weights use u64 * FIXED_POINT_SCALE (1,000,000), replacing f32 non-determinism
+- **VRF selection**: BLAKE3-based VRF for unpredictable leader selection, fixed-point weighted validator selection
+- **Validator trust model**: TrustManager with 3-line trust fallback (direct → peers → peers-of-peers), heartbeat monitoring, liveness alerts
+- **New modules**: consensus.rs, vrf.rs, validator_trust.rs
+- **New protocol constants**: FIXED_POINT_SCALE, BFT_QUORUM_*, MAX_CONSENSUS_ROUNDS, VALIDATOR_TRUST_DEPTH, VALIDATOR_HEARTBEAT_SECS
+- **All 507 veritas-chain tests pass** (0 failures), full workspace 1,643 tests pass
+
 ## 📋 Remaining Work
 
 | Item | Priority | Status |
@@ -69,7 +84,12 @@ ML-DSA-65 signing fully operational — replaces all placeholder HMAC-BLAKE3 sig
 | M2: Message-as-transaction chain model | P0 | Completed (v0.4.0-beta) |
 | M2: Epoch-based pruning (30-day) | P0 | Completed (v0.4.0-beta) |
 | M2: Light validator mode | P1 | Completed (v0.4.0-beta) |
-| M3: BFT consensus + validator trust model | P1 | Design needed |
+| M3: BFT consensus (Streamlet) | P1 | Completed (v0.5.0-beta) |
+| M3: Slashing for equivocation | P1 | Completed (v0.5.0-beta) |
+| M3: Fixed-point u64 validator scoring | P1 | Completed (v0.5.0-beta) |
+| M3: VRF-based validator selection | P1 | Completed (v0.5.0-beta) |
+| M3: Validator discovery + trust model | P1 | Completed (v0.5.0-beta) |
+| M4: Privacy hardening | P1 | Design needed |
 | Hardware attestation (TPM/SecureEnclave/AndroidKeystore) | P2 | Platform stubs |
 | Bluetooth last-mile relay | P3 | Deferred to v2.0 |
 | Async closures refactoring (TASK-170) | P4 | Optional |
@@ -834,9 +854,14 @@ veritas-core
 - `crates/veritas-chain/src/epoch.rs` — Epoch management, pruning logic
 - `crates/veritas-chain/src/light_validator.rs` — Light validator sync + storage
 
+### New Files (from Milestone 3 — v0.5.0-beta)
+
+- `crates/veritas-chain/src/consensus.rs` — Streamlet BFT consensus engine
+- `crates/veritas-chain/src/vrf.rs` — VRF-based validator selection, fixed-point arithmetic
+- `crates/veritas-chain/src/validator_trust.rs` — Trusted validator list, 3-line fallback, liveness monitoring
+
 ### Files Expected (from Architecture Decisions — Future Milestones)
 
-- `crates/veritas-chain/src/validator_trust.rs` — Trusted validator list, 3-line fallback
 - `crates/veritas-protocol/src/image_transfer.rs` — P2P image exchange + on-chain proof
 
 -----

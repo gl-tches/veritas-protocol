@@ -121,6 +121,40 @@ pub enum ChainError {
     /// failed validation (format, length, reserved name, etc.).
     #[error("Invalid username: {0}")]
     InvalidUsername(String),
+
+    /// Consensus error.
+    #[error("Consensus error: {0}")]
+    Consensus(String),
+
+    /// Quorum not reached.
+    #[error("Quorum not reached: {received}/{required} votes")]
+    QuorumNotReached {
+        /// Number of votes received.
+        received: usize,
+        /// Number of votes required.
+        required: usize,
+    },
+
+    /// Invalid consensus vote.
+    ///
+    /// SECURITY: A consensus vote failed validation. This could indicate
+    /// a Byzantine validator attempting to disrupt consensus.
+    #[error("Invalid consensus vote: {0}")]
+    InvalidVote(String),
+
+    /// Equivocation detected.
+    ///
+    /// SECURITY: A validator signed two different blocks at the same height.
+    /// This triggers slashing of the equivocating validator.
+    #[error("Equivocation detected: validator signed conflicting blocks at height {height}")]
+    Equivocation {
+        /// Height at which equivocation occurred.
+        height: u64,
+    },
+
+    /// Validator trust error.
+    #[error("Trust error: {0}")]
+    Trust(String),
 }
 
 /// Result type for blockchain operations.

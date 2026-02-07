@@ -637,3 +637,43 @@ If issues discovered after merge:
 1. Re-merge
 
 Edition changes are isolated per-crate, so partial rollback is possible if needed.
+
+-----
+
+## Milestone 3: BFT Consensus (v0.5.0-beta) — COMPLETED
+
+**Branch**: `claude/implement-bft-consensus-p8xy7`
+**Target**: Implement BFT consensus, fixed-point arithmetic, VRF selection, validator trust model
+**Version**: v0.4.0-beta → v0.5.0-beta
+
+### Summary
+
+All 5 tasks completed. 3 new modules added to `veritas-chain`. Protocol limits extended with BFT constants.
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 3.1 | Streamlet BFT consensus engine | Completed |
+| 3.2 | Slashing for equivocation | Completed |
+| 3.3 | Fixed-point u64 validator scoring | Completed |
+| 3.4 | VRF-based validator selection | Completed |
+| 3.5 | Validator discovery and trust model | Completed |
+
+### New Files
+
+- `crates/veritas-chain/src/consensus.rs` — Streamlet BFT consensus engine
+- `crates/veritas-chain/src/vrf.rs` — VRF-based validator selection, fixed-point arithmetic
+- `crates/veritas-chain/src/validator_trust.rs` — Trusted validator list, 3-line fallback
+
+### Modified Files
+
+- `crates/veritas-chain/src/lib.rs` — New module declarations and exports
+- `crates/veritas-chain/src/error.rs` — New error variants (Consensus, Equivocation, etc.)
+- `crates/veritas-chain/src/validator.rs` — Added `calculate_weight_fixed()` method
+- `crates/veritas-chain/src/slashing.rs` — Added Equivocation offense, fixed-point penalties
+- `crates/veritas-protocol/src/limits.rs` — New BFT/VRF/trust model constants
+
+### Test Results
+
+- veritas-chain: 507 tests passed (0 failed)
+- Full workspace: 1,643 tests passed (0 failed)
+- Clippy: 0 warnings from new code
