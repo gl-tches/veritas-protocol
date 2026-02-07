@@ -20,26 +20,31 @@ pub enum ReputationTier {
     Blacklisted,
     /// Score < 200: Heavily restricted.
     Quarantined,
-    /// Score < 500: Lower priority.
-    Deprioritized,
-    /// Score 500-799: Standard participation.
+    /// Score 200-499: Standard participation (new users start here after initial interactions).
     Normal,
+    /// Score >= 500: Trusted participation.
+    Trusted,
     /// Score >= 800: Prioritized participation.
     Priority,
 }
 
 impl ReputationTier {
     /// Get the tier for a given score.
+    ///
+    /// New users start at score 100 (Quarantined tier) and must build
+    /// reputation through positive interactions to reach Normal (200+).
+    /// This is intentional: new identities are cheap to create, so the
+    /// protocol requires proof of good behavior before granting full access.
     #[must_use]
     pub fn from_score(score: u32) -> Self {
         if score < REPUTATION_BLACKLIST {
             ReputationTier::Blacklisted
         } else if score < REPUTATION_QUARANTINE {
             ReputationTier::Quarantined
-        } else if score < REPUTATION_START {
-            ReputationTier::Deprioritized
-        } else if score < PRIORITY_THRESHOLD {
+        } else if score < 500 {
             ReputationTier::Normal
+        } else if score < PRIORITY_THRESHOLD {
+            ReputationTier::Trusted
         } else {
             ReputationTier::Priority
         }
@@ -51,8 +56,8 @@ impl ReputationTier {
         match self {
             ReputationTier::Blacklisted => "Blacklisted",
             ReputationTier::Quarantined => "Quarantined",
-            ReputationTier::Deprioritized => "Deprioritized",
             ReputationTier::Normal => "Normal",
+            ReputationTier::Trusted => "Trusted",
             ReputationTier::Priority => "Priority",
         }
     }
@@ -102,18 +107,9 @@ impl TierEffects {
                 can_receive_messages: true,
                 can_file_reports: false,
                 can_become_validator: false,
-                message_priority: -2,
-                rate_limit_multiplier: 0.25,
-                description: "Heavily restricted: low priority, severe rate limits",
-            },
-            ReputationTier::Deprioritized => Self {
-                can_send_messages: true,
-                can_receive_messages: true,
-                can_file_reports: false,
-                can_become_validator: false,
                 message_priority: -1,
                 rate_limit_multiplier: 0.5,
-                description: "Low priority: reduced rate limits, cannot file reports",
+                description: "New/low-reputation: reduced rate limits, cannot file reports",
             },
             ReputationTier::Normal => Self {
                 can_send_messages: true,
@@ -123,6 +119,15 @@ impl TierEffects {
                 message_priority: 0,
                 rate_limit_multiplier: 1.0,
                 description: "Standard participation with full messaging rights",
+            },
+            ReputationTier::Trusted => Self {
+                can_send_messages: true,
+                can_receive_messages: true,
+                can_file_reports: true,
+                can_become_validator: false,
+                message_priority: 1,
+                rate_limit_multiplier: 1.5,
+                description: "Trusted: enhanced rate limits, full messaging rights",
             },
             ReputationTier::Priority => Self {
                 can_send_messages: true,
@@ -194,11 +199,12 @@ mod tests {
         assert_eq!(get_tier(0), ReputationTier::Blacklisted);
         assert_eq!(get_tier(49), ReputationTier::Blacklisted);
         assert_eq!(get_tier(50), ReputationTier::Quarantined);
+        assert_eq!(get_tier(100), ReputationTier::Quarantined); // New users start here
         assert_eq!(get_tier(199), ReputationTier::Quarantined);
-        assert_eq!(get_tier(200), ReputationTier::Deprioritized);
-        assert_eq!(get_tier(499), ReputationTier::Deprioritized);
-        assert_eq!(get_tier(500), ReputationTier::Normal);
-        assert_eq!(get_tier(799), ReputationTier::Normal);
+        assert_eq!(get_tier(200), ReputationTier::Normal);
+        assert_eq!(get_tier(499), ReputationTier::Normal);
+        assert_eq!(get_tier(500), ReputationTier::Trusted);
+        assert_eq!(get_tier(799), ReputationTier::Trusted);
         assert_eq!(get_tier(800), ReputationTier::Priority);
         assert_eq!(get_tier(1000), ReputationTier::Priority);
     }
@@ -221,13 +227,6 @@ mod tests {
         assert!(!effects.can_file_reports);
         assert!(!effects.can_become_validator);
         assert!(effects.rate_limit_multiplier < 1.0);
-    }
-
-    #[test]
-    fn test_deprioritized_effects() {
-        let effects = get_effects(ReputationTier::Deprioritized);
-        assert!(effects.can_send_messages);
-        assert!(!effects.can_file_reports);
         assert_eq!(effects.message_priority, -1);
     }
 
@@ -238,6 +237,16 @@ mod tests {
         assert!(effects.can_file_reports);
         assert!(!effects.can_become_validator);
         assert_eq!(effects.rate_limit_multiplier, 1.0);
+    }
+
+    #[test]
+    fn test_trusted_effects() {
+        let effects = get_effects(ReputationTier::Trusted);
+        assert!(effects.can_send_messages);
+        assert!(effects.can_file_reports);
+        assert!(!effects.can_become_validator);
+        assert!(effects.rate_limit_multiplier > 1.0);
+        assert_eq!(effects.message_priority, 1);
     }
 
     #[test]
@@ -286,6 +295,7 @@ mod tests {
     #[test]
     fn test_tier_display() {
         assert_eq!(format!("{}", ReputationTier::Normal), "Normal");
+        assert_eq!(format!("{}", ReputationTier::Trusted), "Trusted");
         assert_eq!(format!("{}", ReputationTier::Priority), "Priority");
     }
 }

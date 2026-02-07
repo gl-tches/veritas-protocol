@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use veritas_crypto::{
-    decrypt, encrypt, EncryptedData, Hash256, MlDsaPrivateKey, MlDsaPublicKey, MlDsaSignature,
-    SharedSecret, SymmetricKey, X25519PublicKey, X25519StaticPrivateKey,
+    decrypt, encrypt, EncryptedData, Hash256, MlDsaKeyPair, MlDsaPrivateKey, MlDsaPublicKey,
+    MlDsaSignature, SharedSecret, SymmetricKey, X25519PublicKey, X25519StaticPrivateKey,
 };
 
 use crate::{IdentityError, IdentityHash, Result};
@@ -49,29 +49,63 @@ fn derive_identity_hash(
     exchange_public: &X25519PublicKey,
     signing_public: Option<&MlDsaPublicKey>,
 ) -> IdentityHash {
+    // Bind signing bytes to a variable so they live long enough for the hash
+    let signing_bytes = signing_public.map(|s| s.as_bytes());
     let mut inputs: Vec<&[u8]> = vec![KEYPAIR_IDENTITY_HASH_CONTEXT, exchange_public.as_bytes()];
 
-    if let Some(signing) = signing_public {
-        inputs.push(signing.as_bytes());
+    if let Some(ref bytes) = signing_bytes {
+        inputs.push(bytes);
     }
 
     let hash = Hash256::hash_many(&inputs);
     IdentityHash::from(hash)
 }
 
+/// Custom serde module for ML-DSA public key serialization.
+///
+/// ML-DSA's `VerifyingKey` doesn't implement Serialize/Deserialize directly,
+/// so we serialize as raw bytes and reconstruct on deserialization.
+mod signing_serde {
+    use super::*;
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S>(key: &Option<MlDsaPublicKey>, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match key {
+            Some(k) => serializer.serialize_some(&k.as_bytes()),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> std::result::Result<Option<MlDsaPublicKey>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let bytes: Option<Vec<u8>> = Option::deserialize(deserializer)?;
+        match bytes {
+            Some(b) => {
+                let key = MlDsaPublicKey::from_bytes(&b)
+                    .map_err(serde::de::Error::custom)?;
+                Ok(Some(key))
+            }
+            None => Ok(None),
+        }
+    }
+}
+
 /// Public keys associated with an identity.
 ///
 /// Contains the public components that can be freely shared:
 /// - X25519 public key for key exchange
-/// - ML-DSA public key for signature verification (when available)
+/// - ML-DSA public key for signature verification (post-quantum)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IdentityPublicKeys {
     /// X25519 public key for key exchange.
     pub exchange: X25519PublicKey,
-    /// ML-DSA public key for signature verification (post-quantum).
-    /// Currently a placeholder until the ml-dsa crate stabilizes.
-    /// Skipped in serialization as MlDsaPublicKey doesn't implement Serialize yet.
-    #[serde(skip)]
+    /// ML-DSA public key for signature verification (post-quantum, FIPS 204).
+    #[serde(with = "signing_serde")]
     pub signing: Option<MlDsaPublicKey>,
 }
 
@@ -168,7 +202,7 @@ impl IdentityKeyPair {
     ///
     /// Creates a new identity with:
     /// - Fresh X25519 keypair for key exchange
-    /// - No ML-DSA keypair (pending crate stabilization)
+    /// - Fresh ML-DSA-65 keypair for post-quantum signing (FIPS 204)
     ///
     /// # Example
     ///
@@ -182,20 +216,21 @@ impl IdentityKeyPair {
         let exchange_private = X25519StaticPrivateKey::generate();
         let exchange_public = exchange_private.public_key();
 
-        // ML-DSA is not yet implemented - skip for now
-        let signing_private: Option<MlDsaPrivateKey> = None;
-        let signing_public: Option<MlDsaPublicKey> = None;
+        // Generate ML-DSA-65 keypair for post-quantum signing
+        let mldsa_kp = MlDsaKeyPair::generate()
+            .expect("ML-DSA key generation should not fail with OsRng");
+        let (signing_priv, signing_pub) = mldsa_kp.into_parts();
 
-        let identity_hash = derive_identity_hash(&exchange_public, signing_public.as_ref());
+        let identity_hash = derive_identity_hash(&exchange_public, Some(&signing_pub));
 
         let public_keys = IdentityPublicKeys {
             exchange: exchange_public,
-            signing: signing_public,
+            signing: Some(signing_pub),
         };
 
         Self {
             exchange_private,
-            signing_private,
+            signing_private: Some(signing_priv),
             identity_hash,
             public_keys,
         }
@@ -267,18 +302,13 @@ impl IdentityKeyPair {
         shared.derive_key(KEY_EXCHANGE_CONTEXT)
     }
 
-    /// Sign a message using ML-DSA.
+    /// Sign a message using ML-DSA-65 (FIPS 204).
     ///
     /// # Errors
     ///
     /// Returns an error if:
-    /// - ML-DSA is not available (not yet implemented)
+    /// - ML-DSA signing key is not available
     /// - Signing fails for any reason
-    ///
-    /// # Note
-    ///
-    /// ML-DSA signing is currently not implemented. This method will
-    /// return an error until the ml-dsa crate stabilizes.
     pub fn sign(&self, message: &[u8]) -> Result<MlDsaSignature> {
         match &self.signing_private {
             Some(private_key) => Ok(private_key.sign(message)?),
@@ -381,8 +411,12 @@ impl IdentityKeyPair {
             ));
         }
 
-        // ML-DSA restoration (when available)
-        let signing_private: Option<MlDsaPrivateKey> = None;
+        // Restore ML-DSA signing key from seed
+        let signing_private: Option<MlDsaPrivateKey> =
+            serializable
+                .signing_private_bytes
+                .as_ref()
+                .and_then(|seed| MlDsaPrivateKey::from_seed(seed).ok());
 
         let identity_hash = encrypted.public_keys.identity_hash();
 
@@ -413,9 +447,16 @@ impl Clone for IdentityKeyPair {
         let exchange_private =
             X25519StaticPrivateKey::from_bytes(self.exchange_private.as_bytes())
                 .expect("cloning existing valid private key should not fail");
+
+        // Reconstruct ML-DSA key from seed (MlDsaPrivateKey doesn't implement Clone by design)
+        let signing_private = self
+            .signing_private
+            .as_ref()
+            .and_then(|sk| MlDsaPrivateKey::from_seed(sk.as_bytes()).ok());
+
         Self {
             exchange_private,
-            signing_private: None, // ML-DSA keys are not Clone
+            signing_private,
             identity_hash: self.identity_hash.clone(),
             public_keys: self.public_keys.clone(),
         }
@@ -503,8 +544,9 @@ mod tests {
         let public_keys = identity.public_keys();
         assert!(!public_keys.exchange.as_bytes().iter().all(|&b| b == 0));
 
-        // ML-DSA not yet available
-        assert!(!identity.has_signing_key());
+        // ML-DSA should now be available
+        assert!(identity.has_signing_key());
+        assert!(public_keys.signing.is_some());
     }
 
     #[test]
@@ -685,11 +727,27 @@ mod tests {
     }
 
     #[test]
-    fn test_sign_returns_error_when_mldsa_unavailable() {
+    fn test_sign_and_verify_with_mldsa() {
         let identity = IdentityKeyPair::generate();
         let message = b"test message";
 
-        let result = identity.sign(message);
+        // Signing should succeed with ML-DSA
+        let signature = identity.sign(message).unwrap();
+
+        // Verify with the public key
+        let public_keys = identity.public_keys();
+        let signing_pub = public_keys.signing.as_ref().unwrap();
+        let result = signing_pub.verify(message, &signature);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sign_verify_wrong_message_fails() {
+        let identity = IdentityKeyPair::generate();
+        let signature = identity.sign(b"correct message").unwrap();
+
+        let signing_pub = identity.public_keys().signing.as_ref().unwrap();
+        let result = signing_pub.verify(b"wrong message", &signature);
         assert!(result.is_err());
     }
 

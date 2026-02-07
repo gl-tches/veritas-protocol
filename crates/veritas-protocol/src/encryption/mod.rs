@@ -3,7 +3,7 @@
 //! This module provides the complete E2E encryption layer that ties together:
 //! - Ephemeral key exchange (X25519)
 //! - Symmetric encryption (XChaCha20-Poly1305)
-//! - Message signing (placeholder HMAC-BLAKE3, future ML-DSA)
+//! - Message signing (ML-DSA-65, FIPS 204)
 //! - Minimal metadata envelopes
 //! - Privacy-preserving mailbox key derivation
 //!

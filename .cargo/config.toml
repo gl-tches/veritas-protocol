@@ -1,0 +1,5 @@
+# ML-DSA-65 key generation and signing operations require significant stack space
+# due to lattice-based matrix operations in the ml-dsa crate.
+# Default test thread stack (2-8MB) is insufficient.
+[env]
+RUST_MIN_STACK = "16777216"  # 16MB stack for test threads

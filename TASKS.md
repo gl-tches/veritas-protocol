@@ -523,6 +523,47 @@ All ~60 bugs from the comprehensive code review have been fixed:
 
 -----
 
+## Milestone 2: Wire Format v2 + ML-DSA Signing (Completed — v0.4.0-beta)
+
+**Branch**: `feat/milestone-2-wire-format-mldsa`
+**Status**: COMPLETED
+**Date**: 2026-02-07
+**Tracking**: See VERITAS_TODO_V2.md sections 2.1–2.12
+
+### Summary
+
+All 12 tasks from Milestone 2 have been implemented. ML-DSA-65 signing is fully operational, replacing the placeholder HMAC-BLAKE3 signing. Wire format v2 deployed with post-quantum envelope sizes. Message-as-transaction chain model, epoch-based pruning, and light validator mode all implemented.
+
+**Stack requirement**: ML-DSA operations require RUST_MIN_STACK=16777216 (16MB).
+
+### Key Changes
+
+| Task | Category | Description |
+|------|----------|-------------|
+| 2.1 | Wire Format | Protocol version negotiation added (PROTOCOL_VERSION = 2) |
+| 2.2 | Wire Format | Cipher suite identifier added (CIPHER_SUITE_MLDSA65_CHACHA20 = 1) |
+| 2.3 | Wire Format | Envelope sizes increased: MAX_ENVELOPE_SIZE 2048→8192, padding buckets [256,512,1024]→[1024,2048,4096,8192], MIN_CIPHERTEXT_SIZE 256→1024 |
+| 2.4 | Crypto | Structured domain separation in `veritas-protocol/src/domain_separation.rs` |
+| 2.5 | Crypto | Transcript binding for HKDF in `veritas-protocol/src/transcript.rs` |
+| 2.6 | CRITICAL | ML-DSA-65 signing (FIPS 204) via `ml-dsa` crate v0.1.0-rc.7 — replaces all placeholder HMAC-BLAKE3 signing across 6 crates. Key sizes: PK=1952, SK seed=32 (full=4032), Sig=3309. Signature size constant corrected 3293→3309. |
+| 2.7 | Chain | Message-as-transaction model in `veritas-chain/src/transaction.rs` |
+| 2.8 | Chain | Epoch-based 30-day pruning in `veritas-chain/src/epoch.rs` |
+| 2.9 | Chain | Light validator mode in `veritas-chain/src/light_validator.rs` (256MB RAM target) |
+| 2.10 | Reputation | Starting score lowered from 500 to 100, capability gating by tier |
+| 2.11 | Reputation | Asymmetric decay: above 500 → decay toward 500; below 500 → decay toward 0 |
+| 2.12 | Wire Format | Generic wire error codes in `veritas-protocol/src/wire_error.rs` |
+
+### New Files Added
+
+- `crates/veritas-protocol/src/domain_separation.rs` — Structured domain separation
+- `crates/veritas-protocol/src/transcript.rs` — Transcript binding for HKDF
+- `crates/veritas-protocol/src/wire_error.rs` — Generic wire error codes
+- `crates/veritas-chain/src/transaction.rs` — Message-as-transaction model
+- `crates/veritas-chain/src/epoch.rs` — Epoch-based 30-day pruning
+- `crates/veritas-chain/src/light_validator.rs` — Light validator mode
+
+-----
+
 ## Completed Tasks
 
 ### Security Remediation (Completed)
@@ -559,6 +600,7 @@ All ~60 bugs from the comprehensive code review have been fixed:
 |170-179|Post-Migration Refactoring |
 |200-299|Future Features            |
 |300-399|M1: Critical Code Fixes    |
+|400-499|M2: Wire Format v2 + ML-DSA|
 
 -----
 

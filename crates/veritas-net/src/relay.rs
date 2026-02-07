@@ -56,7 +56,7 @@ const DEFAULT_MAX_HOP_COUNT: u8 = 3;
 const DEFAULT_MAX_STORED_MESSAGES: usize = 100_000;
 
 /// Default maximum message size in bytes.
-const DEFAULT_MAX_MESSAGE_SIZE: usize = 2048;
+const DEFAULT_MAX_MESSAGE_SIZE: usize = 8192;
 
 /// Default forward delay range for traffic analysis resistance (0-500ms).
 const DEFAULT_FORWARD_DELAY_MS: u64 = 500;
@@ -85,7 +85,7 @@ pub struct RelayConfig {
 
     /// Maximum size of a single message in bytes.
     ///
-    /// Messages larger than this are rejected. Default: 2048
+    /// Messages larger than this are rejected. Default: 8192
     pub max_message_size: usize,
 
     /// Random delay added before forwarding for traffic analysis resistance.
@@ -142,7 +142,7 @@ impl RelayConfig {
             max_hop_count: 5,
             message_ttl: Duration::from_secs(MESSAGE_TTL_SECS),
             max_stored_messages: 1_000_000,
-            max_message_size: 4096,
+            max_message_size: 8192,
             forward_delay: Duration::from_millis(100),
         }
     }
@@ -169,9 +169,9 @@ impl RelayConfig {
             ));
         }
 
-        if self.max_message_size < 256 {
+        if self.max_message_size < 1024 {
             return Err(NetError::Transport(
-                "max_message_size must be at least 256 bytes".to_string(),
+                "max_message_size must be at least 1024 bytes".to_string(),
             ));
         }
 

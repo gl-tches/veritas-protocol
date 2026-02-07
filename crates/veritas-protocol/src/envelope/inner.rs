@@ -181,6 +181,14 @@ pub struct InnerPayload {
 
     /// Reference to a previous message (for replies/threads).
     reply_to: Option<Hash256>,
+
+    /// Cipher suite used for this message.
+    /// 0 = ChaCha20-Poly1305 + X25519 + BLAKE3 (current)
+    /// 1 = ChaCha20-Poly1305 + X25519 + ML-KEM + BLAKE3 (future hybrid)
+    pub cipher_suite: u8,
+
+    /// Protocol wire format version.
+    pub protocol_version: u8,
 }
 
 impl InnerPayload {
@@ -233,6 +241,8 @@ impl InnerPayload {
             signature: MessageSignature::placeholder(),
             message_id,
             reply_to,
+            cipher_suite: 0,
+            protocol_version: 2,
         }
     }
 
@@ -252,6 +262,8 @@ impl InnerPayload {
             signature,
             message_id,
             reply_to,
+            cipher_suite: 0,
+            protocol_version: 2,
         }
     }
 
@@ -317,6 +329,8 @@ impl InnerPayload {
             self.message_id.as_bytes(),
             &content_bytes,
             &reply_bytes,
+            &[self.cipher_suite],
+            &[self.protocol_version],
         ])
     }
 

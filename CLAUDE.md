@@ -12,7 +12,7 @@ VERITAS (Verified Encrypted Real-time Integrity Transmission And Signing) is a p
 **Security Level**: HARDENED + POST-QUANTUM
 **Edition**: Rust 2024
 **MSRV**: 1.85
-**Version**: 0.3.1-beta
+**Version**: 0.4.0-beta
 
 ## ✅ Completed Work Streams
 
@@ -47,15 +47,28 @@ All 20 fix categories (1.1–1.20) from the comprehensive code review have been 
 - **~20 LOW**: Clone on secret types, error variants, timestamp validation, dead code removal, overflow fixes, shutdown handling, formatting fixes
 - **All 1,549 tests pass** (0 failures), build succeeds cleanly
 
+### 4. Milestone 2: Wire Format v2 + ML-DSA Signing (COMPLETED — v0.4.0-beta)
+
+**Status**: All 12 tasks (2.1–2.12) implemented
+**Tracking**: See VERITAS_TODO_V2.md sections 2.1–2.12, TASKS.md for summary
+
+ML-DSA-65 signing fully operational — replaces all placeholder HMAC-BLAKE3 signing:
+- **ML-DSA-65 (FIPS 204)**: Real implementation using `ml-dsa` crate v0.1.0-rc.7. Key sizes: PK=1952, SK seed=32 (full=4032), Sig=3309
+- **Wire format v2**: MAX_ENVELOPE_SIZE 2048→8192, padding buckets [1024,2048,4096,8192], protocol version field (v2), cipher suite field (CIPHER_SUITE_MLDSA65_CHACHA20=1), ML-DSA signature size corrected 3293→3309
+- **Chain model**: Message-as-transaction model, epoch-based 30-day pruning, light validator mode (256MB RAM target)
+- **Reputation**: Starting score 500→100, asymmetric decay (above 500→500, below 500→0), capability gating by tier
+- **New modules**: domain_separation.rs, transcript.rs, wire_error.rs, transaction.rs, epoch.rs, light_validator.rs
+- **Stack requirement**: RUST_MIN_STACK=16777216 (16MB) for ML-DSA operations
+
 ## 📋 Remaining Work
 
 | Item | Priority | Status |
 |------|----------|--------|
 | M1: Critical code fixes (~60 bugs) | P0 | Completed (v0.3.1-beta) |
-| M2: ML-DSA signing + wire format v2 | P0 | Design complete |
-| M2: Message-as-transaction chain model | P0 | Design complete |
-| M2: Epoch-based pruning (30-day) | P0 | Design complete |
-| M2: Light validator mode | P1 | Design complete |
+| M2: ML-DSA signing + wire format v2 | P0 | Completed (v0.4.0-beta) |
+| M2: Message-as-transaction chain model | P0 | Completed (v0.4.0-beta) |
+| M2: Epoch-based pruning (30-day) | P0 | Completed (v0.4.0-beta) |
+| M2: Light validator mode | P1 | Completed (v0.4.0-beta) |
 | M3: BFT consensus + validator trust model | P1 | Design needed |
 | Hardware attestation (TPM/SecureEnclave/AndroidKeystore) | P2 | Platform stubs |
 | Bluetooth last-mile relay | P3 | Deferred to v2.0 |
@@ -93,18 +106,18 @@ After epoch ends:
 
 ### AD-3: ML-DSA Signing (No Ed25519)
 
-All signing uses ML-DSA-65 (FIPS 204, lattice-based). There is NO Ed25519 transition. The existing placeholder HMAC-BLAKE3 signing is replaced directly with ML-DSA. This is a hard cutover — existing chain data has no real signatures to preserve.
+All signing uses ML-DSA-65 (FIPS 204, lattice-based). There is NO Ed25519. ML-DSA-65 is fully implemented as of v0.4.0-beta — all signing across the protocol uses real FIPS 204 signatures.
 
 ```
 ML-DSA-65 sizes:
   Public key:  1,952 bytes
   Signature:   3,309 bytes
-  Private key: 4,032 bytes
+  Private key: 4,032 bytes (seed: 32 bytes)
 ```
 
 These signature sizes are pruned after epoch end, so permanent storage is unaffected.
 
-**Implementation**: Use `ml-dsa` crate (RustCrypto, 0.1.x, already in Cargo.toml). FIPS 204 final. Passes NIST test vectors. Not independently audited — this is accepted risk based on NIST standardization and Cloudflare production deployment of lattice crypto.
+**Implementation**: Uses `ml-dsa` crate (RustCrypto, v0.1.0-rc.7). FIPS 204 final. Passes NIST test vectors. Not independently audited — this is accepted risk based on NIST standardization and Cloudflare production deployment of lattice crypto. Requires RUST_MIN_STACK=16777216 (16MB) for ML-DSA operations.
 
 **Implications for agents**: CryptoAuditor must verify `OsRng` for all ML-DSA key generation. Envelope sizes must accommodate 3,309-byte signatures. All `MAX_ENVELOPE_SIZE` constants must be updated.
 
@@ -538,7 +551,7 @@ pub enum Transaction {
 |Put sender/timestamp inside encrypted payload     |Put on header or transaction   |
 |Add timing jitter (exponential/Poisson)           |Send immediately               |
 |Use domain separation: `"VERITAS-v1." || purpose` |Mix key derivation contexts    |
-|Sign transactions with ML-DSA-65                  |Use placeholder HMAC-BLAKE3    |
+|Sign transactions with ML-DSA-65                  |Use any other signing scheme    |
 
 ### Image Transfer Rules
 
@@ -732,7 +745,7 @@ pub fn verify_tag(expected: &[u8], actual: &[u8]) -> bool {
 |Purpose          |Crate               |Version      |Notes|
 |-----------------|--------------------|-------------|-----|
 |ML-KEM           |`ml-kem`            |0.1.x        |Post-quantum key exchange|
-|ML-DSA           |`ml-dsa`            |0.1.x        |**Primary signing algorithm** — FIPS 204|
+|ML-DSA           |`ml-dsa`            |0.1.0-rc.7   |**Primary signing algorithm** — FIPS 204 (fully implemented)|
 |X25519           |`x25519-dalek`      |2.x          |Key exchange (ECDH)|
 |ChaCha20-Poly1305|`chacha20poly1305`  |0.10.x       |Symmetric encryption|
 |BLAKE3           |`blake3`            |1.x          |Hashing, message digests|
@@ -812,15 +825,18 @@ veritas-core
 - `crates/veritas-reputation/src/proof.rs` — Interaction proofs
 - `crates/veritas-core/src/time.rs` — Trusted time
 
-### Files Expected (from Architecture Decisions)
+### New Files (from Milestone 2 — v0.4.0-beta)
 
+- `crates/veritas-protocol/src/domain_separation.rs` — Structured domain separation
+- `crates/veritas-protocol/src/transcript.rs` — Transcript binding for HKDF
+- `crates/veritas-protocol/src/wire_error.rs` — Generic wire error codes
 - `crates/veritas-chain/src/transaction.rs` — MessageTransaction, Transaction enum
 - `crates/veritas-chain/src/epoch.rs` — Epoch management, pruning logic
 - `crates/veritas-chain/src/light_validator.rs` — Light validator sync + storage
+
+### Files Expected (from Architecture Decisions — Future Milestones)
+
 - `crates/veritas-chain/src/validator_trust.rs` — Trusted validator list, 3-line fallback
-- `crates/veritas-crypto/src/ml_dsa.rs` — ML-DSA-65 signing (activate existing stubs)
-- `crates/veritas-protocol/src/domain_separation.rs` — VERITAS-v1 domain separator
-- `crates/veritas-protocol/src/transcript.rs` — Transcript binding for HKDF
 - `crates/veritas-protocol/src/image_transfer.rs` — P2P image exchange + on-chain proof
 
 -----

@@ -24,7 +24,7 @@
 //!
 //! - Messages are announced via derived mailbox keys, not recipient identities
 //! - Timestamps use hourly buckets to hide exact send times
-//! - Message sizes use fixed padding buckets (256/512/1024)
+//! - Message sizes use fixed padding buckets (1024/2048/4096/8192)
 //!
 //! See [`gossip::GossipManager`] for the main interface.
 //!

@@ -91,8 +91,10 @@ pub mod block;
 pub mod chain;
 pub mod compression;
 pub mod config;
+pub mod epoch;
 pub mod error;
 pub mod lazy_loader;
+pub mod light_validator;
 pub mod managed_chain;
 pub mod memory;
 pub mod merkle;
@@ -100,6 +102,7 @@ pub mod pruner;
 pub mod slashing;
 pub mod storage;
 pub mod sync;
+pub mod transaction;
 pub mod validator;
 
 #[cfg(feature = "sled-storage")]
@@ -114,7 +117,9 @@ pub use config::{
     BlockchainConfig, NodeRole, PruningMode, DEFAULT_SLED_CACHE_MB, MAX_HOT_CACHE_BLOCKS,
     MAX_SLED_CACHE_MB,
 };
+pub use epoch::{EpochManager, PruneResult, EPOCH_DURATION_SECS, MIN_EPOCH};
 pub use error::{ChainError, Result};
+pub use light_validator::{LightValidatorConfig, StorageEstimate, ValidatorMode};
 pub use managed_chain::{IndexRebuildStats, ManagedBlockchain, ManagedMemoryMetrics};
 
 #[cfg(feature = "sled-storage")]
@@ -131,6 +136,7 @@ pub use sync::{
     PendingRequest, SyncAction, SyncManager, SyncMessage, SyncState,
     DEFAULT_MAX_BLOCKS_PER_REQUEST, DEFAULT_MAX_HEADERS_PER_REQUEST, DEFAULT_REQUEST_TIMEOUT_MS,
 };
+pub use transaction::{EncryptedBody, MessageHeader, MessageTransaction, Transaction};
 pub use validator::{
     ValidatorEpochMetrics, ValidatorSelection, ValidatorSet, ValidatorSla, ValidatorStake,
 };
