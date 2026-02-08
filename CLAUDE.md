@@ -12,7 +12,7 @@ VERITAS (Verified Encrypted Real-time Integrity Transmission And Signing) is a p
 **Security Level**: HARDENED + POST-QUANTUM
 **Edition**: Rust 2024
 **MSRV**: 1.85
-**Version**: 0.7.0-beta
+**Version**: 0.8.0-beta
 
 ## ✅ Completed Work Streams
 
@@ -106,6 +106,22 @@ Messaging security fully operational — real forward secrecy and authenticated 
 - **New protocol constants**: MAX_SKIPPED_MESSAGE_KEYS (256), MAX_SESSIONS_PER_IDENTITY (1000), MAX_ONE_TIME_PREKEYS (100), SIGNED_PREKEY_ROTATION_SECS (7 days)
 - **All 1,760 tests pass** (0 failures), full workspace builds cleanly
 
+### 8. Milestone 6: Identity & Reputation Hardening (COMPLETED — v0.8.0-beta)
+
+**Status**: All 5 tasks (6.1–6.5) implemented
+**Tracking**: See VERITAS_TODO_V2.md sections 6.1–6.5, TASKS.md for summary
+
+Identity and reputation hardening fully operational — Sybil resistance, reputation gaming prevention:
+- **Key revocation (IDENT-D7)**: Full on-chain key revocation system. RevocationReason enum (KeyCompromise, KeyExpired, UserInitiated, AdminAction, Superseded). KeyRevocationRequest with ML-DSA signing payload. RevocationRegistry for tracking revoked keys with bounds (MAX_REVOCATIONS=10,000). Enhanced Transaction::KeyRevocation with reason field.
+- **Key rotation contact notification (IDENT-D5)**: KeyRotationNotification signed by both old and new keys. Targeted notification via mailbox keys. RotationNotificationManager with identity chain resolution and cycle detection. Notification expiry (30 days).
+- **Report/collusion system fix (IDENT-D3, IDENT-D4)**: Velocity-based burst detection (InteractionVelocity tracker, MAX_INTERACTION_VELOCITY=20/hour). Enhanced suspicion scoring with velocity factor. Evidence strength scoring (None/HashReference/MultipleReferences/CryptographicProof). Batch report detection (MIN_BATCH_REPORTS=5 in 1-hour window).
+- **Block validation proof fix (IDENT-D6)**: BlockValidation now requires counter-signature from confirming validator (was unilateral). Base gain reduced from 10 to 7 points. Prevents self-awarding reputation.
+- **Device-binding Sybil resistance (IDENT-D1)**: DeviceSecret (Zeroize+ZeroizeOnDrop, 32-byte random). DeviceFingerprint (non-reversible BLAKE3 hash). DeviceBindingToken with BLAKE3 keyed proof. DeviceBindingRegistry with per-device limits (MAX_IDENTITIES_PER_DEVICE=3). Cross-device detection.
+- **New modules**: revocation.rs, rotation_notification.rs, device_binding.rs (veritas-identity)
+- **New protocol constants**: MAX_REVOCATIONS (10,000), MAX_REVOCATION_REQUEST_AGE_SECS (86,400), MAX_NOTIFICATION_CONTACTS (1,000), NOTIFICATION_EXPIRY_SECS (30 days), MAX_IDENTITIES_PER_DEVICE (3), DEVICE_BINDING_VALIDITY_SECS (90 days), MAX_DEVICE_BINDINGS (100,000)
+- **New domain separation purposes**: KEY-REVOCATION, KEY-ROTATION-NOTIFY, DEVICE-BINDING
+- **All 1,937 tests pass** (0 failures), full workspace builds cleanly
+
 ## 📋 Remaining Work
 
 | Item | Priority | Status |
@@ -122,6 +138,7 @@ Messaging security fully operational — real forward secrecy and authenticated 
 | M3: Validator discovery + trust model | P1 | Completed (v0.5.0-beta) |
 | M4: Privacy hardening | P1 | Completed (v0.6.0-beta) |
 | M5: Messaging security (X3DH, Double Ratchet, deniable auth) | P1 | Completed (v0.7.0-beta) |
+| M6: Identity & reputation hardening | P1 | Completed (v0.8.0-beta) |
 | Hardware attestation (TPM/SecureEnclave/AndroidKeystore) | P2 | Platform stubs |
 | Bluetooth last-mile relay | P3 | Deferred to v2.0 |
 | Async closures refactoring (TASK-170) | P4 | Optional |
@@ -905,6 +922,12 @@ veritas-core
 - `crates/veritas-protocol/src/session.rs` — Session management (X3DH + Double Ratchet integration, AuthMode)
 - `crates/veritas-protocol/src/groups/sender_auth.rs` — Group sender authentication (HMAC + ML-DSA modes)
 - `crates/veritas-store/src/session_store.rs` — Session persistence (encrypted storage, peer indexing)
+
+### New Files (from Milestone 6 — v0.8.0-beta)
+
+- `crates/veritas-identity/src/revocation.rs` — Key revocation system (RevocationReason, KeyRevocationRequest, RevocationRegistry)
+- `crates/veritas-identity/src/rotation_notification.rs` — Key rotation contact notifications (dual-signed, mailbox targeting)
+- `crates/veritas-identity/src/device_binding.rs` — Device-binding Sybil resistance (DeviceSecret, DeviceFingerprint, DeviceBindingToken, DeviceBindingRegistry)
 
 -----
 

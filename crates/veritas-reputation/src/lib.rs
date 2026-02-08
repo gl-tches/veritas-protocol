@@ -72,7 +72,7 @@ pub mod score;
 // Re-export main types
 pub use collusion::{
     CLUSTER_SUSPICION_THRESHOLD, ClusterMember, CollusionDetector, InteractionRecord,
-    SuspiciousCluster,
+    InteractionVelocity, MAX_INTERACTION_VELOCITY, SuspiciousCluster,
 };
 pub use decay::{DecayConfig, DecayState, apply_decay};
 pub use effects::{ReputationTier, TierEffects, get_effects, get_tier};
@@ -90,8 +90,8 @@ pub use rate_limiter::{
     RateLimitResult, ScoreRateLimiter,
 };
 pub use report::{
-    MIN_REPORTER_REPUTATION, NEGATIVE_REPORT_THRESHOLD, NegativeReport, ReportAggregator,
-    ReportReason,
+    BATCH_REPORT_WINDOW_SECS, EvidenceStrength, MIN_BATCH_REPORTS, MIN_REPORTER_REPUTATION,
+    NEGATIVE_REPORT_THRESHOLD, NegativeReport, ReportAggregator, ReportReason,
 };
 pub use score::{
     REPUTATION_BLACKLIST, REPUTATION_MAX, REPUTATION_QUARANTINE, REPUTATION_START, ReputationScore,

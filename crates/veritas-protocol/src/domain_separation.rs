@@ -65,6 +65,12 @@ pub mod purposes {
     pub const DENIABLE_AUTH: &str = "DENIABLE-AUTH";
     /// Group sender authentication.
     pub const GROUP_SENDER_AUTH: &str = "GROUP-SENDER-AUTH";
+    /// Key revocation.
+    pub const KEY_REVOCATION: &str = "KEY-REVOCATION";
+    /// Key rotation notification.
+    pub const KEY_ROTATION_NOTIFY: &str = "KEY-ROTATION-NOTIFY";
+    /// Device binding.
+    pub const DEVICE_BINDING: &str = "DEVICE-BINDING";
 }
 
 #[cfg(test)]

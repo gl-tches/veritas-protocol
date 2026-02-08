@@ -11,6 +11,15 @@ pub const CLUSTER_SUSPICION_THRESHOLD: f32 = 0.7;
 /// Minimum cluster size to analyze.
 pub const MIN_CLUSTER_SIZE: usize = 3;
 
+/// Maximum interaction velocity before suspicious (interactions per hour).
+pub const MAX_INTERACTION_VELOCITY: u32 = 20;
+
+/// Time window for velocity calculation (1 hour).
+pub const VELOCITY_WINDOW_SECS: i64 = 3600;
+
+/// Weight of velocity factor in suspicion scoring.
+pub const VELOCITY_FACTOR_WEIGHT: f32 = 0.2;
+
 /// Identity hash type (32 bytes).
 pub type IdentityHash = [u8; 32];
 
@@ -94,6 +103,52 @@ impl SuspiciousCluster {
     }
 }
 
+/// Interaction velocity tracker for burst detection.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct InteractionVelocity {
+    /// Identity pair (from, to).
+    pub pair: (IdentityHash, IdentityHash),
+    /// Timestamps of recent interactions.
+    pub timestamps: Vec<DateTime<Utc>>,
+    /// Peak velocity (interactions per hour).
+    pub peak_velocity: u32,
+}
+
+impl InteractionVelocity {
+    /// Create a new velocity tracker.
+    fn new(from: IdentityHash, to: IdentityHash) -> Self {
+        Self {
+            pair: (from, to),
+            timestamps: Vec::new(),
+            peak_velocity: 0,
+        }
+    }
+
+    /// Record an interaction timestamp.
+    fn record(&mut self) {
+        let now = Utc::now();
+        self.timestamps.push(now);
+
+        // Calculate current velocity (interactions in last hour)
+        let window = now - Duration::seconds(VELOCITY_WINDOW_SECS);
+        self.timestamps.retain(|t| *t > window);
+        let current_velocity = self.timestamps.len() as u32;
+        self.peak_velocity = self.peak_velocity.max(current_velocity);
+    }
+
+    /// Get current velocity (interactions per hour).
+    fn current_velocity(&self) -> u32 {
+        let now = Utc::now();
+        let window = now - Duration::seconds(VELOCITY_WINDOW_SECS);
+        self.timestamps.iter().filter(|t| **t > window).count() as u32
+    }
+
+    /// Check if velocity is suspicious.
+    fn is_suspicious(&self) -> bool {
+        self.current_velocity() > MAX_INTERACTION_VELOCITY
+    }
+}
+
 /// Detects collusion through graph analysis of interactions.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CollusionDetector {
@@ -103,6 +158,8 @@ pub struct CollusionDetector {
     suspicious_clusters: Vec<SuspiciousCluster>,
     /// Identity to cluster mapping for quick lookup.
     identity_clusters: HashMap<IdentityHash, usize>,
+    /// Interaction velocity tracking for burst detection.
+    velocity_trackers: HashMap<(IdentityHash, IdentityHash), InteractionVelocity>,
 }
 
 impl CollusionDetector {
@@ -113,6 +170,7 @@ impl CollusionDetector {
             interactions: HashMap::new(),
             suspicious_clusters: Vec::new(),
             identity_clusters: HashMap::new(),
+            velocity_trackers: HashMap::new(),
         }
     }
 
@@ -123,6 +181,13 @@ impl CollusionDetector {
             .entry(key)
             .and_modify(|r| r.increment())
             .or_insert_with(|| InteractionRecord::new(from, to));
+
+        // Track interaction velocity for burst detection
+        let vel = self
+            .velocity_trackers
+            .entry((from, to))
+            .or_insert_with(|| InteractionVelocity::new(from, to));
+        vel.record();
     }
 
     /// Get all identities that have interacted with the given identity.
@@ -306,8 +371,28 @@ impl CollusionDetector {
             0.0
         };
 
-        let suspicion_score =
-            (density_factor * 0.4 + symmetry_factor * 0.3 + external_factor * 0.3).clamp(0.0, 1.0);
+        // Velocity factor: check if members have high-velocity interactions
+        let mut velocity_suspicion = 0.0f32;
+        let mut velocity_count = 0u32;
+        for member_id in members {
+            let vel = self.get_velocity_suspicion(member_id);
+            if vel > 0.0 {
+                velocity_suspicion += vel;
+                velocity_count += 1;
+            }
+        }
+        let velocity_factor = if velocity_count > 0 {
+            (velocity_suspicion / velocity_count as f32).min(1.0)
+        } else {
+            0.0
+        };
+
+        // Updated scoring with velocity
+        let suspicion_score = (density_factor * 0.3
+            + symmetry_factor * 0.25
+            + external_factor * 0.25
+            + velocity_factor * VELOCITY_FACTOR_WEIGHT)
+            .clamp(0.0, 1.0);
 
         // Only flag clusters with significant suspicion
         if suspicion_score < 0.3 {
@@ -394,6 +479,45 @@ impl CollusionDetector {
     #[must_use]
     pub fn interaction_count(&self) -> usize {
         self.interactions.len()
+    }
+
+    /// Get the velocity-based suspicion factor for a pair.
+    /// Returns 0.0 if normal, up to 1.0 if highly suspicious.
+    pub fn get_velocity_suspicion(&self, identity: &IdentityHash) -> f32 {
+        let mut max_suspicion: f32 = 0.0;
+        for ((from, to), vel) in &self.velocity_trackers {
+            if from == identity || to == identity {
+                let velocity = vel.current_velocity();
+                if velocity > MAX_INTERACTION_VELOCITY {
+                    let factor = ((velocity - MAX_INTERACTION_VELOCITY) as f32
+                        / MAX_INTERACTION_VELOCITY as f32)
+                        .min(1.0);
+                    max_suspicion = max_suspicion.max(factor);
+                }
+            }
+        }
+        max_suspicion
+    }
+
+    /// Get identities with suspicious interaction velocity.
+    pub fn get_velocity_suspicious_identities(&self) -> Vec<IdentityHash> {
+        let mut suspicious = std::collections::HashSet::new();
+        for ((from, to), vel) in &self.velocity_trackers {
+            if vel.is_suspicious() {
+                suspicious.insert(*from);
+                suspicious.insert(*to);
+            }
+        }
+        suspicious.into_iter().collect()
+    }
+
+    /// Clean up old velocity data.
+    pub fn cleanup_velocity_data(&mut self) {
+        let cutoff = Utc::now() - Duration::hours(24);
+        self.velocity_trackers.retain(|_, v| {
+            v.timestamps.retain(|t| *t > cutoff);
+            !v.timestamps.is_empty()
+        });
     }
 
     /// Clean up old interactions (older than 30 days).
@@ -636,6 +760,58 @@ mod tests {
                 penalty
             );
         }
+    }
+
+    #[test]
+    fn test_velocity_tracking() {
+        let mut detector = CollusionDetector::new();
+        let a = make_identity(1);
+        let b = make_identity(2);
+
+        // Record many interactions rapidly
+        for _ in 0..25 {
+            detector.record_interaction(a, b);
+        }
+
+        let vel = detector.get_velocity_suspicion(&a);
+        assert!(vel > 0.0, "High velocity should be suspicious");
+    }
+
+    #[test]
+    fn test_velocity_suspicious_identities() {
+        let mut detector = CollusionDetector::new();
+        let a = make_identity(1);
+        let b = make_identity(2);
+        let c = make_identity(3);
+
+        // a and b interact rapidly
+        for _ in 0..25 {
+            detector.record_interaction(a, b);
+        }
+
+        // c has normal interactions
+        detector.record_interaction(c, a);
+
+        let suspicious = detector.get_velocity_suspicious_identities();
+        assert!(suspicious.contains(&a) || suspicious.contains(&b));
+    }
+
+    #[test]
+    fn test_normal_velocity_not_suspicious() {
+        let mut detector = CollusionDetector::new();
+        let a = make_identity(1);
+        let b = make_identity(2);
+
+        // Few interactions - normal
+        for _ in 0..3 {
+            detector.record_interaction(a, b);
+        }
+
+        let vel = detector.get_velocity_suspicion(&a);
+        assert!(
+            (vel - 0.0).abs() < 0.001,
+            "Low velocity should not be suspicious"
+        );
     }
 
     #[test]

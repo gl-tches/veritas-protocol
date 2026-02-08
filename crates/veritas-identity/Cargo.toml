@@ -20,6 +20,7 @@ bincode.workspace = true
 zeroize.workspace = true
 rand.workspace = true
 subtle.workspace = true
+getrandom.workspace = true
 
 # Error handling
 thiserror.workspace = true

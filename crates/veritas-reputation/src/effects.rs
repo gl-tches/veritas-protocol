@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::score::{REPUTATION_BLACKLIST, REPUTATION_QUARANTINE, REPUTATION_START};
+use crate::score::{REPUTATION_BLACKLIST, REPUTATION_QUARANTINE};
 
 /// Minimum reputation to become a validator.
 pub const MIN_VALIDATOR_REPUTATION: u32 = 700;

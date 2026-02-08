@@ -2,7 +2,7 @@
 
 **Generated**: 2026-02-06 (revised)
 **Source Documents**: `DESIGN_CRITIQUE.md` (42 findings), `PROTOCOL_REVIEW.md` (~95 findings), owner clarifications
-**Current Version**: v0.7.0-beta (Milestone 5 complete) → targeting v1.0 (production)
+**Current Version**: v0.8.0-beta (Milestone 6 complete) → targeting v1.0 (production)
 
 ---
 
@@ -1091,24 +1091,30 @@ Add `(sender_id || recipient_id || session_id || message_counter)` as additional
 
 ---
 
-## Milestone 6: Identity & Reputation Hardening (v0.8.0-beta)
+## Milestone 6: Identity & Reputation Hardening (v0.8.0-beta) — COMPLETED
 
 > **Goal**: Sybil resistance, reputation gaming prevention.
 > **Estimated Effort**: 2–3 instruction sets, ~2 weeks
+> **Status**: All 5 tasks (6.1–6.5) implemented. 3 new modules added to veritas-identity. Enhanced collusion detection and report system in veritas-reputation. All 1,937 tests pass (0 failures).
 
 ### 6.1 — Key Revocation (on-chain transaction type)
+**Status**: Completed
 IDs: IDENT-D7 | Effort: Medium | Breaking: Yes
 
 ### 6.2 — Key Rotation Contact Notification
+**Status**: Completed
 IDs: IDENT-D5 | Effort: Medium | Breaking: No
 
 ### 6.3 — Fix Report/Collusion System
+**Status**: Completed
 IDs: IDENT-D3, IDENT-D4 | Effort: Medium | Breaking: No
 
 ### 6.4 — Fix Unilateral BlockValidation Proofs
+**Status**: Completed
 IDs: IDENT-D6 | Effort: Low | Breaking: Yes
 
 ### 6.5 — Device-Binding as Interim Sybil Resistance
+**Status**: Completed
 IDs: IDENT-D1 | Effort: Medium | Breaking: No
 
 ---
@@ -1213,7 +1219,7 @@ IDs: NET-FEAT-3, NET-FEAT-7, NET-FEAT-8 | Effort: Low | Breaking: No
 | M3: BFT Consensus (v0.5.0) | 5 | ~4-6 weeks | 4 (consensus, validator selection, trust model) | **COMPLETED** |
 | M4: Privacy Hardening (v0.6.0) | 6 | ~2-3 weeks | 3 (mailbox, padding, gossip) | **COMPLETED** |
 | M5: Messaging Security (v0.7.0) | 3 | ~3-4 weeks | 3 (Double Ratchet, deniability, group) | **COMPLETED** |
-| M6: Identity & Reputation (v0.8.0) | 5 | ~2 weeks | 2 (revocation tx, proof format) | Pending |
+| M6: Identity & Reputation (v0.8.0) | 5 | ~2 weeks | 2 (revocation tx, proof format) | **COMPLETED** |
 | M7: Networking (v0.9.0) | 6 | ~2-3 weeks | 0 | Pending |
 | M8: Cross-Cutting Quality (v1.0-rc) | 6 + optimizations | ~2 weeks | 0 | Pending |
 | M9: Feature Completeness (v1.0) | ~40 features | ~3-4 weeks | Varies | Pending |
