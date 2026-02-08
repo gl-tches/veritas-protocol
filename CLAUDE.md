@@ -12,7 +12,7 @@ VERITAS (Verified Encrypted Real-time Integrity Transmission And Signing) is a p
 **Security Level**: HARDENED + POST-QUANTUM
 **Edition**: Rust 2024
 **MSRV**: 1.85
-**Version**: 0.6.0-beta
+**Version**: 0.7.0-beta
 
 ## ✅ Completed Work Streams
 
@@ -91,6 +91,21 @@ Privacy hardening fully operational — addresses critical privacy gaps:
 - **New protocol constants**: PADDING_BUCKETS (8 buckets), TOPIC_SHARD_COUNT (16), MAILBOX_DH_DOMAIN
 - **All 1,762 tests pass** (0 failures), full workspace builds cleanly
 
+### 7. Milestone 5: Messaging Security (COMPLETED — v0.7.0-beta)
+
+**Status**: All 3 tasks (5.1–5.3) implemented
+**Tracking**: See VERITAS_TODO_V2.md sections 5.1–5.3, TASKS.md for summary
+
+Messaging security fully operational — real forward secrecy and authenticated group encryption:
+- **X3DH key agreement (CRYPTO-D1)**: Full X3DH protocol with signed prekeys (BLAKE3 keyed hash for deniability) and one-time prekeys. PreKeyBundle generation and management.
+- **Double Ratchet (CRYPTO-D1)**: Per-message forward secrecy via symmetric ratchet + DH ratchet for post-compromise security. Out-of-order delivery with bounded skipped key cache (MAX_SKIP=256).
+- **Deniable authentication (CRYPTO-D7)**: Triple-DH deniable auth using BLAKE3 keyed hash with canonical public key ordering. Per-session AuthMode choice: Deniable or MlDsa.
+- **Session management**: Full session lifecycle — initiate (X3DH), respond, encrypt, decrypt, export, restore. Session persistence in veritas-store with encrypted storage and peer indexing.
+- **Group sender authentication (CRYPTO-D3)**: Two modes — HMAC-based (deniable within group) and ML-DSA (non-repudiable). AuthenticatedGroupMessage wraps encrypted content with sender proof. MLS-style deferred to v2.0.
+- **New modules**: x3dh.rs, double_ratchet.rs, deniable_auth.rs (veritas-crypto), session.rs (veritas-protocol), sender_auth.rs (veritas-protocol/groups), session_store.rs (veritas-store)
+- **New protocol constants**: MAX_SKIPPED_MESSAGE_KEYS (256), MAX_SESSIONS_PER_IDENTITY (1000), MAX_ONE_TIME_PREKEYS (100), SIGNED_PREKEY_ROTATION_SECS (7 days)
+- **All 1,760 tests pass** (0 failures), full workspace builds cleanly
+
 ## 📋 Remaining Work
 
 | Item | Priority | Status |
@@ -106,6 +121,7 @@ Privacy hardening fully operational — addresses critical privacy gaps:
 | M3: VRF-based validator selection | P1 | Completed (v0.5.0-beta) |
 | M3: Validator discovery + trust model | P1 | Completed (v0.5.0-beta) |
 | M4: Privacy hardening | P1 | Completed (v0.6.0-beta) |
+| M5: Messaging security (X3DH, Double Ratchet, deniable auth) | P1 | Completed (v0.7.0-beta) |
 | Hardware attestation (TPM/SecureEnclave/AndroidKeystore) | P2 | Platform stubs |
 | Bluetooth last-mile relay | P3 | Deferred to v2.0 |
 | Async closures refactoring (TASK-170) | P4 | Optional |
@@ -880,6 +896,15 @@ veritas-core
 
 - `crates/veritas-protocol/src/image_transfer.rs` — P2P image transfer warning + on-chain proof
 - `crates/veritas-net/src/cover_traffic.rs` — Cover traffic generation for traffic analysis resistance
+
+### New Files (from Milestone 5 — v0.7.0-beta)
+
+- `crates/veritas-crypto/src/x3dh.rs` — X3DH key agreement (prekey bundles, signed prekeys, one-time prekeys)
+- `crates/veritas-crypto/src/double_ratchet.rs` — Double Ratchet (symmetric + DH ratcheting, OOO delivery, session state)
+- `crates/veritas-crypto/src/deniable_auth.rs` — Deniable authentication (triple-DH, BLAKE3 keyed hash)
+- `crates/veritas-protocol/src/session.rs` — Session management (X3DH + Double Ratchet integration, AuthMode)
+- `crates/veritas-protocol/src/groups/sender_auth.rs` — Group sender authentication (HMAC + ML-DSA modes)
+- `crates/veritas-store/src/session_store.rs` — Session persistence (encrypted storage, peer indexing)
 
 -----
 

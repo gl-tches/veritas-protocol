@@ -44,6 +44,7 @@ pub mod limits;
 #[cfg(test)]
 mod proptests;
 pub mod receipts;
+pub mod session;
 pub mod signing;
 pub mod transcript;
 pub mod wire_error;
@@ -67,13 +68,19 @@ pub use image_transfer::{
     ImageTransferProof, ImageTransferRequest, MAX_IMAGE_SIZE, validate_transfer_request,
 };
 pub use groups::{
-    EncryptedGroupKey, GroupId, GroupKey, GroupKeyManager, GroupMember, GroupMessageData,
-    GroupMetadata, GroupRole, KeyRotationManager, RotationResult, RotationTrigger,
+    AuthenticatedGroupMessage, EncryptedGroupKey, GroupAuthMode, GroupId, GroupKey, GroupKeyManager,
+    GroupMember, GroupMessageData, GroupMetadata, GroupRole, GroupSenderAuth,
+    GROUP_SENDER_AUTH_TAG_SIZE, KeyRotationManager, RotationResult, RotationTrigger,
+    compute_group_sender_auth, compute_group_sender_auth_mldsa, verify_group_sender_auth,
 };
 pub use limits::*;
 pub use receipts::{DeliveryError, DeliveryReceipt, DeliveryReceiptData, ReceiptType};
 pub use signing::{
     DOMAIN_SEPARATOR, MessageSignature, SIGNATURE_SIZE, SignatureVersion, SigningData,
     sign_message, verify_signature,
+};
+pub use session::{
+    AuthMode, InitialSessionMessage, PersistedSession, Session, SessionId, SessionInfo,
+    SessionMessage,
 };
 pub use wire_error::{WireError, WireErrorCode};
