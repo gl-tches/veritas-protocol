@@ -24,7 +24,7 @@
 //!
 //! - Messages are announced via derived mailbox keys, not recipient identities
 //! - Timestamps use hourly buckets to hide exact send times
-//! - Message sizes use fixed padding buckets (1024/2048/4096/8192)
+//! - Message sizes use 8 logarithmic padding buckets (256/512/1024/1536/2048/3072/4096/8192)
 //!
 //! See [`gossip::GossipManager`] for the main interface.
 //!
@@ -38,6 +38,7 @@
 #![warn(missing_docs)]
 
 pub mod bluetooth;
+pub mod cover_traffic;
 pub mod dht;
 pub mod discovery;
 pub mod error;
@@ -50,6 +51,10 @@ pub mod transport;
 pub mod transport_manager;
 
 pub use bluetooth::{BlePeer, BluetoothConfig, BluetoothRelay, BluetoothStats};
+pub use cover_traffic::{
+    CoverTrafficConfig, CoverTrafficGenerator, CoverTrafficStats, DummyMessage, PrivacyLevel,
+    cover_traffic_interval,
+};
 pub use dht::{
     DEFAULT_MAX_RECORD_SIZE, DEFAULT_QUERY_TIMEOUT_SECS, DEFAULT_REPLICATION_FACTOR, DhtConfig,
     DhtKey, DhtRecord, DhtRecordSet, DhtStorage, DhtStorageStats, DhtStorageStatsSnapshot,
@@ -59,7 +64,9 @@ pub use discovery::{DiscoveredPeer, DiscoveryConfig, DiscoveryEvent, LocalDiscov
 pub use error::{NetError, Result};
 pub use gossip::{
     BlockAnnouncement, GossipAnnouncement, GossipConfig, GossipManager, MessageAnnouncement,
-    ReceiptAnnouncement, TOPIC_BLOCKS, TOPIC_MESSAGES, TOPIC_RECEIPTS,
+    ReceiptAnnouncement, TOPIC_BLOCKS, TOPIC_MESSAGES, TOPIC_RECEIPTS, TOPIC_SHARD_COUNT,
+    all_shard_topics, shard_for_mailbox_key, shard_topic, sharded_topic_for_mailbox_key,
+    shards_for_keys,
 };
 pub use node::{
     NodeBehaviour, NodeConfig, NodeEvent, VERITAS_GOSSIPSUB_PREFIX, VERITAS_KAD_PROTOCOL,

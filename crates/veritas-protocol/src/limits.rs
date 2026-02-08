@@ -22,6 +22,11 @@ pub const MESSAGE_TTL_SECS: u64 = 7 * 24 * 60 * 60;
 /// SECURITY: Check this BEFORE deserialization to prevent OOM attacks (VERITAS-2026-0003).
 pub const MAX_ENVELOPE_SIZE: usize = 8192;
 
+/// Maximum size of a serialized EncryptedMessage in bytes.
+/// SECURITY: Check this BEFORE deserialization to prevent OOM attacks.
+/// An EncryptedMessage wraps a MinimalEnvelope plus mailbox key and salt metadata.
+pub const MAX_ENCRYPTED_MESSAGE_SIZE: usize = MAX_ENVELOPE_SIZE + 1024;
+
 /// Maximum size of a serialized InnerPayload in bytes.
 /// SECURITY: Check this BEFORE deserialization to prevent OOM attacks (VERITAS-2026-0003).
 pub const MAX_INNER_ENVELOPE_SIZE: usize = 6144;
@@ -41,7 +46,12 @@ pub const REASSEMBLY_TIMEOUT_SECS: u64 = 300;
 // === Privacy ===
 
 /// Padding bucket sizes for hiding message length.
-pub const PADDING_BUCKETS: &[usize] = &[1024, 2048, 4096, 8192];
+///
+/// 8 buckets with logarithmic spacing for finer granularity (PRIV-D5).
+/// This reduces the information leaked by message size bucketing.
+/// The first 4 buckets provide fine granularity for typical messages,
+/// while the last 4 cover larger payloads up to MAX_ENVELOPE_SIZE.
+pub const PADDING_BUCKETS: &[usize] = &[256, 512, 1024, 1536, 2048, 3072, 4096, 8192];
 
 /// Maximum timing jitter in milliseconds (0-3 seconds).
 pub const MAX_JITTER_MS: u64 = 3000;

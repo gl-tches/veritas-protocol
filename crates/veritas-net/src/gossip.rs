@@ -8,7 +8,7 @@
 //!
 //! - **Mailbox Keys**: Announcements use derived mailbox keys, not recipient identities
 //! - **Timestamp Buckets**: Hourly buckets instead of exact timestamps
-//! - **Size Buckets**: Fixed padding bucket sizes (1024/2048/4096/8192) hide true message size
+//! - **Size Buckets**: 8 logarithmic padding buckets (256/512/1024/1536/2048/3072/4096/8192) hide true message size
 //! - **No Content**: Only hashes and routing info are announced
 //!
 //! ## Topics
@@ -41,7 +41,7 @@ use crate::rate_limiter::{RateLimitConfig, RateLimitResult, RateLimiter};
 // Topic Constants
 // ============================================================================
 
-/// Topic for new message announcements.
+/// Topic for new message announcements (unsharded, legacy).
 pub const TOPIC_MESSAGES: &str = "veritas/messages/v1";
 
 /// Topic for new block announcements.
@@ -49,6 +49,18 @@ pub const TOPIC_BLOCKS: &str = "veritas/blocks/v1";
 
 /// Topic for delivery receipt announcements.
 pub const TOPIC_RECEIPTS: &str = "veritas/receipts/v1";
+
+/// Number of topic shards for message announcements (PRIV-D3/NET-D4).
+///
+/// Messages are sharded across 16 topics based on the first nibble (4 bits)
+/// of the mailbox key. This reduces per-node bandwidth and metadata leakage:
+/// - Each node only subscribes to shards matching its mailbox key prefixes
+/// - Reduces the fraction of global traffic each node observes
+/// - Makes correlation attacks harder by limiting observable traffic
+pub const TOPIC_SHARD_COUNT: usize = 16;
+
+/// Prefix for sharded message topics.
+const TOPIC_MESSAGES_SHARD_PREFIX: &str = "veritas/messages/v2/shard-";
 
 /// Duration of timestamp buckets (1 hour in seconds).
 const TIMESTAMP_BUCKET_SECS: u64 = 60 * 60;
@@ -238,7 +250,7 @@ pub struct MessageAnnouncement {
     pub timestamp_bucket: u64,
 
     /// Size bucket indicating padded message size.
-    /// One of: 1024, 2048, 4096, or 8192 bytes.
+    /// One of: 256, 512, 1024, 1536, 2048, 3072, 4096, or 8192 bytes (PRIV-D5).
     pub size_bucket: u16,
 }
 
@@ -447,6 +459,83 @@ impl ReceiptAnnouncement {
         bincode::deserialize(bytes)
             .map_err(|e| NetError::Gossip(format!("deserialization failed: {}", e)))
     }
+}
+
+// ============================================================================
+// Topic Sharding (PRIV-D3 / NET-D4)
+// ============================================================================
+
+/// Compute the shard index for a mailbox key.
+///
+/// Uses the first nibble (4 bits) of the mailbox key to determine
+/// which shard the message should be published on.
+///
+/// # Arguments
+///
+/// * `mailbox_key` - The mailbox key to shard
+///
+/// # Returns
+///
+/// A shard index in the range [0, TOPIC_SHARD_COUNT).
+pub fn shard_for_mailbox_key(mailbox_key: &MailboxKey) -> usize {
+    let first_byte = mailbox_key.as_bytes()[0];
+    // Use the high nibble (4 bits) as the shard index
+    (first_byte >> 4) as usize
+}
+
+/// Get the sharded topic name for a mailbox key.
+///
+/// # Arguments
+///
+/// * `mailbox_key` - The mailbox key to determine the shard for
+///
+/// # Returns
+///
+/// The topic string for the appropriate shard (e.g., "veritas/messages/v2/shard-0a").
+pub fn sharded_topic_for_mailbox_key(mailbox_key: &MailboxKey) -> String {
+    let shard = shard_for_mailbox_key(mailbox_key);
+    format!("{}{:02x}", TOPIC_MESSAGES_SHARD_PREFIX, shard)
+}
+
+/// Get the topic name for a specific shard index.
+///
+/// # Arguments
+///
+/// * `shard` - The shard index (0 to TOPIC_SHARD_COUNT-1)
+///
+/// # Returns
+///
+/// The topic string for the specified shard.
+pub fn shard_topic(shard: usize) -> String {
+    format!("{}{:02x}", TOPIC_MESSAGES_SHARD_PREFIX, shard)
+}
+
+/// Get all sharded topic names.
+///
+/// # Returns
+///
+/// A vector of all 16 shard topic names.
+pub fn all_shard_topics() -> Vec<String> {
+    (0..TOPIC_SHARD_COUNT).map(shard_topic).collect()
+}
+
+/// Compute which shards a node should subscribe to based on its mailbox keys.
+///
+/// # Arguments
+///
+/// * `mailbox_keys` - The mailbox keys this node is interested in
+///
+/// # Returns
+///
+/// A sorted, deduplicated vector of shard indices.
+pub fn shards_for_keys(mailbox_keys: &[MailboxKey]) -> Vec<usize> {
+    let mut shards: Vec<usize> = mailbox_keys
+        .iter()
+        .map(shard_for_mailbox_key)
+        .collect();
+    shards.sort_unstable();
+    shards.dedup();
+    shards
 }
 
 // ============================================================================
@@ -837,6 +926,63 @@ impl GossipManager {
             "Announced message"
         );
 
+        Ok(())
+    }
+
+    /// Announce a new message to the network using topic sharding (PRIV-D3).
+    ///
+    /// Publishes the announcement to the appropriate shard topic based on
+    /// the mailbox key prefix. This reduces per-node bandwidth and limits
+    /// metadata leakage since each node only sees traffic for its shards.
+    ///
+    /// # Arguments
+    ///
+    /// * `announcement` - The message announcement to publish
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if the announcement was published successfully.
+    pub async fn announce_message_sharded(&self, announcement: MessageAnnouncement) -> Result<()> {
+        // SECURITY: Check local rate limit BEFORE publishing (VERITAS-2026-0007)
+        {
+            let mut local_limiter = self.local_rate_limiter.lock().await;
+            if !local_limiter.check() {
+                warn!("Local rate limit exceeded for sharded message announcements");
+                return Err(NetError::RateLimitExceeded(
+                    "local announcement rate limit exceeded".to_string(),
+                ));
+            }
+        }
+
+        // Determine the shard topic based on mailbox key prefix
+        let topic = sharded_topic_for_mailbox_key(&announcement.mailbox_key);
+        let data = announcement.to_bytes()?;
+        self.publish(&topic, data).await?;
+
+        debug!(
+            message_hash = %announcement.message_hash,
+            size_bucket = announcement.size_bucket,
+            shard_topic = %topic,
+            "Announced message (sharded)"
+        );
+
+        Ok(())
+    }
+
+    /// Subscribe to sharded message topics for the given mailbox keys.
+    ///
+    /// Subscribes only to the shard topics that match the provided mailbox keys,
+    /// reducing bandwidth and metadata exposure.
+    ///
+    /// # Arguments
+    ///
+    /// * `mailbox_keys` - The mailbox keys to subscribe to shards for
+    pub async fn subscribe_to_shards(&mut self, mailbox_keys: &[MailboxKey]) -> Result<()> {
+        let shards = shards_for_keys(mailbox_keys);
+        for shard in shards {
+            let topic = shard_topic(shard);
+            self.subscribe(&topic).await?;
+        }
         Ok(())
     }
 
@@ -1307,7 +1453,7 @@ mod tests {
         let mailbox_key = MailboxKey::from_bytes([1u8; 32]);
         let message_hash = Hash256::hash(b"test message");
 
-        // 100 is not a valid padding bucket (should be 1024, 2048, 4096, or 8192)
+        // 100 is not a valid padding bucket
         let result = MessageAnnouncement::new(mailbox_key, message_hash, 1704067200, 100);
 
         assert!(result.is_err());
@@ -1383,8 +1529,13 @@ mod tests {
 
     #[test]
     fn test_validate_size_bucket_valid() {
+        // 8 buckets: [256, 512, 1024, 1536, 2048, 3072, 4096, 8192] (PRIV-D5)
+        assert!(validate_size_bucket(256).is_ok());
+        assert!(validate_size_bucket(512).is_ok());
         assert!(validate_size_bucket(1024).is_ok());
+        assert!(validate_size_bucket(1536).is_ok());
         assert!(validate_size_bucket(2048).is_ok());
+        assert!(validate_size_bucket(3072).is_ok());
         assert!(validate_size_bucket(4096).is_ok());
         assert!(validate_size_bucket(8192).is_ok());
     }
@@ -1394,9 +1545,9 @@ mod tests {
         assert!(validate_size_bucket(0).is_err());
         assert!(validate_size_bucket(100).is_err());
         assert!(validate_size_bucket(128).is_err());
-        assert!(validate_size_bucket(256).is_err());
-        assert!(validate_size_bucket(512).is_err());
         assert!(validate_size_bucket(999).is_err());
+        assert!(validate_size_bucket(2000).is_err());
+        assert!(validate_size_bucket(5000).is_err());
     }
 
     // ========================================================================
@@ -1756,5 +1907,112 @@ mod tests {
 
         let restored = ReceiptAnnouncement::from_bytes(&bytes).unwrap();
         assert_eq!(announcement, restored);
+    }
+
+    // ========================================================================
+    // Topic Sharding Tests (PRIV-D3 / NET-D4)
+    // ========================================================================
+
+    #[test]
+    fn test_shard_for_mailbox_key() {
+        // Key starting with 0x00 → shard 0
+        let key_0 = MailboxKey::from_bytes([0x00; 32]);
+        assert_eq!(shard_for_mailbox_key(&key_0), 0);
+
+        // Key starting with 0x10 → shard 1
+        let mut bytes_1 = [0u8; 32];
+        bytes_1[0] = 0x10;
+        let key_1 = MailboxKey::from_bytes(bytes_1);
+        assert_eq!(shard_for_mailbox_key(&key_1), 1);
+
+        // Key starting with 0xF0 → shard 15
+        let mut bytes_f = [0u8; 32];
+        bytes_f[0] = 0xF0;
+        let key_f = MailboxKey::from_bytes(bytes_f);
+        assert_eq!(shard_for_mailbox_key(&key_f), 15);
+
+        // Key starting with 0xAB → shard 10 (0xA)
+        let mut bytes_a = [0u8; 32];
+        bytes_a[0] = 0xAB;
+        let key_a = MailboxKey::from_bytes(bytes_a);
+        assert_eq!(shard_for_mailbox_key(&key_a), 10);
+    }
+
+    #[test]
+    fn test_sharded_topic_name() {
+        let key = MailboxKey::from_bytes([0x00; 32]);
+        let topic = sharded_topic_for_mailbox_key(&key);
+        assert_eq!(topic, "veritas/messages/v2/shard-00");
+
+        let mut bytes = [0u8; 32];
+        bytes[0] = 0xF0;
+        let key_f = MailboxKey::from_bytes(bytes);
+        let topic_f = sharded_topic_for_mailbox_key(&key_f);
+        assert_eq!(topic_f, "veritas/messages/v2/shard-0f");
+    }
+
+    #[test]
+    fn test_all_shard_topics() {
+        let topics = all_shard_topics();
+        assert_eq!(topics.len(), TOPIC_SHARD_COUNT);
+
+        // First and last
+        assert_eq!(topics[0], "veritas/messages/v2/shard-00");
+        assert_eq!(topics[15], "veritas/messages/v2/shard-0f");
+    }
+
+    #[test]
+    fn test_shard_topic() {
+        assert_eq!(shard_topic(0), "veritas/messages/v2/shard-00");
+        assert_eq!(shard_topic(5), "veritas/messages/v2/shard-05");
+        assert_eq!(shard_topic(15), "veritas/messages/v2/shard-0f");
+    }
+
+    #[test]
+    fn test_shards_for_keys_deduplication() {
+        // Multiple keys mapping to the same shard
+        let key1 = MailboxKey::from_bytes([0x00; 32]);
+        let key2 = MailboxKey::from_bytes([0x01; 32]);
+        // Both have first nibble 0 → shard 0
+        let shards = shards_for_keys(&[key1, key2]);
+        assert_eq!(shards, vec![0]);
+    }
+
+    #[test]
+    fn test_shards_for_keys_multiple() {
+        let key1 = MailboxKey::from_bytes([0x00; 32]); // shard 0
+        let mut bytes = [0u8; 32];
+        bytes[0] = 0xF0;
+        let key2 = MailboxKey::from_bytes(bytes); // shard 15
+        bytes[0] = 0x50;
+        let key3 = MailboxKey::from_bytes(bytes); // shard 5
+
+        let shards = shards_for_keys(&[key1, key2, key3]);
+        assert_eq!(shards, vec![0, 5, 15]);
+    }
+
+    #[test]
+    fn test_shard_distribution() {
+        // Generate random mailbox keys and verify they distribute across shards
+        use rand::RngCore;
+        use rand::rngs::OsRng;
+
+        let mut shard_counts = [0u32; TOPIC_SHARD_COUNT];
+        for _ in 0..1000 {
+            let mut bytes = [0u8; 32];
+            OsRng.fill_bytes(&mut bytes);
+            let key = MailboxKey::from_bytes(bytes);
+            let shard = shard_for_mailbox_key(&key);
+            shard_counts[shard] += 1;
+        }
+
+        // Each shard should have at least some entries (with high probability)
+        for (i, &count) in shard_counts.iter().enumerate() {
+            assert!(
+                count > 0,
+                "Shard {} has no entries out of 1000 random keys",
+                i
+            );
+        }
     }
 }

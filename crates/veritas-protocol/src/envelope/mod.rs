@@ -96,7 +96,7 @@ pub mod padding;
 pub use inner::{InnerPayload, MessageContent};
 pub use mailbox::{
     MAILBOX_KEY_SIZE, MAILBOX_SALT_SIZE, MailboxKey, MailboxKeyParams, current_epoch,
-    derive_mailbox_key, epoch_from_timestamp, generate_mailbox_salt,
+    derive_mailbox_key, derive_mailbox_key_dh, epoch_from_timestamp, generate_mailbox_salt,
 };
 pub use minimal::{
     ENVELOPE_NONCE_SIZE, MIN_CIPHERTEXT_SIZE, MinimalEnvelope, MinimalEnvelopeBuilder,

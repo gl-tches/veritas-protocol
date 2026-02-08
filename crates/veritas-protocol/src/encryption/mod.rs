@@ -80,7 +80,7 @@
 pub mod e2e;
 
 pub use e2e::{
-    DecryptionContext, EncryptedMessage, MESSAGE_ENCRYPTION_CONTEXT, PreparedMessage, SendConfig,
-    add_timing_jitter, decrypt_and_verify, decrypt_as_recipient, encrypt_for_recipient,
-    prepare_for_send,
+    BurstConfig, DecryptionContext, EncryptedMessage, MESSAGE_ENCRYPTION_CONTEXT, PreparedMessage,
+    SendConfig, add_timing_jitter, decrypt_and_verify, decrypt_as_recipient,
+    encrypt_for_recipient, prepare_for_send,
 };

@@ -12,7 +12,7 @@ VERITAS (Verified Encrypted Real-time Integrity Transmission And Signing) is a p
 **Security Level**: HARDENED + POST-QUANTUM
 **Edition**: Rust 2024
 **MSRV**: 1.85
-**Version**: 0.4.0-beta
+**Version**: 0.6.0-beta
 
 ## ✅ Completed Work Streams
 
@@ -75,6 +75,22 @@ BFT consensus fully operational — replaces longest-chain rule with Streamlet B
 - **New protocol constants**: FIXED_POINT_SCALE, BFT_QUORUM_*, MAX_CONSENSUS_ROUNDS, VALIDATOR_TRUST_DEPTH, VALIDATOR_HEARTBEAT_SECS
 - **All 507 veritas-chain tests pass** (0 failures), full workspace 1,643 tests pass
 
+### 6. Milestone 4: Privacy Hardening (COMPLETED — v0.6.0-beta)
+
+**Status**: All 6 tasks (4.1–4.6) implemented
+**Tracking**: See VERITAS_TODO_V2.md sections 4.1–4.6, TASKS.md for summary
+
+Privacy hardening fully operational — addresses critical privacy gaps:
+- **DH-based mailbox keys (PRIV-D2)**: Mailbox keys derived from sender+recipient DH shared secret, not recipient public identity hash. Only actual communication partners can compute the key.
+- **Logarithmic padding (PRIV-D5)**: 8 buckets [256, 512, 1024, 1536, 2048, 3072, 4096, 8192] replacing 4 buckets [1024, 2048, 4096, 8192]
+- **Exponential jitter (PRIV-D6)**: Replaced uniform 0-3s jitter with exponential distribution (inverse CDF). Added BurstConfig for batch release.
+- **Cover traffic (PRIV-D7)**: CoverTrafficGenerator produces dummy messages indistinguishable from real traffic. Configurable privacy levels (Low/Medium/High).
+- **Topic sharding (NET-D4/PRIV-D3)**: 16 GossipSub shards by mailbox key prefix. Reduces per-node bandwidth and metadata leakage.
+- **Image transfer warnings (AD-6)**: Mandatory privacy warning + acknowledgment before P2P image transfer. On-chain proof (image hash + receipt hash).
+- **New modules**: cover_traffic.rs (veritas-net), image_transfer.rs (veritas-protocol)
+- **New protocol constants**: PADDING_BUCKETS (8 buckets), TOPIC_SHARD_COUNT (16), MAILBOX_DH_DOMAIN
+- **All 1,762 tests pass** (0 failures), full workspace builds cleanly
+
 ## 📋 Remaining Work
 
 | Item | Priority | Status |
@@ -89,7 +105,7 @@ BFT consensus fully operational — replaces longest-chain rule with Streamlet B
 | M3: Fixed-point u64 validator scoring | P1 | Completed (v0.5.0-beta) |
 | M3: VRF-based validator selection | P1 | Completed (v0.5.0-beta) |
 | M3: Validator discovery + trust model | P1 | Completed (v0.5.0-beta) |
-| M4: Privacy hardening | P1 | Design needed |
+| M4: Privacy hardening | P1 | Completed (v0.6.0-beta) |
 | Hardware attestation (TPM/SecureEnclave/AndroidKeystore) | P2 | Platform stubs |
 | Bluetooth last-mile relay | P3 | Deferred to v2.0 |
 | Async closures refactoring (TASK-170) | P4 | Optional |
@@ -198,7 +214,7 @@ Each specialist has a crate scope AND an architecture-aware checklist.
 |-----------------------|--------------------|----------------------|
 |**🛡️ CryptoAuditor**    |`veritas-crypto`    |ML-DSA key generation uses `OsRng`. `Zeroize`/`ZeroizeOnDrop` on all ML-DSA private keys. No `Clone` on secret types. `ConstantTimeEq` for secret comparisons. No hardcoded keys/nonces. ML-DSA signature sizes match FIPS 204 spec (3,309 bytes for ML-DSA-65).|
 |**🆔 IdentityAuditor**  |`veritas-identity`  |Identity lifecycle (creation, rotation, revocation). Username validation and limits. Origin fingerprint integrity. Key hierarchy: master key > signing key > encryption key.|
-|**📡 ProtocolAuditor**  |`veritas-protocol`  |Size validation BEFORE deserialization (new limit: 8192 bytes). Envelope padding applied (new buckets: 1024/2048/4096/8192). Chunk reassembly bounds. Nonce uniqueness. Domain separation format: `"VERITAS-v1." \|\| purpose \|\| "." \|\| context_length \|\| context`. Transcript binding in HKDF. Cipher suite field present. Protocol version field present.|
+|**📡 ProtocolAuditor**  |`veritas-protocol`  |Size validation BEFORE deserialization (new limit: 8192 bytes). Envelope padding applied (8 buckets: 256/512/1024/1536/2048/3072/4096/8192). Chunk reassembly bounds. Nonce uniqueness. Domain separation format: `"VERITAS-v1." \|\| purpose \|\| "." \|\| context_length \|\| context`. Transcript binding in HKDF. Cipher suite field present. Protocol version field present.|
 |**⛓️ ChainAuditor**     |`veritas-chain`     |Block signature verification (ML-DSA). Validator set integrity. Merkle proof validation. **Epoch pruning correctness**: headers survive pruning, bodies+signatures removed, deterministic boundary. **Transaction model**: messages are transactions, not separate delivery path. **Light validator sync**: header-only sync never accepts invalid transactions. Fixed-point `u64` arithmetic (no `f32`) in validator scoring.|
 |**🌐 NetworkAuditor**   |`veritas-net`       |Rate limiting on all inputs. DHT eclipse vector protection. Gossip flood protection. Peer authentication. Timeouts on all async operations. **Validator discovery**: trusted list integrity, 3-line trust fallback verification.|
 |**💾 StorageAuditor**   |`veritas-store`     |`encrypted_db` usage for sensitive data. Keyring access controls. No plaintext secrets in storage. **Epoch pruning storage**: body-only deletion without header corruption. Sled backend integrity during pruning.|
@@ -567,7 +583,7 @@ pub enum Transaction {
 |--------------------------------------------------|-------------------------------|
 |Derive mailbox key from sender+recipient DH output|Put recipient ID in header     |
 |Use ephemeral X25519 key per message              |Reuse keys across messages     |
-|Pad to fixed size buckets (1024/2048/4096/8192)   |Reveal true message size       |
+|Pad to fixed size buckets (256/512/1024/1536/2048/3072/4096/8192)|Reveal true message size       |
 |Put sender/timestamp inside encrypted payload     |Put on header or transaction   |
 |Add timing jitter (exponential/Poisson)           |Send immediately               |
 |Use domain separation: `"VERITAS-v1." || purpose` |Mix key derivation contexts    |
@@ -790,8 +806,8 @@ pub mod limits {
     pub const MAX_ANNOUNCEMENTS_PER_PEER_PER_SEC: u32 = 10;
     
     // Privacy (updated buckets for post-quantum envelope sizes)
-    pub const PADDING_BUCKETS: &[usize] = &[1024, 2048, 4096, 8192];
-    pub const MAX_JITTER_MS: u64 = 3000;  // TODO: switch to exponential/Poisson
+    pub const PADDING_BUCKETS: &[usize] = &[256, 512, 1024, 1536, 2048, 3072, 4096, 8192];
+    pub const MAX_JITTER_MS: u64 = 3000;  // Exponential/Poisson distribution (implemented in M4)
     
     // ML-DSA-65 sizes (FIPS 204)
     pub const ML_DSA_65_PK_SIZE: usize = 1952;
@@ -860,9 +876,10 @@ veritas-core
 - `crates/veritas-chain/src/vrf.rs` — VRF-based validator selection, fixed-point arithmetic
 - `crates/veritas-chain/src/validator_trust.rs` — Trusted validator list, 3-line fallback, liveness monitoring
 
-### Files Expected (from Architecture Decisions — Future Milestones)
+### New Files (from Milestone 4 — v0.6.0-beta)
 
-- `crates/veritas-protocol/src/image_transfer.rs` — P2P image exchange + on-chain proof
+- `crates/veritas-protocol/src/image_transfer.rs` — P2P image transfer warning + on-chain proof
+- `crates/veritas-net/src/cover_traffic.rs` — Cover traffic generation for traffic analysis resistance
 
 -----
 

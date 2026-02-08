@@ -39,6 +39,7 @@ pub mod encryption;
 pub mod envelope;
 pub mod error;
 pub mod groups;
+pub mod image_transfer;
 pub mod limits;
 #[cfg(test)]
 mod proptests;
@@ -49,18 +50,22 @@ pub mod wire_error;
 
 pub use chunking::{ChunkInfo, ChunkReassembler, MessageChunk, split_into_chunks};
 pub use encryption::{
-    DecryptionContext, EncryptedMessage, MESSAGE_ENCRYPTION_CONTEXT, PreparedMessage, SendConfig,
-    add_timing_jitter, decrypt_and_verify, decrypt_as_recipient, encrypt_for_recipient,
-    prepare_for_send,
+    BurstConfig, DecryptionContext, EncryptedMessage, MESSAGE_ENCRYPTION_CONTEXT, PreparedMessage,
+    SendConfig, add_timing_jitter, decrypt_and_verify, decrypt_as_recipient,
+    encrypt_for_recipient, prepare_for_send,
 };
 pub use envelope::{
     ENVELOPE_NONCE_SIZE, InnerPayload, LENGTH_PREFIX_SIZE, MAILBOX_KEY_SIZE, MAILBOX_SALT_SIZE,
     MIN_CIPHERTEXT_SIZE, MailboxKey, MailboxKeyParams, MessageContent, MinimalEnvelope,
     MinimalEnvelopeBuilder, PADDING_MARKER, PaddingError, bucket_for_size, current_epoch,
-    derive_mailbox_key, epoch_from_timestamp, generate_mailbox_salt, is_valid_padded,
-    max_bucket_size, max_data_size, pad_to_bucket, unpad,
+    derive_mailbox_key, derive_mailbox_key_dh, epoch_from_timestamp, generate_mailbox_salt,
+    is_valid_padded, max_bucket_size, max_data_size, pad_to_bucket, unpad,
 };
 pub use error::{ProtocolError, Result};
+pub use image_transfer::{
+    IMAGE_TRANSFER_WARNING, IMAGE_TRANSFER_WARNING_SHORT, ImageContentType, ImageTransferError,
+    ImageTransferProof, ImageTransferRequest, MAX_IMAGE_SIZE, validate_transfer_request,
+};
 pub use groups::{
     EncryptedGroupKey, GroupId, GroupKey, GroupKeyManager, GroupMember, GroupMessageData,
     GroupMetadata, GroupRole, KeyRotationManager, RotationResult, RotationTrigger,

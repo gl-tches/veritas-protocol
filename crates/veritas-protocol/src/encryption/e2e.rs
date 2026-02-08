@@ -84,7 +84,18 @@ impl EncryptedMessage {
     }
 
     /// Deserialize from bytes.
+    ///
+    /// # Security
+    ///
+    /// Validates size before deserialization to prevent OOM attacks.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() > crate::limits::MAX_ENCRYPTED_MESSAGE_SIZE {
+            return Err(ProtocolError::InvalidEnvelope(format!(
+                "encrypted message too large: {} bytes (max: {})",
+                bytes.len(),
+                crate::limits::MAX_ENCRYPTED_MESSAGE_SIZE,
+            )));
+        }
         bincode::deserialize(bytes).map_err(|e| ProtocolError::Serialization(e.to_string()))
     }
 
@@ -180,12 +191,12 @@ pub fn encrypt_for_recipient(
     // Step 7: Encrypt with the derived key
     let encrypted_data = encrypt(&encryption_key, &padded_payload)?;
 
-    // Step 8: Derive mailbox key for routing
-    // SECURITY: The salt used for mailbox key derivation MUST be the same salt
-    // stored in the EncryptedMessage. We generate the salt first, then pass it
-    // to MailboxKeyParams to ensure consistency. Previously, generate_mailbox_salt()
-    // created one salt and MailboxKeyParams::new_current() created a different one,
-    // causing a mismatch that prevented the recipient from re-deriving the mailbox key.
+    // Step 8: Derive mailbox key for routing using DH shared secret (PRIV-D2)
+    // SECURITY: The mailbox key is now derived from a DH shared secret between
+    // sender and recipient, ensuring only communication partners can compute it.
+    // The salt used for mailbox key derivation MUST be the same salt stored in
+    // the EncryptedMessage. We generate the salt first, then pass it to
+    // MailboxKeyParams to ensure consistency.
     let recipient_hash = recipient.identity_hash();
     let mailbox_salt = generate_mailbox_salt();
     let now = std::time::SystemTime::now()
@@ -193,7 +204,17 @@ pub fn encrypt_for_recipient(
         .expect("system time before UNIX epoch")
         .as_secs();
     let epoch = crate::envelope::epoch_from_timestamp(now, crate::limits::EPOCH_DURATION_SECS);
-    let mailbox_params = MailboxKeyParams::new(&recipient_hash, epoch, mailbox_salt);
+
+    // PRIV-D2: Derive a static DH shared secret for mailbox key derivation.
+    // This uses the sender's static exchange key and recipient's static exchange key.
+    // The result is that only the sender and recipient can derive the mailbox key.
+    let mailbox_dh_secret = sender.derive_encryption_key(&recipient.exchange);
+    let mailbox_params = MailboxKeyParams::new_with_dh(
+        &recipient_hash,
+        epoch,
+        mailbox_salt,
+        mailbox_dh_secret,
+    );
     let mailbox_key = mailbox_params.derive();
 
     // Step 9: Assemble the minimal envelope
@@ -418,12 +439,14 @@ impl std::fmt::Debug for DecryptionContext {
     }
 }
 
-/// Generate a random timing jitter duration for privacy.
+/// Generate a random timing jitter duration using exponential distribution (PRIV-D6).
 ///
-/// Returns a random duration between 0 and MAX_JITTER_MS (3000ms) that
-/// should be used as a delay before sending messages. This prevents
-/// timing correlation attacks where an observer could link message
-/// creation to network transmission.
+/// Uses an exponential distribution (mean = MAX_JITTER_MS / 2) instead of a
+/// uniform distribution, which provides better resistance to traffic analysis.
+/// The exponential distribution more closely models natural inter-arrival times,
+/// making message timing patterns harder to distinguish from background noise.
+///
+/// The output is clamped to [0, MAX_JITTER_MS] to prevent extreme delays.
 ///
 /// # Security Note
 ///
@@ -448,9 +471,73 @@ impl std::fmt::Debug for DecryptionContext {
 /// network.send(encrypted).await;
 /// ```
 pub fn add_timing_jitter() -> Duration {
+    exponential_jitter(MAX_JITTER_MS)
+}
+
+/// Generate exponential jitter clamped to a maximum value (PRIV-D6).
+///
+/// Draws from an exponential distribution with mean = max_ms / 2,
+/// then clamps the result to [0, max_ms]. This provides a distribution
+/// where most delays are short but longer delays are possible, mimicking
+/// natural message inter-arrival times.
+fn exponential_jitter(max_ms: u64) -> Duration {
     use rand::rngs::OsRng;
-    let jitter_ms = OsRng.gen_range(0..=MAX_JITTER_MS);
+
+    // Mean delay = max_ms / 2 (1500ms for default 3000ms max)
+    let lambda = 2.0 / max_ms as f64;
+
+    // Generate uniform random (0, 1) using OsRng for crypto safety
+    let u: f64 = loop {
+        let val: f64 = OsRng.gen_range(0.0001_f64..1.0_f64);
+        if val > 0.0 && val < 1.0 {
+            break val;
+        }
+    };
+
+    // Inverse CDF of exponential: -ln(U) / lambda
+    let exp_sample = -u.ln() / lambda;
+
+    // Clamp to [0, max_ms]
+    let jitter_ms = exp_sample.min(max_ms as f64).max(0.0) as u64;
     Duration::from_millis(jitter_ms)
+}
+
+/// Configuration for burst detection and batch release (PRIV-D6).
+///
+/// When a burst of messages is detected (multiple messages sent in rapid
+/// succession), they are accumulated and released at random intervals
+/// to prevent burst timing patterns from leaking information.
+#[derive(Debug, Clone)]
+pub struct BurstConfig {
+    /// Maximum number of messages to accumulate before forced release.
+    pub max_batch_size: usize,
+    /// Minimum time between batch releases in milliseconds.
+    pub min_release_interval_ms: u64,
+    /// Maximum time to hold a message before forced release.
+    pub max_hold_time_ms: u64,
+    /// Whether burst detection is enabled.
+    pub enabled: bool,
+}
+
+impl Default for BurstConfig {
+    fn default() -> Self {
+        Self {
+            max_batch_size: 5,
+            min_release_interval_ms: 1000,
+            max_hold_time_ms: 10000,
+            enabled: true,
+        }
+    }
+}
+
+impl BurstConfig {
+    /// Create a disabled burst config for testing.
+    pub fn disabled() -> Self {
+        Self {
+            enabled: false,
+            ..Self::default()
+        }
+    }
 }
 
 /// Configuration for message sending.
@@ -469,7 +556,7 @@ pub fn add_timing_jitter() -> Duration {
 /// // Testing only: disable jitter for deterministic tests
 /// let test_config = SendConfig::testing();
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct SendConfig {
     /// Whether to enforce timing jitter.
     ///
@@ -479,15 +566,24 @@ pub struct SendConfig {
     ///
     /// Default: `true`
     pub enforce_jitter: bool,
+
+    /// Burst detection and batch release configuration (PRIV-D6).
+    ///
+    /// When enabled, multiple messages sent in rapid succession are
+    /// accumulated and released at randomized intervals to prevent
+    /// burst timing patterns from leaking information.
+    pub burst_config: BurstConfig,
 }
 
 impl Default for SendConfig {
     /// Returns the default configuration with all privacy features enabled.
     ///
-    /// - Timing jitter: enabled (0-3000ms random delay)
+    /// - Timing jitter: enabled (exponential distribution, mean 1500ms, max 3000ms)
+    /// - Burst detection: enabled (batch up to 5, release with random intervals)
     fn default() -> Self {
         Self {
             enforce_jitter: true,
+            burst_config: BurstConfig::default(),
         }
     }
 }
@@ -495,8 +591,9 @@ impl Default for SendConfig {
 impl SendConfig {
     /// Create a configuration for testing with privacy features disabled.
     ///
-    /// **WARNING**: This disables timing jitter. NEVER use in production.
-    /// Only use for deterministic testing where timing behavior must be predictable.
+    /// **WARNING**: This disables timing jitter and burst detection.
+    /// NEVER use in production. Only use for deterministic testing where
+    /// timing behavior must be predictable.
     ///
     /// # Example
     ///
@@ -507,6 +604,7 @@ impl SendConfig {
     pub fn testing() -> Self {
         Self {
             enforce_jitter: false,
+            burst_config: BurstConfig::disabled(),
         }
     }
 
