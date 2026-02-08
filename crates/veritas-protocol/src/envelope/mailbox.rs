@@ -1,29 +1,34 @@
 //! Mailbox key derivation for privacy-preserving message routing.
 //!
-//! Mailbox keys are derived identifiers that change over time, preventing
-//! recipients from being tracked across messages. Instead of using the
-//! recipient's identity hash directly, we derive a mailbox key from:
+//! Mailbox keys are derived from a shared secret between sender and recipient
+//! (DH output), ensuring that only actual communication partners can compute
+//! the key. This prevents third parties from computing mailbox keys even if
+//! they know the recipient's public identity.
 //!
-//! - Recipient identity hash
-//! - Current epoch (rotates daily)
+//! The derivation uses:
+//! - DH shared secret between sender and recipient exchange keys
+//! - Current epoch (rotates every 30 days)
 //! - Random per-message salt
 //!
 //! This ensures that:
-//! - Messages to the same recipient have different mailbox keys
+//! - Messages to the same recipient have different mailbox keys per salt
 //! - Mailbox keys are unlinkable across epochs
 //! - Relays cannot correlate recipient identities
+//! - Only sender and recipient can derive the mailbox key (PRIV-D2)
 //!
 //! ## Security Properties
 //!
 //! - **Unlinkability**: Different salts produce different mailbox keys
 //! - **Forward Privacy**: Old epochs cannot be correlated with new ones
 //! - **Recipient Privacy**: Mailbox key reveals nothing about recipient identity
+//! - **Shared Secret Binding**: Only communication partners can compute keys (PRIV-D2)
 
 use rand::RngCore;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use veritas_crypto::Hash256;
 use veritas_identity::IdentityHash;
+use zeroize::Zeroize;
 
 use crate::limits::EPOCH_DURATION_SECS;
 
@@ -31,7 +36,12 @@ use crate::limits::EPOCH_DURATION_SECS;
 ///
 /// This prefix ensures mailbox keys cannot be confused with other
 /// types of keys in the VERITAS protocol.
-const MAILBOX_KEY_DOMAIN: &[u8] = b"VERITAS-MAILBOX-KEY-v1";
+const MAILBOX_KEY_DOMAIN: &[u8] = b"VERITAS-MAILBOX-KEY-v2";
+
+/// Domain separator for DH-based mailbox key derivation (PRIV-D2).
+///
+/// Used when deriving mailbox keys from DH shared secrets.
+const MAILBOX_DH_DOMAIN: &[u8] = b"VERITAS-MAILBOX-DH-v1";
 
 /// Size of mailbox key in bytes.
 pub const MAILBOX_KEY_SIZE: usize = 32;
@@ -78,7 +88,10 @@ impl AsRef<[u8]> for MailboxKey {
 /// Parameters for deriving a mailbox key.
 ///
 /// Contains all inputs needed to derive a mailbox key for a message.
-#[derive(Clone, Serialize, Deserialize)]
+/// Supports both legacy recipient-only derivation and the new DH-based
+/// derivation (PRIV-D2) where the shared secret between sender and
+/// recipient is used.
+#[derive(Serialize, Deserialize)]
 pub struct MailboxKeyParams {
     /// Recipient's identity hash (kept private, used only for derivation).
     recipient_id: IdentityHash,
@@ -86,6 +99,22 @@ pub struct MailboxKeyParams {
     epoch: u64,
     /// Random salt for this specific message.
     salt: [u8; MAILBOX_SALT_SIZE],
+    /// Optional DH shared secret bytes for privacy-hardened derivation (PRIV-D2).
+    /// When present, mailbox key is derived from the shared secret instead of
+    /// recipient identity alone, ensuring only communication partners can compute it.
+    /// Zeroized on drop to prevent secret leakage.
+    #[serde(skip)]
+    dh_shared_secret: Option<[u8; 32]>,
+}
+
+impl Drop for MailboxKeyParams {
+    fn drop(&mut self) {
+        // Zeroize the DH shared secret on drop to prevent leakage
+        if let Some(ref mut secret) = self.dh_shared_secret {
+            secret.zeroize();
+        }
+        self.salt.zeroize();
+    }
 }
 
 impl MailboxKeyParams {
@@ -121,6 +150,7 @@ impl MailboxKeyParams {
             recipient_id: recipient_id.clone(),
             epoch,
             salt,
+            dh_shared_secret: None,
         }
     }
 
@@ -138,6 +168,57 @@ impl MailboxKeyParams {
             recipient_id: recipient_id.clone(),
             epoch,
             salt,
+            dh_shared_secret: None,
+        }
+    }
+
+    /// Create mailbox key parameters with a DH shared secret (PRIV-D2).
+    ///
+    /// This is the **recommended** constructor for privacy-hardened mailbox keys.
+    /// The shared secret ensures that only the sender and recipient can compute
+    /// the mailbox key, preventing third parties from correlating messages even
+    /// if they know the recipient's public identity.
+    ///
+    /// # Arguments
+    ///
+    /// * `recipient_id` - The recipient's identity hash
+    /// * `epoch` - The epoch number
+    /// * `salt` - The random salt
+    /// * `dh_shared_secret` - The DH shared secret between sender and recipient
+    pub fn new_with_dh(
+        recipient_id: &IdentityHash,
+        epoch: u64,
+        salt: [u8; MAILBOX_SALT_SIZE],
+        dh_shared_secret: [u8; 32],
+    ) -> Self {
+        Self {
+            recipient_id: recipient_id.clone(),
+            epoch,
+            salt,
+            dh_shared_secret: Some(dh_shared_secret),
+        }
+    }
+
+    /// Create mailbox key parameters for the current epoch with a DH shared secret.
+    ///
+    /// Combines `new_current` with DH shared secret binding.
+    pub fn new_current_with_dh(
+        recipient_id: &IdentityHash,
+        dh_shared_secret: [u8; 32],
+    ) -> Self {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time before UNIX epoch")
+            .as_secs();
+
+        let epoch = epoch_from_timestamp(now, EPOCH_DURATION_SECS);
+        let salt = generate_mailbox_salt();
+
+        Self {
+            recipient_id: recipient_id.clone(),
+            epoch,
+            salt,
+            dh_shared_secret: Some(dh_shared_secret),
         }
     }
 
@@ -151,9 +232,19 @@ impl MailboxKeyParams {
         &self.salt
     }
 
+    /// Check if this uses DH-based derivation.
+    pub fn is_dh_bound(&self) -> bool {
+        self.dh_shared_secret.is_some()
+    }
+
     /// Derive the mailbox key from these parameters.
     ///
-    /// The mailbox key is derived as:
+    /// When a DH shared secret is present (PRIV-D2), the mailbox key is derived as:
+    /// ```text
+    /// BLAKE3(MAILBOX_DH_DOMAIN || DH_shared_secret || epoch || salt)
+    /// ```
+    ///
+    /// Without a DH shared secret (legacy), it falls back to:
     /// ```text
     /// BLAKE3(DOMAIN || recipient_id || epoch || salt)
     /// ```
@@ -162,7 +253,11 @@ impl MailboxKeyParams {
     ///
     /// A 32-byte mailbox key that is unlinkable to the recipient's identity.
     pub fn derive(&self) -> MailboxKey {
-        let key = derive_mailbox_key(&self.recipient_id, self.epoch, &self.salt);
+        let key = if let Some(ref dh_secret) = self.dh_shared_secret {
+            derive_mailbox_key_dh(dh_secret, self.epoch, &self.salt)
+        } else {
+            derive_mailbox_key(&self.recipient_id, self.epoch, &self.salt)
+        };
         MailboxKey(key)
     }
 }
@@ -215,6 +310,35 @@ pub fn derive_mailbox_key(
     Hash256::hash_many(&[
         MAILBOX_KEY_DOMAIN,
         recipient_id.as_bytes(),
+        &epoch.to_be_bytes(),
+        salt,
+    ])
+    .to_bytes()
+}
+
+/// Derive a mailbox key from a DH shared secret, epoch, and salt (PRIV-D2).
+///
+/// This is the **privacy-hardened** derivation that ensures only the sender
+/// and recipient (who share the DH secret) can compute the mailbox key.
+/// Third parties who know the recipient's public identity cannot derive it.
+///
+/// # Arguments
+///
+/// * `dh_shared_secret` - The 32-byte DH shared secret between sender and recipient
+/// * `epoch` - Current epoch number
+/// * `salt` - Random 16-byte salt (unique per message)
+///
+/// # Returns
+///
+/// A 32-byte derived mailbox key.
+pub fn derive_mailbox_key_dh(
+    dh_shared_secret: &[u8; 32],
+    epoch: u64,
+    salt: &[u8; MAILBOX_SALT_SIZE],
+) -> [u8; MAILBOX_KEY_SIZE] {
+    Hash256::hash_many(&[
+        MAILBOX_DH_DOMAIN,
+        dh_shared_secret,
         &epoch.to_be_bytes(),
         salt,
     ])
@@ -432,6 +556,102 @@ mod tests {
         let deserialized: MailboxKey = bincode::deserialize(&serialized).unwrap();
 
         assert_eq!(key, deserialized);
+    }
+
+    // ========================================================================
+    // DH-based Mailbox Key Tests (PRIV-D2)
+    // ========================================================================
+
+    #[test]
+    fn test_derive_mailbox_key_dh_deterministic() {
+        let dh_secret = [0x42u8; 32];
+        let epoch = 12345u64;
+        let salt = [0x11u8; MAILBOX_SALT_SIZE];
+
+        let key1 = derive_mailbox_key_dh(&dh_secret, epoch, &salt);
+        let key2 = derive_mailbox_key_dh(&dh_secret, epoch, &salt);
+
+        assert_eq!(key1, key2);
+    }
+
+    #[test]
+    fn test_dh_key_differs_from_legacy_key() {
+        let recipient = test_recipient();
+        let dh_secret = [0x42u8; 32];
+        let epoch = 12345u64;
+        let salt = [0x11u8; MAILBOX_SALT_SIZE];
+
+        let legacy_key = derive_mailbox_key(&recipient, epoch, &salt);
+        let dh_key = derive_mailbox_key_dh(&dh_secret, epoch, &salt);
+
+        assert_ne!(legacy_key, dh_key, "DH-based key must differ from legacy key");
+    }
+
+    #[test]
+    fn test_different_dh_secrets_different_keys() {
+        let secret1 = [0x11u8; 32];
+        let secret2 = [0x22u8; 32];
+        let epoch = 12345u64;
+        let salt = [0x33u8; MAILBOX_SALT_SIZE];
+
+        let key1 = derive_mailbox_key_dh(&secret1, epoch, &salt);
+        let key2 = derive_mailbox_key_dh(&secret2, epoch, &salt);
+
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_mailbox_params_with_dh() {
+        let recipient = test_recipient();
+        let dh_secret = [0x42u8; 32];
+        let epoch = 12345u64;
+        let salt = [0x11u8; MAILBOX_SALT_SIZE];
+
+        let params = MailboxKeyParams::new_with_dh(&recipient, epoch, salt, dh_secret);
+        assert!(params.is_dh_bound());
+
+        let derived = params.derive();
+        let expected = derive_mailbox_key_dh(&dh_secret, epoch, &salt);
+        assert_eq!(derived.as_bytes(), &expected);
+    }
+
+    #[test]
+    fn test_mailbox_params_without_dh_is_legacy() {
+        let recipient = test_recipient();
+        let epoch = 12345u64;
+        let salt = [0x11u8; MAILBOX_SALT_SIZE];
+
+        let params = MailboxKeyParams::new(&recipient, epoch, salt);
+        assert!(!params.is_dh_bound());
+
+        let derived = params.derive();
+        let expected = derive_mailbox_key(&recipient, epoch, &salt);
+        assert_eq!(derived.as_bytes(), &expected);
+    }
+
+    #[test]
+    fn test_dh_mailbox_key_changes_with_epoch() {
+        let dh_secret = [0x42u8; 32];
+        let salt = [0x11u8; MAILBOX_SALT_SIZE];
+
+        let key1 = derive_mailbox_key_dh(&dh_secret, 100, &salt);
+        let key2 = derive_mailbox_key_dh(&dh_secret, 101, &salt);
+
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_dh_mailbox_key_changes_with_salt() {
+        let dh_secret = [0x42u8; 32];
+        let epoch = 12345u64;
+
+        let salt1 = [0x11u8; MAILBOX_SALT_SIZE];
+        let salt2 = [0x22u8; MAILBOX_SALT_SIZE];
+
+        let key1 = derive_mailbox_key_dh(&dh_secret, epoch, &salt1);
+        let key2 = derive_mailbox_key_dh(&dh_secret, epoch, &salt2);
+
+        assert_ne!(key1, key2);
     }
 }
 

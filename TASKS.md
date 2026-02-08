@@ -677,3 +677,46 @@ All 5 tasks completed. 3 new modules added to `veritas-chain`. Protocol limits e
 - veritas-chain: 507 tests passed (0 failed)
 - Full workspace: 1,643 tests passed (0 failed)
 - Clippy: 0 warnings from new code
+
+-----
+
+## Milestone 4: Privacy Hardening (v0.6.0-beta) — COMPLETED
+
+**Branch**: `claude/privacy-hardening-milestone-4-HCwJP`
+**Version**: v0.6.0-beta
+**Date**: 2026-02-08
+
+All 6 tasks completed. 2 new modules added. Privacy-critical improvements across `veritas-protocol` and `veritas-net`.
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 4.1 | DH-based mailbox key derivation (PRIV-D2) | Completed |
+| 4.2 | 8 logarithmic padding buckets (PRIV-D5) | Completed |
+| 4.3 | Exponential jitter + BurstConfig (PRIV-D6) | Completed |
+| 4.4 | Cover traffic generation (PRIV-D7) | Completed |
+| 4.5 | GossipSub topic sharding - 16 shards (NET-D4/PRIV-D3) | Completed |
+| 4.6 | P2P image transfer warning system (AD-6) | Completed |
+
+### New Files
+
+- `crates/veritas-protocol/src/image_transfer.rs` — P2P image transfer warning + on-chain proof
+- `crates/veritas-net/src/cover_traffic.rs` — Cover traffic generation for traffic analysis resistance
+
+### Modified Files
+
+- `crates/veritas-protocol/src/envelope/mailbox.rs` — DH-based mailbox key derivation
+- `crates/veritas-protocol/src/encryption/e2e.rs` — Exponential jitter, BurstConfig
+- `crates/veritas-protocol/src/encryption/mod.rs` — BurstConfig export
+- `crates/veritas-protocol/src/limits.rs` — 8 logarithmic padding buckets
+- `crates/veritas-protocol/src/envelope/padding.rs` — Updated tests for new buckets
+- `crates/veritas-protocol/src/envelope/minimal.rs` — MIN_CIPHERTEXT_SIZE 1024→256
+- `crates/veritas-protocol/src/envelope/mod.rs` — derive_mailbox_key_dh export
+- `crates/veritas-protocol/src/lib.rs` — New module + exports
+- `crates/veritas-net/src/gossip.rs` — Topic sharding (16 shards)
+- `crates/veritas-net/src/lib.rs` — New module + exports
+
+### Test Results
+
+- veritas-protocol: 308 tests passed (0 failed)
+- veritas-net: 95 tests passed (0 failed)
+- Full workspace: 1,762 tests passed (0 failed)

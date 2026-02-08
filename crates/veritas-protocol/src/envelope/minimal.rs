@@ -30,7 +30,7 @@
 //!
 //! - Mailbox key (but cannot link to recipient identity)
 //! - Ephemeral public key (but cannot link to sender identity)
-//! - Approximate message size (bucket: 1024, 2048, 4096, or 8192 bytes)
+//! - Approximate message size (bucket: 256, 512, 1024, 1536, 2048, 3072, 4096, or 8192 bytes)
 //!
 //! ## What Relays CANNOT See
 //!
@@ -51,7 +51,8 @@ use super::mailbox::{MAILBOX_KEY_SIZE, MailboxKey};
 pub const ENVELOPE_NONCE_SIZE: usize = 24;
 
 /// Minimum ciphertext size (smallest bucket + overhead).
-pub const MIN_CIPHERTEXT_SIZE: usize = 1024;
+/// Updated for 8-bucket padding scheme (PRIV-D5).
+pub const MIN_CIPHERTEXT_SIZE: usize = 256;
 
 /// Domain separator for envelope hashing.
 const ENVELOPE_HASH_DOMAIN: &[u8] = b"VERITAS-ENVELOPE-HASH-v1";

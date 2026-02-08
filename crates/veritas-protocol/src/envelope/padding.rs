@@ -63,8 +63,8 @@ pub type Result<T> = std::result::Result<T, PaddingError>;
 /// ```ignore
 /// use veritas_protocol::envelope::padding::bucket_for_size;
 ///
-/// assert_eq!(bucket_for_size(100), Some(1024));
-/// assert_eq!(bucket_for_size(1500), Some(2048));
+/// assert_eq!(bucket_for_size(100), Some(256));
+/// assert_eq!(bucket_for_size(1500), Some(1536));
 /// assert_eq!(bucket_for_size(4092), Some(4096));
 /// assert_eq!(bucket_for_size(9000), None);
 /// ```
@@ -115,7 +115,7 @@ pub fn max_data_size() -> usize {
 /// let data = b"Hello, VERITAS!";
 /// let padded = pad_to_bucket(data).unwrap();
 ///
-/// assert_eq!(padded.len(), 1024); // Smallest bucket
+/// assert_eq!(padded.len(), 256); // Smallest bucket
 ///
 /// let unpadded = unpad(&padded).unwrap();
 /// assert_eq!(&unpadded, data);
@@ -224,25 +224,40 @@ mod tests {
 
     #[test]
     fn test_bucket_for_size() {
-        // Small data goes to smallest bucket
-        assert_eq!(bucket_for_size(0), Some(1024));
-        assert_eq!(bucket_for_size(100), Some(1024));
+        // 8 buckets: [256, 512, 1024, 1536, 2048, 3072, 4096, 8192] (PRIV-D5)
+
+        // Small data goes to smallest bucket (256)
+        assert_eq!(bucket_for_size(0), Some(256));
+        assert_eq!(bucket_for_size(100), Some(256));
+        assert_eq!(bucket_for_size(252), Some(256)); // 252 + 4 = 256
+
+        // Next bucket (512)
+        assert_eq!(bucket_for_size(253), Some(512));
+        assert_eq!(bucket_for_size(400), Some(512));
+        assert_eq!(bucket_for_size(508), Some(512)); // 508 + 4 = 512
+
+        // Bucket 1024
+        assert_eq!(bucket_for_size(509), Some(1024));
         assert_eq!(bucket_for_size(1020), Some(1024)); // 1020 + 4 = 1024
 
-        // Needs prefix, so 1021 data bytes need next bucket
-        assert_eq!(bucket_for_size(1021), Some(2048));
+        // Bucket 1536
+        assert_eq!(bucket_for_size(1021), Some(1536));
+        assert_eq!(bucket_for_size(1532), Some(1536)); // 1532 + 4 = 1536
 
-        // Medium data
-        assert_eq!(bucket_for_size(1500), Some(2048));
+        // Bucket 2048
+        assert_eq!(bucket_for_size(1533), Some(2048));
         assert_eq!(bucket_for_size(2044), Some(2048)); // 2044 + 4 = 2048
-        assert_eq!(bucket_for_size(2045), Some(4096));
 
-        // Large data
-        assert_eq!(bucket_for_size(3000), Some(4096));
+        // Bucket 3072
+        assert_eq!(bucket_for_size(2045), Some(3072));
+        assert_eq!(bucket_for_size(3068), Some(3072)); // 3068 + 4 = 3072
+
+        // Bucket 4096
+        assert_eq!(bucket_for_size(3069), Some(4096));
         assert_eq!(bucket_for_size(4092), Some(4096)); // 4092 + 4 = 4096
-        assert_eq!(bucket_for_size(4093), Some(8192));
 
-        // Max data
+        // Bucket 8192
+        assert_eq!(bucket_for_size(4093), Some(8192));
         assert_eq!(bucket_for_size(8000), Some(8192));
         assert_eq!(bucket_for_size(8188), Some(8192)); // 8188 + 4 = 8192
 
@@ -265,7 +280,7 @@ mod tests {
         let data = b"";
         let padded = pad_to_bucket(data).unwrap();
 
-        assert_eq!(padded.len(), 1024); // Smallest bucket
+        assert_eq!(padded.len(), 256); // Smallest bucket (PRIV-D5)
         // First 4 bytes should be zero length
         assert_eq!(&padded[..4], &[0, 0, 0, 0]);
 
@@ -275,11 +290,11 @@ mod tests {
 
     #[test]
     fn test_pad_max_size_for_bucket() {
-        // Max data that fits in 1024-byte bucket (1020 data + 4 prefix = 1024)
-        let data = vec![0x42u8; 1020];
+        // Max data that fits in 256-byte bucket (252 data + 4 prefix = 256)
+        let data = vec![0x42u8; 252];
         let padded = pad_to_bucket(&data).unwrap();
 
-        assert_eq!(padded.len(), 1024);
+        assert_eq!(padded.len(), 256);
 
         let unpadded = unpad(&padded).unwrap();
         assert_eq!(unpadded, data);
@@ -287,21 +302,43 @@ mod tests {
 
     #[test]
     fn test_pad_to_correct_bucket() {
-        // 100 bytes -> 1024 bucket
+        // 8 buckets: [256, 512, 1024, 1536, 2048, 3072, 4096, 8192] (PRIV-D5)
+
+        // 100 bytes -> 256 bucket
         let small = vec![0x42u8; 100];
-        assert_eq!(pad_to_bucket(&small).unwrap().len(), 1024);
+        assert_eq!(pad_to_bucket(&small).unwrap().len(), 256);
 
-        // 1500 bytes -> 2048 bucket
-        let medium = vec![0x42u8; 1500];
-        assert_eq!(pad_to_bucket(&medium).unwrap().len(), 2048);
+        // 400 bytes -> 512 bucket
+        let med_small = vec![0x42u8; 400];
+        assert_eq!(pad_to_bucket(&med_small).unwrap().len(), 512);
 
-        // 3000 bytes -> 4096 bucket
-        let large = vec![0x42u8; 3000];
-        assert_eq!(pad_to_bucket(&large).unwrap().len(), 4096);
+        // 800 bytes -> 1024 bucket
+        let medium = vec![0x42u8; 800];
+        assert_eq!(pad_to_bucket(&medium).unwrap().len(), 1024);
+
+        // 1200 bytes -> 1536 bucket
+        let med_large = vec![0x42u8; 1200];
+        assert_eq!(pad_to_bucket(&med_large).unwrap().len(), 1536);
+
+        // 1500 bytes -> 1536 bucket
+        let med_large2 = vec![0x42u8; 1500];
+        assert_eq!(pad_to_bucket(&med_large2).unwrap().len(), 1536);
+
+        // 2000 bytes -> 2048 bucket
+        let large = vec![0x42u8; 2000];
+        assert_eq!(pad_to_bucket(&large).unwrap().len(), 2048);
+
+        // 3000 bytes -> 3072 bucket
+        let xlarge = vec![0x42u8; 3000];
+        assert_eq!(pad_to_bucket(&xlarge).unwrap().len(), 3072);
+
+        // 4000 bytes -> 4096 bucket
+        let xxlarge = vec![0x42u8; 4000];
+        assert_eq!(pad_to_bucket(&xxlarge).unwrap().len(), 4096);
 
         // 5000 bytes -> 8192 bucket
-        let xlarge = vec![0x42u8; 5000];
-        assert_eq!(pad_to_bucket(&xlarge).unwrap().len(), 8192);
+        let xxxlarge = vec![0x42u8; 5000];
+        assert_eq!(pad_to_bucket(&xxxlarge).unwrap().len(), 8192);
     }
 
     #[test]
