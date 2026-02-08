@@ -773,3 +773,58 @@ All 3 tasks completed. 5 new modules added across `veritas-crypto`, `veritas-pro
 - Full workspace: 1,760 tests passed (0 failed)
 - Clippy: 0 new warnings from Milestone 5 code
 - Full workspace: 1,762 tests passed (0 failed)
+
+-----
+
+## Milestone 6: Identity & Reputation Hardening (v0.8.0-beta) — COMPLETED
+
+**Branch**: `claude/identity-reputation-hardening-YyJxo`
+**Version**: v0.8.0-beta
+**Date**: 2026-02-08
+
+All 5 tasks completed. 3 new modules added to `veritas-identity`. Enhanced collusion detection and report system in `veritas-reputation`.
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 6.1 | Key revocation (on-chain transaction type) | Completed |
+| 6.2 | Key rotation contact notification | Completed |
+| 6.3 | Fix report/collusion system | Completed |
+| 6.4 | Fix unilateral block validation proofs | Completed |
+| 6.5 | Device-binding as interim Sybil resistance | Completed |
+
+### New Files
+
+- `crates/veritas-identity/src/revocation.rs` — Key revocation system (RevocationReason, KeyRevocationRequest, RevocationRegistry)
+- `crates/veritas-identity/src/rotation_notification.rs` — Key rotation contact notifications (dual-signed, mailbox targeting)
+- `crates/veritas-identity/src/device_binding.rs` — Device-binding Sybil resistance (DeviceSecret, DeviceFingerprint, DeviceBindingToken, DeviceBindingRegistry)
+
+### Modified Files
+
+- `Cargo.toml` — Version bumped to 0.8.0-beta
+- `crates/veritas-chain/src/transaction.rs` — Enhanced KeyRevocation with reason field
+- `crates/veritas-identity/Cargo.toml` — Added subtle dependency for constant-time ops
+- `crates/veritas-identity/src/lib.rs` — New module declarations and exports (revocation, rotation_notification, device_binding)
+- `crates/veritas-protocol/src/domain_separation.rs` — New domain separation purposes (KEY-REVOCATION, KEY-ROTATION-NOTIFY, DEVICE-BINDING)
+- `crates/veritas-protocol/src/limits.rs` — New identity/device binding constants
+- `crates/veritas-reputation/src/collusion.rs` — Velocity-based burst detection, enhanced suspicion scoring
+- `crates/veritas-reputation/src/effects.rs` — Fixed unused import
+- `crates/veritas-reputation/src/lib.rs` — New exports (InteractionVelocity, EvidenceStrength, etc.)
+- `crates/veritas-reputation/src/manager.rs` — Updated for enhanced collusion/report integration
+- `crates/veritas-reputation/src/proof.rs` — BlockValidation now requires counter-signature, base gain reduced 10→7
+- `crates/veritas-reputation/src/report.rs` — Evidence strength scoring, batch report detection
+
+### New Protocol Constants
+
+- `MAX_REVOCATIONS: usize = 10_000` — Maximum tracked key revocations
+- `MAX_REVOCATION_REQUEST_AGE_SECS: u64 = 86_400` — Revocation request validity (24h)
+- `MAX_NOTIFICATION_CONTACTS: usize = 1_000` — Max contacts per rotation notification
+- `NOTIFICATION_EXPIRY_SECS: u64 = 2_592_000` — Notification validity (30 days)
+- `MAX_IDENTITIES_PER_DEVICE: u32 = 3` — Per-device identity limit
+- `DEVICE_BINDING_VALIDITY_SECS: u64 = 7_776_000` — Device binding validity (90 days)
+- `MAX_DEVICE_BINDINGS: usize = 100_000` — Maximum tracked device bindings
+
+### Test Results
+
+- veritas-identity: 366 tests passed (0 failed) — up from 179
+- veritas-reputation: 129 tests passed (0 failed) — up from 100
+- Full workspace: 1,937 tests passed (0 failed) — up from 1,762

@@ -83,8 +83,8 @@ impl InteractionType {
 
     /// Check if this interaction type requires a counter-signature from the recipient.
     ///
-    /// Some interaction types (like block validation) may only require
-    /// the validator's signature, while others require both parties.
+    /// All interaction types require both parties to sign, including block validation
+    /// which requires a confirming validator's counter-signature (IDENT-D6).
     #[must_use]
     pub fn requires_counter_signature(&self) -> bool {
         match self {
@@ -92,7 +92,7 @@ impl InteractionType {
             Self::MessageStorage => true,
             Self::MessageDelivery => true,
             Self::DhtParticipation => true,
-            Self::BlockValidation => false, // Only validator signs
+            Self::BlockValidation => true, // CHANGED: Now requires confirming validator (IDENT-D6)
         }
     }
 
@@ -104,7 +104,7 @@ impl InteractionType {
             Self::MessageStorage => 5,
             Self::MessageDelivery => 5,
             Self::DhtParticipation => 2,
-            Self::BlockValidation => 10,
+            Self::BlockValidation => 7, // Reduced from 10: now requires confirming validator (IDENT-D6)
         }
     }
 }
@@ -485,7 +485,7 @@ mod tests {
         assert!(InteractionType::MessageStorage.requires_counter_signature());
         assert!(InteractionType::MessageDelivery.requires_counter_signature());
         assert!(InteractionType::DhtParticipation.requires_counter_signature());
-        assert!(!InteractionType::BlockValidation.requires_counter_signature());
+        assert!(InteractionType::BlockValidation.requires_counter_signature()); // CHANGED: IDENT-D6
     }
 
     #[test]
@@ -540,7 +540,7 @@ mod tests {
     }
 
     #[test]
-    fn test_block_validation_no_counter_signature_required() {
+    fn test_block_validation_requires_counter_signature() {
         let from = make_identity(1);
         let to = make_identity(2);
         let nonce = generate_nonce();
@@ -548,7 +548,7 @@ mod tests {
 
         let from_sig = make_signature(b"from");
 
-        // BlockValidation does NOT require counter-signature
+        // BlockValidation NOW requires counter-signature (IDENT-D6 fix)
         let result = InteractionProof::new(
             from,
             to,
@@ -556,7 +556,34 @@ mod tests {
             timestamp,
             nonce,
             from_sig,
-            None,
+            None, // Missing counter-signature - should fail now
+        );
+
+        assert!(matches!(
+            result,
+            Err(ReputationError::MissingCounterSignature)
+        ));
+    }
+
+    #[test]
+    fn test_block_validation_with_counter_signature_succeeds() {
+        let from = make_identity(1);
+        let to = make_identity(2);
+        let nonce = generate_nonce();
+        let timestamp = 1704067200;
+
+        let from_sig = make_signature(b"from");
+        let to_sig = make_signature(b"to");
+
+        // BlockValidation with counter-signature should succeed
+        let result = InteractionProof::new(
+            from,
+            to,
+            InteractionType::BlockValidation,
+            timestamp,
+            nonce,
+            from_sig,
+            Some(to_sig),
         );
 
         assert!(result.is_ok());
@@ -810,7 +837,7 @@ mod tests {
         assert_eq!(InteractionType::MessageStorage.base_gain(), 5);
         assert_eq!(InteractionType::MessageDelivery.base_gain(), 5);
         assert_eq!(InteractionType::DhtParticipation.base_gain(), 2);
-        assert_eq!(InteractionType::BlockValidation.base_gain(), 10);
+        assert_eq!(InteractionType::BlockValidation.base_gain(), 7); // Changed from 10: IDENT-D6
     }
 
     #[test]

@@ -80,6 +80,7 @@
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod device_binding;
 pub mod error;
 pub mod hardware;
 pub mod identity_hash;
@@ -88,8 +89,14 @@ pub mod lifecycle;
 pub mod limits;
 #[cfg(test)]
 mod proptests;
+pub mod revocation;
+pub mod rotation_notification;
 pub mod username;
 
+pub use device_binding::{
+    DEVICE_BINDING_VALIDITY_SECS, DeviceBindingRegistry, DeviceBindingToken, DeviceFingerprint,
+    DeviceSecret, MAX_DEVICE_BINDINGS, MAX_IDENTITIES_PER_DEVICE,
+};
 pub use error::{IdentityError, Result};
 pub use hardware::{
     ATTESTATION_MAX_AGE_SECS, AttestationPlatform, HardwareAttestation, HardwareFingerprint,
@@ -100,4 +107,12 @@ pub use lifecycle::{
     EXPIRY_GRACE_PERIOD_SECS, KEY_EXPIRY_SECS, KEY_WARNING_SECS, KeyLifecycle, KeyState,
 };
 pub use limits::{IdentityLimiter, IdentitySlotInfo, MAX_IDENTITIES_PER_ORIGIN, OriginFingerprint};
+pub use revocation::{
+    KeyRevocationRequest, RevocationReason, RevocationRecord, RevocationRegistry,
+    MAX_REVOCATIONS, MAX_REVOCATION_REQUEST_AGE_SECS,
+};
+pub use rotation_notification::{
+    KeyRotationNotification, RotationNotificationManager, MAX_NOTIFICATION_CONTACTS,
+    NOTIFICATION_EXPIRY_SECS,
+};
 pub use username::{MAX_USERNAME_LEN, MIN_USERNAME_LEN, Username, UsernameRegistration};

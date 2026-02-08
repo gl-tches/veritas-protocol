@@ -96,13 +96,15 @@ pub enum Transaction {
         /// Rotation timestamp.
         timestamp: u64,
     },
-    /// Key revocation (future).
+    /// Key revocation — irreversible on-chain revocation of a public key.
     KeyRevocation {
         /// Identity hash of the key being revoked.
         identity_hash: IdentityHash,
         /// Hash of the revoked key.
         revoked_key_hash: Hash256,
-        /// Signature proving authorization.
+        /// Serialized revocation reason (see `veritas_identity::RevocationReason`).
+        reason: String,
+        /// Signature proving authorization (ML-DSA-65).
         signature: Vec<u8>,
         /// Revocation timestamp.
         timestamp: u64,

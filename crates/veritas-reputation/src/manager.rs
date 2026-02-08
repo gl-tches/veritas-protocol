@@ -866,6 +866,7 @@ mod tests {
     fn test_process_reports() {
         let mut manager = ReputationManager::new();
         let target = make_identity(10);
+        let evidence = Some([0xBB; 32]); // HashReference evidence (1.0 multiplier)
 
         // File 3 reports from different reporters
         for i in 1..=3 {
@@ -875,7 +876,7 @@ mod tests {
             manager.get_score_mut(&reporter).gain(400);
 
             manager
-                .file_report(reporter, target, ReportReason::Spam, None)
+                .file_report(reporter, target, ReportReason::Spam, evidence)
                 .unwrap();
         }
 
@@ -1104,7 +1105,7 @@ mod tests {
             .unwrap();
         assert_eq!(gained1, 3);
 
-        // Test BlockValidation (base_gain = 10)
+        // Test BlockValidation (base_gain = 7, reduced from 10 per IDENT-D6)
         let from2 = make_identity(3);
         let to2 = make_identity(4);
         manager.ensure_identity_exists(&to2);
@@ -1113,7 +1114,7 @@ mod tests {
         let gained2 = manager
             .record_positive_interaction(from2, to2, &proof2)
             .unwrap();
-        assert_eq!(gained2, 10);
+        assert_eq!(gained2, 7);
 
         // Test DhtParticipation (base_gain = 2)
         let from3 = make_identity(5);

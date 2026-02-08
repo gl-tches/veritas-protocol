@@ -234,6 +234,14 @@ pub const SIGNED_PREKEY_ROTATION_SECS: u64 = 7 * 24 * 60 * 60;
 /// Replenish when fewer than this many remain.
 pub const OTPK_REPLENISH_THRESHOLD: usize = 10;
 
+// === Key Revocation ===
+
+/// Maximum tracked key revocations per registry.
+pub const MAX_REVOCATIONS: usize = 10_000;
+
+/// Maximum age of a revocation request in seconds (24 hours).
+pub const MAX_REVOCATION_REQUEST_AGE_SECS: u64 = 86_400;
+
 #[cfg(test)]
 mod tests {
     use super::*;
