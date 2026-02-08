@@ -41,6 +41,10 @@ pub enum StoreError {
     #[error("Data corruption detected: {0}")]
     Corruption(String),
 
+    /// Storage capacity exceeded.
+    #[error("Storage full: {0}")]
+    StoreFull(String),
+
     /// IO error.
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

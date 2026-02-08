@@ -57,6 +57,14 @@ pub mod purposes {
     pub const IDENTITY_HASH: &str = "IDENTITY-HASH";
     /// Transcript binding.
     pub const TRANSCRIPT: &str = "TRANSCRIPT";
+    /// X3DH key agreement.
+    pub const X3DH: &str = "X3DH";
+    /// Double Ratchet session.
+    pub const DOUBLE_RATCHET: &str = "DOUBLE-RATCHET";
+    /// Deniable authentication.
+    pub const DENIABLE_AUTH: &str = "DENIABLE-AUTH";
+    /// Group sender authentication.
+    pub const GROUP_SENDER_AUTH: &str = "GROUP-SENDER-AUTH";
 }
 
 #[cfg(test)]

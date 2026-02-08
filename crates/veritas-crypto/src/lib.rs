@@ -25,6 +25,8 @@
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod deniable_auth;
+pub mod double_ratchet;
 pub mod error;
 pub mod hash;
 pub mod mldsa;
@@ -33,7 +35,14 @@ pub mod mlkem;
 mod proptests;
 pub mod symmetric;
 pub mod x25519;
+pub mod x3dh;
 
+pub use deniable_auth::{
+    DeniableAuthTag, DENIABLE_AUTH_TAG_SIZE, compute_deniable_auth, verify_deniable_auth,
+};
+pub use double_ratchet::{
+    DoubleRatchetSession, MAX_SKIP, RatchetHeader, RatchetMessage, SessionState,
+};
 pub use error::{CryptoError, Result};
 pub use hash::Hash256;
 pub use mldsa::{MlDsaKeyPair, MlDsaPrivateKey, MlDsaPublicKey, MlDsaSignature};
@@ -43,3 +52,8 @@ pub use symmetric::{
     encrypt, encrypt_with_aad,
 };
 pub use x25519::{SharedSecret, X25519EphemeralKeyPair, X25519PublicKey, X25519StaticPrivateKey};
+pub use x3dh::{
+    OneTimePreKey, PreKeyBundle, SignedPreKey, X3DHInitialMessage, X3DHSharedSecret,
+    generate_one_time_prekeys, generate_prekey_bundle, generate_signed_prekey, x3dh_initiate,
+    x3dh_respond,
+};

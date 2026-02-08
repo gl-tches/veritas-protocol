@@ -35,6 +35,7 @@ pub mod encrypted_db;
 pub mod error;
 pub mod keyring;
 pub mod message_queue;
+pub mod session_store;
 
 pub use encrypted_db::{DbKey, EncryptedDb, EncryptedTree};
 pub use error::{Result, StoreError};
@@ -42,3 +43,4 @@ pub use keyring::{ExportedIdentity, Keyring, KeyringEntry, KeyringMetadata};
 pub use message_queue::{
     InboxMessage, InboxStats, MessageId, MessageQueue, MessageStatus, OutboxStats, QueuedMessage,
 };
+pub use session_store::{SessionStore, MAX_SESSIONS};

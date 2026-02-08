@@ -17,6 +17,9 @@ veritas-identity.workspace = true
 serde.workspace = true
 bincode.workspace = true
 
+# Hashing
+blake3.workspace = true
+
 # Security
 zeroize.workspace = true
 rand.workspace = true

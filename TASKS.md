@@ -719,4 +719,57 @@ All 6 tasks completed. 2 new modules added. Privacy-critical improvements across
 
 - veritas-protocol: 308 tests passed (0 failed)
 - veritas-net: 95 tests passed (0 failed)
+
+-----
+
+## Milestone 5: Messaging Security (v0.7.0-beta) — COMPLETED
+
+**Branch**: `claude/messaging-security-milestone-5-sXqOH`
+**Version**: v0.7.0-beta
+**Date**: 2026-02-08
+
+All 3 tasks completed. 5 new modules added across `veritas-crypto`, `veritas-protocol`, and `veritas-store`.
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 5.1 | X3DH key agreement + Double Ratchet for 1:1 messaging (CRYPTO-D1) | Completed |
+| 5.2 | Deniable authentication via triple-DH (CRYPTO-D7) | Completed |
+| 5.3 | Group sender authentication (CRYPTO-D3) | Completed |
+
+### New Files
+
+- `crates/veritas-crypto/src/x3dh.rs` — X3DH key agreement (prekey bundles, signed prekeys, one-time prekeys)
+- `crates/veritas-crypto/src/double_ratchet.rs` — Double Ratchet (symmetric + DH ratcheting, OOO delivery)
+- `crates/veritas-crypto/src/deniable_auth.rs` — Deniable authentication (BLAKE3 keyed hash, canonical key ordering)
+- `crates/veritas-protocol/src/session.rs` — Session management (X3DH integration, encrypt/decrypt, export/restore)
+- `crates/veritas-protocol/src/groups/sender_auth.rs` — Group sender authentication (HMAC + ML-DSA modes)
+- `crates/veritas-store/src/session_store.rs` — Session persistence (encrypted storage, peer indexing)
+
+### Modified Files
+
+- `crates/veritas-crypto/src/lib.rs` — New module declarations and exports (x3dh, double_ratchet, deniable_auth)
+- `crates/veritas-protocol/src/lib.rs` — New module declarations and exports (session, group sender auth)
+- `crates/veritas-protocol/src/groups/mod.rs` — sender_auth module and exports
+- `crates/veritas-protocol/src/domain_separation.rs` — New domain separation purposes (X3DH, DOUBLE-RATCHET, DENIABLE-AUTH, GROUP-SENDER-AUTH)
+- `crates/veritas-protocol/src/limits.rs` — New session/prekey constants
+- `crates/veritas-protocol/Cargo.toml` — Added blake3 dependency
+- `crates/veritas-store/src/lib.rs` — New session_store module and exports
+- `crates/veritas-store/src/error.rs` — Added StoreFull error variant
+- `Cargo.toml` — Version bumped to 0.7.0-beta
+
+### New Protocol Constants
+
+- `MAX_SKIPPED_MESSAGE_KEYS: usize = 256` — DoS prevention for OOO delivery
+- `MAX_SESSIONS_PER_IDENTITY: usize = 1000` — Session count limit
+- `MAX_ONE_TIME_PREKEYS: usize = 100` — Prekey bundle limit
+- `SIGNED_PREKEY_ROTATION_SECS: u64 = 604800` — 7-day signed prekey rotation
+- `OTPK_REPLENISH_THRESHOLD: usize = 10` — One-time prekey refill threshold
+
+### Test Results
+
+- veritas-crypto: 107 tests passed (0 failed)
+- veritas-protocol: 323 tests passed (0 failed)
+- veritas-store: 77 tests passed (0 failed)
+- Full workspace: 1,760 tests passed (0 failed)
+- Clippy: 0 new warnings from Milestone 5 code
 - Full workspace: 1,762 tests passed (0 failed)

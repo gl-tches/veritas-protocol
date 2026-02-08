@@ -216,6 +216,24 @@ pub const MAX_RESPONSE_LATENCY_MS: u64 = 5000;
 /// Minimum blocks to produce per epoch when scheduled.
 pub const MIN_BLOCKS_PER_EPOCH: u32 = 10;
 
+// === Double Ratchet / Session ===
+
+/// Maximum skipped message keys per session (DoS prevention).
+pub const MAX_SKIPPED_MESSAGE_KEYS: usize = 256;
+
+/// Maximum concurrent sessions per identity.
+pub const MAX_SESSIONS_PER_IDENTITY: usize = 1000;
+
+/// Maximum one-time prekeys in a bundle.
+pub const MAX_ONE_TIME_PREKEYS: usize = 100;
+
+/// Signed prekey rotation interval (7 days).
+pub const SIGNED_PREKEY_ROTATION_SECS: u64 = 7 * 24 * 60 * 60;
+
+/// One-time prekey replenishment threshold.
+/// Replenish when fewer than this many remain.
+pub const OTPK_REPLENISH_THRESHOLD: usize = 10;
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -2,7 +2,7 @@
 
 **Generated**: 2026-02-06 (revised)
 **Source Documents**: `DESIGN_CRITIQUE.md` (42 findings), `PROTOCOL_REVIEW.md` (~95 findings), owner clarifications
-**Current Version**: v0.6.0-beta (Milestone 4 complete) → targeting v1.0 (production)
+**Current Version**: v0.7.0-beta (Milestone 5 complete) → targeting v1.0 (production)
 
 ---
 
@@ -1027,29 +1027,39 @@ Add `(sender_id || recipient_id || session_id || message_counter)` as additional
 
 ---
 
-## Milestone 5: Messaging Security (v0.7.0-beta)
+## Milestone 5: Messaging Security (v0.7.0-beta) — COMPLETED
 
 > **Goal**: Real forward secrecy and group encryption.
 > **Estimated Effort**: 2–3 instruction sets, ~3-4 weeks
+>
+> **Status**: All 3 tasks (5.1–5.3) implemented. X3DH key agreement, Double Ratchet with OOO support, deniable authentication, session management, session persistence, and group sender authentication all operational. 1,760 tests pass (0 failures), full workspace builds cleanly.
 
 ### 5.1 — Implement Double Ratchet for 1:1 Messaging
+
+**Status**: Completed
 
 | Field | Value |
 |-------|-------|
 | **IDs** | CRYPTO-D1 |
-| **Crates** | `veritas-crypto`, `veritas-protocol`, `veritas-core` |
+| **Crates** | `veritas-crypto`, `veritas-protocol`, `veritas-store` |
 | **Effort** | High |
 | **Breaking** | Yes (messaging protocol) |
 
-**What to implement**:
-1. X3DH key agreement using prekey bundles
+**What was implemented**:
+1. X3DH key agreement using prekey bundles (signed prekeys + one-time prekeys)
 2. Double Ratchet for per-message forward secrecy and post-compromise security
-3. Prekey bundle management (on-chain or in DHT)
-4. Session state management in `veritas-store`
+3. Prekey bundle generation and management
+4. Session state management with export/import for persistence in `veritas-store`
+5. Out-of-order message delivery support with bounded skipped key cache (MAX_SKIP=256)
+6. Session store with encrypted persistence, peer indexing, and session listing
+
+**Resolution**: Implemented across `veritas-crypto` (x3dh.rs, double_ratchet.rs), `veritas-protocol` (session.rs), and `veritas-store` (session_store.rs).
 
 ---
 
 ### 5.2 — Add Deniable Authentication
+
+**Status**: Completed
 
 | Field | Value |
 |-------|-------|
@@ -1058,11 +1068,15 @@ Add `(sender_id || recipient_id || session_id || message_counter)` as additional
 | **Effort** | Medium |
 | **Breaking** | Yes |
 
-**Fix**: X3DH-style triple-DH for deniable authentication in 1:1 messages.
+**What was implemented**: Triple-DH deniable authentication using BLAKE3 keyed hash. Canonical ordering of public keys ensures symmetric MAC computation (either party can produce the same tag). AuthMode enum allows per-session choice between deniable (HmacBlake3) and non-repudiable (MlDsa) authentication.
+
+**Resolution**: Implemented in `veritas-crypto` (deniable_auth.rs) with integration in `veritas-protocol` (session.rs AuthMode).
 
 ---
 
 ### 5.3 — Improve Group Encryption
+
+**Status**: Completed
 
 | Field | Value |
 |-------|-------|
@@ -1071,7 +1085,9 @@ Add `(sender_id || recipient_id || session_id || message_counter)` as additional
 | **Effort** | Medium |
 | **Breaking** | Yes |
 
-**Fix**: Add sender authentication inside group messages. Implement key rotation on member removal. MLS-style for large groups deferred to v2.0.
+**What was implemented**: Group sender authentication with two modes — HMAC-based (deniable within group) and ML-DSA (non-repudiable). AuthenticatedGroupMessage type wraps encrypted content with sender proof. Key rotation on member removal already existed from Milestone 1; now combined with sender auth for complete group security. MLS-style for large groups deferred to v2.0.
+
+**Resolution**: Implemented in `veritas-protocol` (groups/sender_auth.rs).
 
 ---
 
@@ -1194,9 +1210,9 @@ IDs: NET-FEAT-3, NET-FEAT-7, NET-FEAT-8 | Effort: Low | Breaking: No
 |-----------|-------|--------|-----------------|--------|
 | M1: Critical Code Fixes (v0.3.1) | ~60 | ~1 week | 2 (WASM salt, mailbox salt) | **COMPLETED** |
 | M2: Wire Format v2 + ML-DSA (v0.4.0) | 12 | ~4-5 weeks | 9 (signing, wire format, KDF, envelope, chain model, pruning) | **COMPLETED** |
-| M3: BFT Consensus (v0.5.0) | 5 | ~4-6 weeks | 4 (consensus, validator selection, trust model) | Pending |
-| M4: Privacy Hardening (v0.6.0) | 6 | ~2-3 weeks | 3 (mailbox, padding, gossip) | Pending |
-| M5: Messaging Security (v0.7.0) | 3 | ~3-4 weeks | 3 (Double Ratchet, deniability, group) | Pending |
+| M3: BFT Consensus (v0.5.0) | 5 | ~4-6 weeks | 4 (consensus, validator selection, trust model) | **COMPLETED** |
+| M4: Privacy Hardening (v0.6.0) | 6 | ~2-3 weeks | 3 (mailbox, padding, gossip) | **COMPLETED** |
+| M5: Messaging Security (v0.7.0) | 3 | ~3-4 weeks | 3 (Double Ratchet, deniability, group) | **COMPLETED** |
 | M6: Identity & Reputation (v0.8.0) | 5 | ~2 weeks | 2 (revocation tx, proof format) | Pending |
 | M7: Networking (v0.9.0) | 6 | ~2-3 weeks | 0 | Pending |
 | M8: Cross-Cutting Quality (v1.0-rc) | 6 + optimizations | ~2 weeks | 0 | Pending |

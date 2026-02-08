@@ -47,7 +47,12 @@
 pub mod keys;
 pub mod metadata;
 pub mod rotation;
+pub mod sender_auth;
 
 pub use keys::{EncryptedGroupKey, GroupKey, GroupKeyManager, GroupMessageData};
 pub use metadata::{GroupId, GroupMember, GroupMetadata, GroupRole};
 pub use rotation::{KeyRotationManager, RotationResult, RotationTrigger};
+pub use sender_auth::{
+    AuthenticatedGroupMessage, GroupAuthMode, GroupSenderAuth, GROUP_SENDER_AUTH_TAG_SIZE,
+    compute_group_sender_auth, compute_group_sender_auth_mldsa, verify_group_sender_auth,
+};
